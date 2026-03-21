@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
 import { C, Btn, PageHeader, StatCard, fmt } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
@@ -28,35 +27,32 @@ const ESTADO_CONFIG = {
 };
 
 export default function Cobro() {
-  const qc = useQueryClient();
   const [filtros, setFiltros] = useState({ empresa:[], cliente:[], estado:[], subtipo:[] });
   const [expanded, setExp] = useState(null);
 
   const setFiltro = (key, vals) => setFiltros(f => ({ ...f, [key]: vals }));
   const limpiar   = () => setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] });
 
-  const { data: listas = {} }    = useQuery({ queryKey:['listas'],    queryFn:()=>api.get('/listas').then(r=>r.data) });
-  const { data: config = {} }    = useQuery({ queryKey:['config'],    queryFn:()=>api.get('/config').then(r=>r.data) });
-  const { data: todosAfil = [] } = useQuery({ queryKey:['afiliados_all'], queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]) });
+  const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
+  const { data: config = {} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['cobro'],
     queryFn: () => api.get('/cobro', { params:{ empresa:'', cliente:'', tipo:'' } }).then(r=>r.data),
     refetchInterval: 60_000,
   });
 
-  // Opciones dinámicas
-  const clientesUnicos  = [...new Set(todosAfil.map(a=>a.cliente_txt).filter(Boolean))].sort();
-  const subtiposUnicos  = [...new Set(todosAfil.map(a=>a.subtipo).filter(Boolean))].sort();
-  const estadosOpts     = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
+  // Opciones dinámicas — derivadas directamente de los datos de cobro
+  const clientesUnicos = [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
+  const subtiposUnicos = [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort();
+  const estadosOpts    = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
 
   // Filtrado local con multiselección
   const rowsFiltrados = rows.filter(r => {
-    const afil = todosAfil.find(a => a.doc === r.doc);
     const labelEstado = ESTADO_CONFIG[r.estado]?.label || r.estado;
-    if (filtros.empresa.length  && !filtros.empresa.includes(r.empresa))       return false;
-    if (filtros.cliente.length  && !filtros.cliente.includes(r.cliente))       return false;
-    if (filtros.estado.length   && !filtros.estado.includes(labelEstado))      return false;
-    if (filtros.subtipo.length  && !filtros.subtipo.includes(afil?.subtipo))   return false;
+    if (filtros.empresa.length  && !filtros.empresa.includes(r.empresa))    return false;
+    if (filtros.cliente.length  && !filtros.cliente.includes(r.cliente))    return false;
+    if (filtros.estado.length   && !filtros.estado.includes(labelEstado))   return false;
+    if (filtros.subtipo.length  && !filtros.subtipo.includes(r.subtipo))    return false;
     return true;
   });
 
@@ -65,16 +61,6 @@ export default function Cobro() {
   const nCobr    = rowsFiltrados.filter(r=>r.estado==='COBRADO').length;
   const planPend = rowsFiltrados.filter(r=>r.estado==='HOY'||r.estado==='VENCIDO').reduce((s,r)=>s+r.planilla,0);
 
-  const crearFactura = useMutation({
-    mutationFn: (row) => api.post('/facturas', {
-      nombre_afiliado: row.nombre, doc: row.doc, cliente: row.cliente||'',
-      anio: String(new Date().getFullYear()), mes: MESES[new Date().getMonth()],
-      periodo:'30', estado:'pendiente', ingresos:0, costos:row.planilla, utilidad:-row.planilla,
-      servicios_detalle: (row.servicios||[]).map(s=>({ servicio:s, incluido:true, valor:0 })),
-    }),
-    onSuccess: () => { toast.success('Factura creada'); qc.invalidateQueries({queryKey:['cobro']}); qc.invalidateQueries({queryKey:['facturas']}); },
-    onError: e => toast.error(e.response?.data?.detail||'Error'),
-  });
 
   return (
     <div>
@@ -106,20 +92,19 @@ export default function Cobro() {
         <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
-              {['','Nombre','Empresa','Doc.','Subtipo','Cliente','Día cobro','Servicios','Planilla ($)','Estado','Acción'].map(h=>(
+              {['','Nombre','Empresa','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                   color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+            {isLoading && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
             {!isLoading && rowsFiltrados.length===0 && (
-              <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
+              <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
             )}
             {rowsFiltrados.map(r => {
               const cfg  = ESTADO_CONFIG[r.estado]||ESTADO_CONFIG.PROXIMO;
-              const afil = todosAfil.find(a=>a.doc===r.doc);
               const isExp= expanded===r.id;
               return (
                 <React.Fragment key={r.id}>
@@ -133,9 +118,10 @@ export default function Cobro() {
                     <td style={tdc}><span style={{ fontWeight:500 }}>{r.nombre}</span></td>
                     <td style={tdc}>{r.empresa}</td>
                     <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{r.doc}</td>
-                    <td style={tdc}>{afil?.subtipo?<span style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11 }}>{afil.subtipo}</span>:'—'}</td>
+                    <td style={tdc}>{r.subtipo?<span style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11 }}>{r.subtipo}</span>:'—'}</td>
                     <td style={tdc}>{r.cliente||'—'}</td>
-                    <td style={{ ...tdc,fontWeight:600,color:C.primary }}>Día {r.dia_cobro}</td>
+                    <td style={{ ...tdc,fontWeight:600,color:C.primary,whiteSpace:'nowrap' }}>{r.mes} {r.anio}</td>
+                    <td style={{ ...tdc,color:C.text2,whiteSpace:'nowrap' }}>Día {r.dia_cobro}</td>
                     <td style={tdc}>
                       <div style={{ display:'flex',flexWrap:'wrap',gap:3 }}>
                         {(r.servicios||[]).map(s=>(
@@ -149,17 +135,14 @@ export default function Cobro() {
                         {cfg.label}
                       </span>
                     </td>
-                    <td style={tdc}>
-                      {r.estado!=='COBRADO'
-                        ? <Btn size="sm" variant="primary" onClick={()=>crearFactura.mutate(r)} disabled={crearFactura.isPending}>🧾 Facturar</Btn>
-                        : <span style={{ fontSize:11,color:C.blue }}>✓ Facturado</span>
-                      }
+                    <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:180,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
+                      {r.novedades||'—'}
                     </td>
                   </tr>
                   {isExp && (
                     <tr style={{ background:C.surface2,borderBottom:`1px solid ${C.border}` }}>
-                      <td colSpan={11} style={{ padding:'12px 20px' }}>
-                        <PlanillaDetalle afiliado={afil} config={config} />
+                      <td colSpan={12} style={{ padding:'12px 20px' }}>
+                        <PlanillaDetalle afiliado={r} cobroRow={r} config={config} />
                       </td>
                     </tr>
                   )}
@@ -173,7 +156,14 @@ export default function Cobro() {
   );
 }
 
-function PlanillaDetalle({ afiliado, config }) {
+function PlanillaDetalle({ afiliado, cobroRow, config }) {
+  const { data: facturas=[] } = useQuery({
+    queryKey: ['facturas_cobro', afiliado?.doc],
+    queryFn: () => api.get('/facturas', { params:{ limit:0 } }).then(r=>(r.data.items||[]).filter(f=>f.doc===afiliado.doc)),
+    enabled: !!afiliado?.doc,
+    staleTime: 30_000,
+  });
+
   if (!afiliado||!config) return <div style={{ color:C.text2,fontSize:12 }}>Sin datos</div>;
   const ceil100 = v=>Math.ceil(v/100)*100;
   const ibc  = (afiliado.ibc&&afiliado.ibc>0)?afiliado.ibc:(config.ibc_global||1950905);
@@ -216,7 +206,32 @@ function PlanillaDetalle({ afiliado, config }) {
         <span>🏢 Empresa: <strong>{afiliado.empresa||'—'}</strong></span>
         <span>🔢 Subtipo: <strong>{afiliado.subtipo||'—'}</strong></span>
         <span>📞 Tel: <strong>{afiliado.tel||'—'}</strong></span>
+        {afiliado.novedades && (
+          <span style={{ color:C.amber,fontWeight:600 }}>📝 Novedades: <strong>{afiliado.novedades}</strong></span>
+        )}
       </div>
+
+      {/* Historial de pagos */}
+      {facturas.length > 0 && (
+        <div style={{ marginTop:12 }}>
+          <div style={{ fontSize:11,fontWeight:700,color:C.primary,marginBottom:6 }}>💳 Historial de pagos</div>
+          <div style={{ display:'flex',flexWrap:'wrap',gap:4 }}>
+            {facturas.slice(0,12).map(f=>(
+              <div key={f.id} style={{
+                background: f.estado==='pagado'?C.greenBg:C.amberBg,
+                border:`1px solid ${f.estado==='pagado'?C.green:C.amber}`,
+                borderRadius:7, padding:'4px 10px', fontSize:10,
+              }}>
+                <span style={{ fontWeight:700,color:f.estado==='pagado'?C.green:C.amber }}>
+                  {f.mes} {f.anio}
+                </span>
+                <span style={{ color:C.text2,marginLeft:4 }}>{f.estado==='pagado'?'✓ Pagado':'⏳ Pend.'}</span>
+                {f.costos>0 && <span style={{ color:C.text2,marginLeft:4 }}>${Number(f.costos).toLocaleString('es-CO')}</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

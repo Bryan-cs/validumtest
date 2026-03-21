@@ -7,6 +7,16 @@ import { BarraFiltros } from '../components/FiltroCheck';
 
 const UP = v => (v||'').toUpperCase();
 
+async function dlExcel(url, filename) {
+  try {
+    const res = await api.get(url, { responseType: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(res.data);
+    a.download = filename;
+    a.click();
+  } catch { alert('Error generando reporte'); }
+}
+
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const TIPOS_CONCEPTO = ['Bono','Comision','Ajuste','Descuento','Otro ingreso','Deduccion'];
@@ -52,7 +62,7 @@ function calcPlanilla(afiliado, config, dias) {
 }
 
 // ─── MODAL NUEVA FACTURA ─────────────────────────────────────────────────────
-function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
+export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   const [cedula, setCedula] = useState('');
   const [afiliado, setAfiliado] = useState(null);
   const [errorBusq, setErrorBusq] = useState('');
@@ -106,7 +116,10 @@ function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   };
 
   const costoPlanilla = planilla.reduce((s, p) => s + (marcados[p.servicio] ? p.valor : 0), 0);
-  const extra = conceptos.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
+  const extra = conceptos.reduce((s, c) => {
+    const val = parseFloat(c.valor) || 0;
+    return s + (c.tipo === 'Deduccion' ? -val : val);
+  }, 0);
   const utilidad = ingreso - costoPlanilla + extra;
   const ibc = afiliado ? ((afiliado.ibc && afiliado.ibc > 0) ? afiliado.ibc : config?.ibc_global) : config?.ibc_global;
 
@@ -124,7 +137,7 @@ function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       });
     },
     onSuccess: () => { toast.success('Factura guardada'); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['cobro']}); onClose(); },
-    onError: e => toast.error(e.message || e.response?.data?.detail || 'Error'),
+    onError: e => toast.error(e.response?.data?.detail || e.message || 'Error'),
   });
 
   return (
@@ -232,7 +245,10 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
   }));
 
   const costoPlanilla = planillaFinal.reduce((s, p) => s + (marcados[p.servicio] !== false ? p.valor : 0), 0);
-  const extra = conceptos.reduce((s, c) => s + (parseFloat(c.valor) || 0), 0);
+  const extra = conceptos.reduce((s, c) => {
+    const val = parseFloat(c.valor) || 0;
+    return s + (c.tipo === 'Deduccion' ? -val : val);
+  }, 0);
   const utilidad = ingreso - costoPlanilla + extra;
 
   const guardar = useMutation({
@@ -393,11 +409,29 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [paginaF, setPaginaF] = useState(1);
   const POR_PAG_F = 50;
 
+  // Mapear filtros al formato del backend
+  const anioB    = filtros.anio.length    === 1 ? filtros.anio[0]    : '';
+  const mesB     = filtros.mes.length     === 1 ? filtros.mes[0]     : '';
+  const clienteB = filtros.cliente.length === 1 ? filtros.cliente[0] : '';
+  const estadoB  = filtros.estado.length  === 1
+    ? (filtros.estado[0] === 'Pagada' ? 'pagado' : 'pendiente') : '';
+  const hayFiltros = anioB || mesB || clienteB || estadoB || busqueda ||
+    filtros.anio.length > 1 || filtros.mes.length > 1 ||
+    filtros.cliente.length > 1 || filtros.estado.length > 1;
+
+  // Si hay filtros activos, traer todos y filtrar localmente; si no, paginar
   const { data: respF={total:0,items:[]}, isLoading } = useQuery({
-    queryKey: ['facturas', paginaF],
-    queryFn: () => api.get('/facturas', { params:{ skip:(paginaF-1)*POR_PAG_F, limit:POR_PAG_F } }).then(r=>r.data),
+    queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros],
+    queryFn: () => api.get('/facturas', { params: hayFiltros
+      ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0 }
+      : { skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F }
+    }).then(r=>r.data),
     keepPreviousData: true,
   });
+
+  // Resetear página cuando cambien los filtros
+  useEffect(() => { setPaginaF(1); }, [anioB, mesB, clienteB, estadoB, busqueda]);
+
   const rows      = respF.items || [];
   const totalFact = respF.total || 0;
   const totalPagsF = Math.ceil(totalFact / POR_PAG_F);
@@ -437,13 +471,25 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   return (
     <div>
       <PageHeader title="🧾 Facturación" subtitle={`${rowsFiltradas.length} de ${totalFact} facturas`}
-        action={<Btn variant="accent" onClick={()=>{setPrefill(null);setModalNueva(true);}}>+ Nueva factura</Btn>} />
+        action={
+          <div style={{ display:'flex', gap:8 }}>
+            <Btn variant="secondary" onClick={()=>{
+              const p = new URLSearchParams();
+              if (anioB) p.set('anio', anioB);
+              if (mesB)  p.set('mes',  mesB);
+              if (clienteB) p.set('cliente', clienteB);
+              if (estadoB)  p.set('estado',  estadoB);
+              dlExcel(`/reportes/financiero?${p}`, `facturas${anioB?'_'+anioB:''}${mesB?'_'+mesB:''}.xlsx`);
+            }}>📊 Exportar Excel</Btn>
+            <Btn variant="accent" onClick={()=>{setPrefill(null);setModalNueva(true);}}>+ Nueva factura</Btn>
+          </div>
+        } />
 
       <div style={{ display:'flex',gap:10,marginBottom:14,flexWrap:'wrap' }}>
         <StatCard label="Total ingresos"      value={fmt(totIng)}  color={C.primary} />
         <StatCard label="Utilidad bruta"      value={fmt(totUtil)} color={C.green} />
         <StatCard label="Pendiente cobro"     value={fmt(totPend)} color={C.amber} />
-        <StatCard label="Facturas pendientes" value={totalFact} color={C.red} />
+        <StatCard label="Facturas pendientes" value={rowsFiltradas.filter(f=>f.estado==='pendiente').length} color={C.red} />
       </div>
 
       <input placeholder="🔍 Buscar código, afiliado, documento, cliente..."
@@ -466,7 +512,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         <table style={{ width:'100%',borderCollapse:'collapse',background:'#fff' }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
-              {['Código','Afiliado','Cliente','Período','Ingreso','Planilla','Utilidad','Banco','Estado','Acciones'].map(h=>(
+              {['Código','Afiliado','Cliente','Período','Ingreso','Planilla','Utilidad','Banco','Estado','Novedades','Acciones'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                   color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
@@ -496,10 +542,20 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       {f.estado==='pagado'?'Pagada':'Pendiente'}
                     </span>
                   </td>
+                  <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
+                    {f.novedades||'—'}
+                  </td>
                   <td style={tdc}>
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
                       <Btn size="sm" variant="secondary" onClick={()=>setModalEditar(f)}>✏️ Editar</Btn>
                       {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={()=>pagar.mutate(f.id)}>✓ Pagada</Btn>}
+                      <Btn size="sm" variant="secondary" onClick={()=>{
+                        const tel = (f.tel||'').replace(/\D/g,'');
+                        if (!tel) { alert('El afiliado no tiene teléfono registrado'); return; }
+                        const phone = tel.startsWith('57') ? tel : `57${tel}`;
+                        const msg = encodeURIComponent(`Hola ${f.nombre_afiliado}, le enviamos su factura ${f.codigo} del período ${f.mes} ${f.anio} por valor de $${Number(f.costos||0).toLocaleString('es-CO')}. Por favor comuníquese con nosotros para más información.`);
+                        window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
+                      }}>💬 WhatsApp</Btn>
                       <Btn size="sm" variant="danger"
                         onClick={()=>{ if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
                     </div>
@@ -508,7 +564,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
               );
             })}
             {!isLoading && rowsFiltradas.length===0 && (
-              <tr><td colSpan={10} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas</td></tr>
+              <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas</td></tr>
             )}
           </tbody>
         </table>

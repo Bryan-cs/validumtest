@@ -6,6 +6,18 @@ import { C, Btn, Modal, PageHeader, statusBadge } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5'];
+
+async function dlExcel(url, filename) {
+  try {
+    const res = await api.get(url, { responseType: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(res.data);
+    a.download = filename;
+    a.click();
+  } catch (e) {
+    alert('Error generando reporte');
+  }
+}
 const ESTADOS_SRV = ['ACTIVO','SUSPENDIDO','DOBLE AFILIACION','EN ESPERA DE ACTIVACION',
                      'RETIRADO','EN MORA','NO AFILIADO','PENDIENTE'];
 const UP = (v) => (v||'').toUpperCase();
@@ -38,14 +50,18 @@ const Sel = ({ label, value, onChange, options=[], style }) => (
 
 export default function Afiliados() {
   const qc = useQueryClient();
-  const [tab, setTab]           = useState('activos'); // 'activos' | 'eliminados'
+  const [tab, setTab]           = useState('activos'); // 'activos' | 'eliminados' | 'historial' | 'pagos'
   const [busqueda, setBusqueda] = useState('');
-  const [filtros,  setFiltros]  = useState({ estado:[], empresa:[], cliente:[], subtipo:[] });
+  const [filtros,  setFiltros]  = useState({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
   const [modal,    setModal]    = useState(null);
   const [form,     setForm]     = useState({});
 
+  // Pagos tab state
+  const [docSeleccionado, setDocSeleccionado] = useState('');
+  const [busquedaPagos,   setBusquedaPagos]   = useState('');
+
   const setFiltro = (key,vals) => setFiltros(f=>({...f,[key]:vals}));
-  const limpiar   = () => setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[] });
+  const limpiar   = () => setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
 
   const [pagina, setPagina] = useState(1);
   const POR_PAG = 50;
@@ -65,10 +81,19 @@ export default function Afiliados() {
   const data     = resp.items || [];
   const totalReg = resp.total || 0;
   const totalPags = Math.ceil(totalReg / POR_PAG);
-  const { data: actividad=[] } = useQuery({ queryKey:['actividad'], queryFn:()=>api.get('/actividad').then(r=>r.data) });
+  const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data) });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
     enabled: tab === 'eliminados',
+  });
+
+  // Facturas del afiliado seleccionado en tab pagos
+  const afilSelObj = todos.find(a => a.doc === docSeleccionado);
+  const { data: factAfil=[], isLoading: loadFact } = useQuery({
+    queryKey: ['facturas_afil', docSeleccionado],
+    queryFn: () => api.get('/facturas', { params: { limit: 0 } })
+      .then(r => (r.data.items || []).filter(f => f.doc === docSeleccionado)),
+    enabled: !!docSeleccionado,
   });
 
   const clientesUnicos = [...new Set(todos.map(a=>a.cliente_txt).filter(Boolean))].sort();
@@ -81,9 +106,15 @@ export default function Afiliados() {
     if (filtros.empresa.length && !filtros.empresa.includes(a.empresa))               return false;
     if (filtros.cliente.length && !filtros.cliente.includes(a.cliente_txt))           return false;
     if (filtros.estado.length  && !filtros.estado.includes(a.estado_srv||a.estado))   return false;
-    if (filtros.subtipo.length && !filtros.subtipo.includes(a.subtipo))               return false;
+    if (filtros.subtipo.length   && !filtros.subtipo.includes(a.subtipo))               return false;
+    if (filtros.tipo_doc.length  && !filtros.tipo_doc.includes(a.tipo_doc||'CC'))       return false;
     return true;
   });
+
+  // Sugerencias de búsqueda en tab pagos
+  const sugerenciasPagos = busquedaPagos.length >= 2
+    ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
+    : [];
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setModal('nuevo'); };
@@ -114,15 +145,38 @@ export default function Afiliados() {
     onError: e => toast.error(e.response?.data?.detail||'Error al restaurar'),
   });
 
+  const borrarPermanente = useMutation({
+    mutationFn: id => api.delete(`/eliminados/${id}`),
+    onSuccess: () => { toast.success('Eliminado permanentemente'); qc.invalidateQueries({queryKey:['eliminados']}); },
+    onError: e => toast.error(e.response?.data?.detail||'Error'),
+  });
+
   // Historial filtrado por afiliado seleccionado
   const [afilSelHist, setAfilSelHist] = useState(null);
   const histAfil = actividad.filter(a => afilSelHist && a.detalle?.includes(afilSelHist));
 
+  // Totales facturas del afiliado seleccionado
+  const totalPagado    = factAfil.filter(f=>f.estado==='pagado').reduce((s,f)=>s+(f.costos||0),0);
+  const totalPendiente = factAfil.filter(f=>f.estado!=='pagado').reduce((s,f)=>s+(f.costos||0),0);
+
   return (
     <div>
       <PageHeader title="👥 Afiliados"
-        subtitle={tab==='activos' ? `${dataFiltrada.length} de ${totalReg} registros` : `${eliminados.length} eliminados`}
-        action={tab==='activos' && <Btn variant="accent" onClick={openNuevo}>+ Nuevo afiliado</Btn>} />
+        subtitle={tab==='activos' ? `${dataFiltrada.length} de ${totalReg} registros` : tab==='eliminados' ? `${eliminados.length} eliminados` : ''}
+        action={tab==='activos' && (
+          <div style={{ display:'flex', gap:8 }}>
+            <Btn variant="secondary" onClick={() => {
+              const p = new URLSearchParams();
+              if (busqueda) p.set('q', busqueda);
+              if (filtros.estado.length) p.set('estado', filtros.estado.join(','));
+              if (filtros.empresa.length) p.set('empresa', filtros.empresa.join(','));
+              if (filtros.cliente.length) p.set('cliente', filtros.cliente.join(','));
+              if (filtros.subtipo.length) p.set('subtipo', filtros.subtipo.join(','));
+              dlExcel(`/reportes/afiliados?${p}`, 'afiliados.xlsx');
+            }}>📊 Exportar Excel</Btn>
+            <Btn variant="accent" onClick={openNuevo}>+ Nuevo afiliado</Btn>
+          </div>
+        )} />
 
       {/* Pestañas */}
       <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
@@ -130,6 +184,7 @@ export default function Afiliados() {
           { key:'activos',    label:`👥 Activos (${totalReg})` },
           { key:'eliminados', label:`🗑️ Eliminados (${eliminados.length || '...'})` },
           { key:'historial',  label:'📋 Historial de cambios' },
+          { key:'pagos',      label:'💳 Historial de pagos' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
@@ -151,10 +206,11 @@ export default function Afiliados() {
               fontSize:13,outline:'none',marginBottom:12,boxSizing:'border-box' }} />
           <BarraFiltros
             filtros={[
-              { key:'empresa', label:'Empresa', icon:'🏢', options: listas.empresas||[] },
-              { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
-              { key:'estado',  label:'Estado',  icon:'📌', options: estadosOpts },
-              { key:'subtipo', label:'Subtipo', icon:'🔢', options: subtiposUnicos },
+              { key:'empresa',  label:'Empresa',   icon:'🏢', options: listas.empresas||[] },
+              { key:'cliente',  label:'Cliente',   icon:'👤', options: clientesUnicos },
+              { key:'estado',   label:'Estado',    icon:'📌', options: estadosOpts },
+              { key:'subtipo',  label:'Subtipo',   icon:'🔢', options: subtiposUnicos },
+              { key:'tipo_doc', label:'Tipo doc',  icon:'🪪', options: ['CC','CE','PT','PA','NIT'] },
             ]}
             valores={filtros} onChange={setFiltro} onLimpiar={limpiar}
           />
@@ -182,7 +238,9 @@ export default function Afiliados() {
                       </span>
                     </td>
                     <td style={tdc}>{a.empresa||'—'}</td>
-                    <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{a.doc}</td>
+                    <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>
+                      <span style={{ fontSize:10,fontWeight:700,color:C.text2,marginRight:4 }}>{a.tipo_doc||'CC'}</span>{a.doc}
+                    </td>
                     <td style={tdc}>{a.cliente_txt||'—'}</td>
                     <td style={tdc}>{a.subtipo?<Chip>{a.subtipo}</Chip>:'—'}</td>
                     <td style={tdc}><span style={{ fontSize:11,color:C.text2 }}>{a.eps||'—'}</span></td>
@@ -196,12 +254,15 @@ export default function Afiliados() {
                     <td style={{ ...tdc,maxWidth:160 }}>
                       <span style={{ fontSize:11,color:C.text2,display:'-webkit-box',
                         WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                        {a.obs||'—'}
+                        {a.novedades||'—'}
                       </span>
                     </td>
                     <td style={tdc}>
-                      <div style={{ display:'flex',gap:6 }}>
+                      <div style={{ display:'flex',gap:4,flexWrap:'wrap' }}>
                         <Btn size="sm" variant="secondary" onClick={()=>openEditar(a)}>✏️ Editar</Btn>
+                        <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/certificado`,`certificado_${a.nombre.replace(/ /g,'_')}.pdf`)}>📄 Cert.</Btn>
+                        <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/estado-cuenta`,`estado_cuenta_${a.nombre.replace(/ /g,'_')}.pdf`)}>📑 E.C.</Btn>
+                        <Btn size="sm" variant="secondary" onClick={()=>{ setDocSeleccionado(a.doc); setBusquedaPagos(a.nombre); setTab('pagos'); }}>💳</Btn>
                         <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm(`¿Eliminar a ${a.nombre}?`)) eliminar.mutate(a.id); }}>×</Btn>
                       </div>
                     </td>
@@ -244,11 +305,18 @@ export default function Afiliados() {
                     <td style={tdc}>{e.fecha_eliminacion||'—'}</td>
                     <td style={tdc}>{e.eliminado_por||'—'}</td>
                     <td style={tdc}>
-                      <Btn size="sm" variant="success"
-                        onClick={() => { if(window.confirm(`¿Restaurar a ${e.nombre} como ACTIVO?`)) restaurar.mutate(e.id); }}
-                        disabled={restaurar.isPending}>
-                        ↩ Restaurar
-                      </Btn>
+                      <div style={{ display:'flex', gap:6 }}>
+                        <Btn size="sm" variant="success"
+                          onClick={() => { if(window.confirm(`¿Restaurar a ${e.nombre} como ACTIVO?`)) restaurar.mutate(e.id); }}
+                          disabled={restaurar.isPending}>
+                          ↩ Restaurar
+                        </Btn>
+                        <Btn size="sm" variant="danger"
+                          onClick={() => { if(window.confirm(`¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`)) borrarPermanente.mutate(e.id); }}
+                          disabled={borrarPermanente.isPending}>
+                          🗑️ Borrar
+                        </Btn>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -303,13 +371,144 @@ export default function Afiliados() {
         </div>
       )}
 
+      {/* ═══ TAB: PAGOS POR AFILIADO ═══ */}
+      {tab === 'pagos' && (
+        <div>
+          <div style={{ display:'flex', alignItems:'flex-start', gap:12, marginBottom:16, flexWrap:'wrap' }}>
+            <div style={{ position:'relative', flex:'0 0 340px' }}>
+              <input
+                placeholder="🔍 Buscar afiliado por nombre o documento..."
+                value={busquedaPagos}
+                onChange={e => { setBusquedaPagos(e.target.value); if (!e.target.value) setDocSeleccionado(''); }}
+                style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
+                  fontSize:13,outline:'none',boxSizing:'border-box' }}
+              />
+              {sugerenciasPagos.length > 0 && !docSeleccionado && (
+                <div style={{ position:'absolute',top:'100%',left:0,right:0,background:'#fff',
+                  border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 12px rgba(0,0,0,.1)',
+                  zIndex:100,maxHeight:200,overflowY:'auto' }}>
+                  {sugerenciasPagos.map(a => (
+                    <div key={a.id} onClick={() => { setDocSeleccionado(a.doc); setBusquedaPagos(a.nombre); }}
+                      style={{ padding:'9px 14px',cursor:'pointer',fontSize:13,borderBottom:`1px solid ${C.border}` }}
+                      onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                      onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                      <strong>{a.nombre}</strong>
+                      <span style={{ marginLeft:8,color:C.text2,fontSize:11 }}>{a.doc} · {a.empresa||''}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            {docSeleccionado && (
+              <Btn size="sm" variant="secondary" onClick={()=>{ setDocSeleccionado(''); setBusquedaPagos(''); }}>
+                ✕ Limpiar
+              </Btn>
+            )}
+            {docSeleccionado && afilSelObj && (
+              <Btn size="sm" variant="secondary"
+                onClick={()=>dlExcel(`/afiliados/${afilSelObj.id}/estado-cuenta`,`estado_cuenta_${afilSelObj.nombre.replace(/ /g,'_')}.pdf`)}>
+                📑 Estado de cuenta PDF
+              </Btn>
+            )}
+          </div>
+
+          {!docSeleccionado && (
+            <div style={{ padding:'40px 20px',textAlign:'center',color:C.text2,fontSize:13 }}>
+              💳 Busca un afiliado para ver su historial de pagos
+            </div>
+          )}
+
+          {docSeleccionado && afilSelObj && (
+            <>
+              {/* Info afiliado */}
+              <div style={{ background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:8,
+                padding:'10px 16px',marginBottom:14,display:'flex',gap:24,flexWrap:'wrap',fontSize:13 }}>
+                <div><strong style={{ color:C.blue }}>{afilSelObj.nombre}</strong></div>
+                <div style={{ color:C.text2 }}>Doc: <strong>{afilSelObj.doc}</strong></div>
+                <div style={{ color:C.text2 }}>Empresa: <strong>{afilSelObj.empresa||'—'}</strong></div>
+                <div style={{ color:C.text2 }}>Cliente: <strong>{afilSelObj.cliente_txt||'—'}</strong></div>
+                <div style={{ marginLeft:'auto',display:'flex',gap:16 }}>
+                  <span style={{ color:C.green,fontWeight:600 }}>
+                    ✅ Pagado: ${totalPagado.toLocaleString('es-CO')}
+                  </span>
+                  <span style={{ color:C.red,fontWeight:600 }}>
+                    ⏳ Pendiente: ${totalPendiente.toLocaleString('es-CO')}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+                  <thead>
+                    <tr style={{ background:C.surface2 }}>
+                      {['Código','Mes','Año','Total ($)','Estado','Banco','Novedades'].map(h=>(
+                        <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
+                          color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loadFact && <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+                    {!loadFact && factAfil.length===0 && (
+                      <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas registradas</td></tr>
+                    )}
+                    {factAfil.map((f,i)=>(
+                      <tr key={f.id} style={{ borderBottom:`1px solid ${C.border}`,
+                        background: f.estado==='pagado' ? '#F0FDF4' : '#FFF5F5' }}>
+                        <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{f.codigo}</td>
+                        <td style={tdc}>{f.mes}</td>
+                        <td style={tdc}>{f.anio}</td>
+                        <td style={{ ...tdc,fontWeight:600 }}>${(f.costos||0).toLocaleString('es-CO')}</td>
+                        <td style={tdc}>
+                          <span style={{
+                            padding:'3px 8px',borderRadius:6,fontSize:11,fontWeight:600,
+                            background: f.estado==='pagado' ? '#DCFCE7' : '#FEE2E2',
+                            color: f.estado==='pagado' ? C.green : C.red,
+                          }}>
+                            {(f.estado||'').toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={{ ...tdc,fontSize:12,color:C.text2 }}>{f.banco||'—'}</td>
+                        <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:180 }}>
+                          <span style={{ display:'-webkit-box',WebkitLineClamp:2,
+                            WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+                            {f.novedades||'—'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* ─── MODAL FORMULARIO ─── */}
       <Modal open={!!modal} onClose={()=>setModal(null)} width={720}
         title={modal==='nuevo'?'➕ Nuevo afiliado':`✏️ Editar — ${form.nombre||''}`}>
         <Seccion title="Datos personales" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
           <InputUp label="Nombre completo *" value={form.nombre||''} onChange={v=>sf('nombre',v)} />
-          <InputUp label="N° Documento *"    value={form.doc||''}    onChange={v=>sf('doc',v)} />
+          <div style={{ marginBottom:12 }}>
+            <label style={lbl}>Tipo y N° Documento *</label>
+            <div style={{ display:'flex', gap:6 }}>
+              <select value={form.tipo_doc||'CC'} onChange={e=>sf('tipo_doc',e.target.value)}
+                style={{ padding:'9px 10px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,
+                  outline:'none',background:'#fff',color:C.text,flexShrink:0 }}>
+                <option value="CC">CC</option>
+                <option value="CE">CE</option>
+                <option value="PT">PT</option>
+                <option value="PA">PA</option>
+                <option value="NIT">NIT</option>
+              </select>
+              <input value={form.doc||''} onChange={e=>sf('doc',e.target.value.toUpperCase())}
+                placeholder="NÚMERO DE DOCUMENTO"
+                style={{ flex:1,padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
+                  fontSize:13,outline:'none',color:C.text,textTransform:'uppercase' }} />
+            </div>
+          </div>
           <InputUp label="Cargo"             value={form.cargo||''} onChange={v=>sf('cargo',v)} />
           <InputUp label="Teléfono"          value={form.tel||''} onChange={v=>sf('tel',v)} type="tel" />
           <InputUp label="Email"             value={form.email||''} onChange={v=>sf('email',v)} style={{ gridColumn:'1/-1' }} />
@@ -364,7 +563,7 @@ export default function Afiliados() {
           <InputUp label="Fecha afiliación" type="date" value={form.fecha_afiliacion||''} onChange={v=>sf('fecha_afiliacion',v)} />
         </div>
 
-        <Seccion title="IBC y observaciones" />
+        <Seccion title="IBC y novedades" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
           <div style={{ marginBottom:12 }}>
             <label style={lbl}>IBC individual ($) — vacío = usa global</label>
@@ -374,9 +573,9 @@ export default function Afiliados() {
                 fontSize:13,outline:'none',boxSizing:'border-box',color:C.text }} />
           </div>
           <div style={{ marginBottom:12 }}>
-            <label style={lbl}>Observaciones / Novedades</label>
-            <textarea value={form.obs||''} onChange={e=>sf('obs',UP(e.target.value))}
-              placeholder="OBSERVACIONES DEL AFILIADO..." rows={2}
+            <label style={lbl}>Novedades</label>
+            <textarea value={form.novedades||''} onChange={e=>sf('novedades',UP(e.target.value))}
+              placeholder="NOVEDADES DEL AFILIADO..." rows={2}
               style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
                 fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,
                 resize:'vertical',textTransform:'uppercase' }} />

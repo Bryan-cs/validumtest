@@ -80,13 +80,13 @@ def _planilla(db: Session, afiliado: models.Afiliado, dias: int = 30) -> dict:
 
 def _afiliado_to_dict(a: models.Afiliado) -> dict:
     return {
-        "id": a.id, "nombre": a.nombre, "doc": a.doc,
+        "id": a.id, "nombre": a.nombre, "tipo_doc": a.tipo_doc, "doc": a.doc,
         "empresa": a.empresa, "cargo": a.cargo,
         "cliente_txt": a.cliente_txt, "eps": a.eps, "arl": a.arl,
         "ccf": a.ccf, "afp": a.afp, "subtipo": a.subtipo,
         "estado": a.estado, "estado_srv": a.estado_srv,
         "servicios": json.loads(a.servicios or "[]"),
-        "tel": a.tel, "email": a.email, "dir": a.dir, "obs": a.obs,
+        "tel": a.tel, "email": a.email, "dir": a.dir, "obs": a.obs, "novedades": a.novedades,
         "ibc": a.ibc, "fecha_ingreso": a.fecha_ingreso,
         "fecha_afiliacion": a.fecha_afiliacion,
         "registrado_por": a.registrado_por, "activo": a.activo,
@@ -153,12 +153,12 @@ def get_afiliado_by_doc(db, doc): return db.query(models.Afiliado).filter_by(doc
 def create_afiliado(db, data: schemas.AfiliadoCreate):
     cache_invalidar("cobro:")  # invalidar caché al agregar afiliado
     a = models.Afiliado(**{
-        "nombre":data.nombre,"doc":data.doc,"empresa":data.empresa,
+        "nombre":data.nombre,"tipo_doc":data.tipo_doc,"doc":data.doc,"empresa":data.empresa,
         "cargo":data.cargo,"cliente_txt":data.cliente_txt,
         "eps":data.eps,"arl":data.arl,"ccf":data.ccf,"afp":data.afp,
         "subtipo":data.subtipo,"estado":data.estado,"estado_srv":data.estado_srv,
         "servicios":json.dumps(data.servicios),"tel":data.tel,
-        "email":data.email,"dir":data.dir,"obs":data.obs,
+        "email":data.email,"dir":data.dir,"obs":data.obs,"novedades":data.novedades,
         "ibc":data.ibc,"fecha_ingreso":data.fecha_ingreso,
         "fecha_afiliacion":data.fecha_afiliacion,"registrado_por":data.registrado_por,
     })
@@ -166,14 +166,15 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
     db.commit(); db.refresh(a); return _afiliado_to_dict(a)
 
 def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
+    cache_invalidar("cobro:")  # novedades u otros campos del afiliado afectan el cobro
     a = db.query(models.Afiliado).filter_by(id=id).first()
     for field, val in [
-        ("nombre",data.nombre),("doc",data.doc),("empresa",data.empresa),
+        ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
         ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
         ("eps",data.eps),("arl",data.arl),("ccf",data.ccf),("afp",data.afp),
         ("subtipo",data.subtipo),("estado",data.estado),("estado_srv",data.estado_srv),
         ("servicios",json.dumps(data.servicios)),("tel",data.tel),
-        ("email",data.email),("dir",data.dir),("obs",data.obs),
+        ("email",data.email),("dir",data.dir),("obs",data.obs),("novedades",data.novedades),
         ("ibc",data.ibc),("fecha_ingreso",data.fecha_ingreso),
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
@@ -223,7 +224,19 @@ def get_facturas(db, anio="", mes="", cliente="", estado="", banco="",
     q = q.order_by(models.Factura.id.desc())
     if limit > 0:
         q = q.offset(skip).limit(limit)
-    return {"total": total, "items": [_factura_to_dict(f) for f in q.all()]}
+    items = q.all()
+    # Obtener teléfonos de afiliados en una sola consulta
+    docs = list({f.doc for f in items if f.doc})
+    tels = {}
+    if docs:
+        for a in db.query(models.Afiliado.doc, models.Afiliado.tel).filter(models.Afiliado.doc.in_(docs)).all():
+            tels[a.doc] = a.tel or ""
+    result = []
+    for f in items:
+        d = _factura_to_dict(f)
+        d["tel"] = tels.get(f.doc, "")
+        result.append(d)
+    return {"total": total, "items": result}
 
 def get_factura(db, id): f = db.query(models.Factura).filter_by(id=id).first(); return f
 def get_facturas_pendientes_by_doc(db, doc, mes=None):
@@ -232,6 +245,15 @@ def get_facturas_pendientes_by_doc(db, doc, mes=None):
     return q.all()
 
 def create_factura(db, data: schemas.FacturaCreate):
+    # Validar que no exista ya una factura para este afiliado en el mismo mes/año
+    anio_fact = data.anio or str(datetime.now().year)
+    duplicada = db.query(models.Factura).filter_by(
+        doc=data.doc, mes=data.mes, anio=anio_fact
+    ).first()
+    if duplicada:
+        from fastapi import HTTPException
+        raise HTTPException(400, f"Ya existe una factura del mes")
+
     cache_invalidar("cobro:")  # invalidar caché de cobro al crear factura
     codigo = data.codigo or _next_codigo(db)
     f = models.Factura(
@@ -270,6 +292,7 @@ def delete_factura(db, id, user=""):
     db.query(models.Factura).filter_by(id=id).delete()
     _log(db, user, "eliminó una factura", "Facturación", codigo)
     db.commit()
+    cache_invalidar("cobro:")  # invalidar caché al eliminar factura
 
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
 def get_retiros(db, anio="", mes=""):
@@ -300,6 +323,16 @@ def delete_retiro(db, id, user=""):
     r = db.query(models.Retiro).filter_by(id=id).first()
     if r:
         _log(db, user, "eliminó un retiro", "Retiros", r.nombre)
+        # Reactivar afiliado solo si no tiene otros retiros registrados
+        otros = db.query(models.Retiro).filter(
+            models.Retiro.doc == r.doc, models.Retiro.id != id
+        ).count()
+        if otros == 0:
+            afil = db.query(models.Afiliado).filter_by(doc=r.doc).first()
+            if afil:
+                afil.estado = "ACTIVO"
+                afil.estado_srv = "ACTIVO"
+                _log(db, user, "reactivó afiliado por eliminación de retiro", "Afiliados", afil.nombre)
     db.query(models.Retiro).filter_by(id=id).delete()
     db.commit()
 
@@ -327,6 +360,13 @@ def update_nomina(db, id, nomina):
     if not e: return None
     e.nomina = nomina; db.commit()
     return {"id":e.id,"nomina":e.nomina}
+
+def delete_empleado(db, id, user=""):
+    e = db.query(models.Empleado).filter_by(id=id).first()
+    if e:
+        _log(db, user, "eliminó un empleado", "Empleados", e.nombre)
+        db.delete(e)
+        db.commit()
 
 # ─── GASTOS ───────────────────────────────────────────────────────────────────
 def get_gastos(db):
@@ -377,14 +417,24 @@ def update_lista(db, nombre, items):
     return {"nombre":nombre,"items":items}
 
 # ─── ACTIVIDAD ────────────────────────────────────────────────────────────────
-def get_actividad(db, modulo="", usuario=""):
+def get_actividad(db, modulo="", usuario="", dia="", mes="", anio=""):
+    from sqlalchemy import extract
     q = db.query(models.Actividad)
-    if modulo: q = q.filter_by(modulo=modulo)
+    if modulo:  q = q.filter_by(modulo=modulo)
     if usuario: q = q.filter_by(usuario=usuario)
-    rows = q.order_by(models.Actividad.id.desc()).limit(100).all()
+    if dia:     q = q.filter(extract('day',   models.Actividad.fecha) == int(dia))
+    if mes:     q = q.filter(extract('month', models.Actividad.fecha) == MESES.index(mes) + 1)
+    if anio:    q = q.filter(extract('year',  models.Actividad.fecha) == int(anio))
+    rows = q.order_by(models.Actividad.id.desc()).limit(500).all()
     return [{"id":r.id,"usuario":r.usuario,"accion":r.accion,"modulo":r.modulo,
              "detalle":r.detalle,"fecha":r.fecha.strftime("%d/%m/%Y %H:%M") if r.fecha else ""}
             for r in rows]
+
+def clear_actividad(db, user=""):
+    db.query(models.Actividad).delete()
+    db.add(models.Actividad(usuario=user, accion="limpió el historial de actividad",
+                            modulo="Sistema", detalle="Historial borrado"))
+    db.commit()
 
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
 def get_dashboard(db, anio="", mes=""):
@@ -410,7 +460,17 @@ def get_dashboard(db, anio="", mes=""):
 
     nominas = db.query(func.coalesce(func.sum(models.Empleado.nomina), 0)).filter_by(activo=True).scalar()
     gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor),    0)).filter_by(activo=True).scalar()
-    util_neta = float(facts.utilidad) - float(nominas) - float(gastos)
+
+    # Nóminas y gastos son valores mensuales fijos.
+    # Se multiplican según el período filtrado para comparar correctamente contra los ingresos.
+    if anio and not mes:
+        meses_factor = 12          # año completo → 12 meses de costos fijos
+    elif mes:
+        meses_factor = 1           # mes específico → 1 mes de costos fijos
+    else:
+        meses_factor = 1           # sin filtro → referencia mensual
+
+    util_neta = float(facts.utilidad) - (float(nominas) + float(gastos)) * meses_factor
 
     return {
         "activos": int(stats.activos or 0), "retirados": int(stats.retirados or 0),
@@ -419,7 +479,28 @@ def get_dashboard(db, anio="", mes=""):
         "utilidad_bruta": float(facts.utilidad), "nominas": float(nominas),
         "gastos_fijos": float(gastos), "utilidad_neta": util_neta,
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
+        "meses_factor": meses_factor,
     }
+
+# ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
+def get_dashboard_meses(db):
+    """Retorna lista de {mes, anio, ingresos, facturas} de los últimos 6 meses."""
+    from datetime import datetime
+    result = []
+    now = datetime.now()
+    for i in range(5, -1, -1):
+        month = (now.month - 1 - i) % 12 + 1
+        year  = now.year + ((now.month - 1 - i) // 12)
+        mes_nombre = MESES[month - 1]
+        rows = db.query(models.Factura).filter_by(mes=mes_nombre, anio=str(year)).all()
+        ingresos = sum(f.ingresos or 0 for f in rows)
+        result.append({
+            "mes": mes_nombre[:3],
+            "anio": year,
+            "ingresos": ingresos,
+            "facturas": len(rows),
+        })
+    return result
 
 # ─── CACHÉ EN MEMORIA ────────────────────────────────────────────────────────
 import time as _time
@@ -445,9 +526,9 @@ def cache_invalidar(prefijo: str = ""):
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
 def get_cobro(db, empresa="", cliente="", tipo=""):
-    """Calcula el estado de cobro de cada afiliado.
-    Usa caché de 2 minutos para evitar recalcular en cada request.
-    El caché se invalida automáticamente al crear/editar facturas o afiliados.
+    """Calcula el estado de cobro por afiliado y mes (últimos 6 meses).
+    Genera una fila por cada mes pendiente de cada afiliado.
+    El caché se invalida automáticamente al crear/editar/eliminar facturas o afiliados.
     """
     cache_key = f"cobro:{empresa}:{cliente}:{tipo}"
     cached = _cache_get(cache_key)
@@ -455,26 +536,50 @@ def get_cobro(db, empresa="", cliente="", tipo=""):
         return cached
 
     hoy = datetime.now()
-    mes_actual  = MESES[hoy.month-1]
-    anio_actual = str(hoy.year)
-    dia_hoy     = hoy.day
+    dia_hoy = hoy.day
 
-    # Pre-cargar config y facturas del mes para evitar N+1 queries
+    # Generar los últimos 6 meses (mes-5 ... mes actual) como lista (año, mes_idx 1-12)
+    meses_ventana = []
+    for i in range(5, -1, -1):
+        m = hoy.month - i
+        y = hoy.year
+        while m <= 0:
+            m += 12
+            y -= 1
+        meses_ventana.append((y, m))   # [(2025,10),(2025,11),...,(2026,3)]
+
+    # Pre-cargar config
     cfg = db.query(models.Config).first()
     ibc_global = cfg.ibc_global if cfg else 1_950_905
     pcts = json.loads(cfg.porcentajes or "{}") if cfg else {}
-    docs_facturados = set(
-        f.doc for f in db.query(models.Factura.doc).filter_by(mes=mes_actual, anio=anio_actual).all()
+
+    # Pre-cargar TODAS las facturas de los últimos 6 meses → set de (doc, mes, anio)
+    anios_ventana = list({str(y) for y, _ in meses_ventana})
+    meses_ventana_nombres = list({MESES[m-1] for _, m in meses_ventana})
+    facturas_set = set(
+        (f.doc, f.mes, f.anio)
+        for f in db.query(models.Factura.doc, models.Factura.mes, models.Factura.anio)
+        .filter(models.Factura.anio.in_(anios_ventana))
+        .filter(models.Factura.mes.in_(meses_ventana_nombres))
+        .all()
     )
 
-    afils = db.query(models.Afiliado).filter_by(activo=True).all()
+    afils = db.query(models.Afiliado).filter(
+        models.Afiliado.activo == True,
+        ~models.Afiliado.estado_srv.ilike("%RETIR%"),
+        ~models.Afiliado.estado_srv.ilike("%SUSPENDIDO%"),
+    ).all()
+
     rows = []
     for a in afils:
-        # Excluir empleados propios
         if (a.cliente_txt or "").upper() == "EMPLEADO": continue
         fa = a.fecha_afiliacion or a.fecha_ingreso or ""
         if not fa or "-" not in fa: continue
-        try: dia_afil = int(fa.split("-")[2])
+        try:
+            partes = fa.split("-")
+            dia_afil  = int(partes[2])
+            afil_year = int(partes[0])
+            afil_month= int(partes[1])
         except: continue
 
         ibc = a.ibc if (a.ibc and a.ibc > 0) else ibc_global
@@ -482,29 +587,51 @@ def get_cobro(db, empresa="", cliente="", tipo=""):
         planilla = sum(_ceil100(ibc * pcts.get(s, pcts.get(s.upper(), 0.0))) for s in srvs)
         cliente_afil = a.cliente_txt or ""
 
-        # COBRADO: tiene factura del mes y año actual
-        tiene_fac = a.doc in docs_facturados
+        for (y, m) in meses_ventana:
+            # No mostrar meses anteriores a la fecha de afiliación
+            if (y, m) < (afil_year, afil_month): continue
 
-        if tiene_fac:            estado = "COBRADO"
-        elif dia_afil < dia_hoy: estado = "VENCIDO"
-        elif dia_afil == dia_hoy:estado = "HOY"
-        else:                    estado = "PROXIMO"
+            mes_nombre = MESES[m - 1]
+            anio_str   = str(y)
+            tiene_fac  = (a.doc, mes_nombre, anio_str) in facturas_set
+            es_actual  = (y == hoy.year and m == hoy.month)
 
-        rows.append({
-            "id": a.id, "nombre": a.nombre, "empresa": a.empresa,
-            "doc": a.doc, "dia_cobro": dia_afil,
-            "fecha_afiliacion": fa, "cliente": cliente_afil,
-            "servicios": srvs, "planilla": planilla, "estado": estado,
-        })
+            if tiene_fac:
+                estado = "COBRADO"
+            elif not es_actual:
+                estado = "VENCIDO"   # mes pasado sin factura
+            else:
+                # Mes actual: usar día de cobro
+                if dia_afil < dia_hoy:   estado = "VENCIDO"
+                elif dia_afil == dia_hoy: estado = "HOY"
+                else:                     estado = "PROXIMO"
+
+            rows.append({
+                "id":       f"{a.id}_{m}_{y}",
+                "afil_id":  a.id,
+                "nombre":   a.nombre,
+                "empresa":  a.empresa,
+                "doc":      a.doc,
+                "dia_cobro":dia_afil,
+                "mes":      mes_nombre,
+                "anio":     anio_str,
+                "fecha_afiliacion": fa,
+                "cliente":  cliente_afil,
+                "servicios":srvs,
+                "planilla": planilla,
+                "estado":   estado,
+                "novedades":a.novedades or "",
+                "subtipo":  a.subtipo or "",
+            })
 
     if empresa: rows = [r for r in rows if r["empresa"] == empresa]
     if cliente: rows = [r for r in rows if r["cliente"] == cliente]
-    if tipo == "HOY":     rows = [r for r in rows if r["estado"]=="HOY"]
-    elif tipo == "VENCIDO": rows = [r for r in rows if r["estado"]=="VENCIDO"]
-    elif tipo == "PROXIMO": rows = [r for r in rows if r["estado"]=="PROXIMO"]
-    elif tipo == "COBRADO": rows = [r for r in rows if r["estado"]=="COBRADO"]
+    if tipo == "HOY":     rows = [r for r in rows if r["estado"] == "HOY"]
+    elif tipo == "VENCIDO": rows = [r for r in rows if r["estado"] == "VENCIDO"]
+    elif tipo == "PROXIMO": rows = [r for r in rows if r["estado"] == "PROXIMO"]
+    elif tipo == "COBRADO": rows = [r for r in rows if r["estado"] == "COBRADO"]
 
-    orden = {"VENCIDO":0,"HOY":1,"PROXIMO":2,"COBRADO":3}
-    rows.sort(key=lambda r:(orden.get(r["estado"],4), r["dia_cobro"]))
+    orden = {"VENCIDO": 0, "HOY": 1, "PROXIMO": 2, "COBRADO": 3}
+    rows.sort(key=lambda r: (orden.get(r["estado"], 4), r["nombre"], r["anio"], r["mes"]))
     _cache_set(cache_key, rows)
     return rows

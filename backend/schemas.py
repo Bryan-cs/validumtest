@@ -8,6 +8,7 @@ class LoginRequest(BaseModel):
 
 class AfiliadoCreate(BaseModel):
     nombre: str
+    tipo_doc: str = "CC"
     doc: str
     empresa: str = ""
     cargo: str = ""
@@ -24,6 +25,7 @@ class AfiliadoCreate(BaseModel):
     email: str = ""
     dir: str = ""
     obs: str = ""
+    novedades: str = ""
     ibc: Optional[float] = None
     fecha_ingreso: str = ""
     fecha_afiliacion: str = ""

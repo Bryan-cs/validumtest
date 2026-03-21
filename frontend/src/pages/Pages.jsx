@@ -7,6 +7,18 @@ import { C, Btn, PageHeader, StatCard, fmt } from '../components/UI';
 
 const UP = v => (v||'').toUpperCase();
 
+async function dlExcel(url, filename) {
+  try {
+    const res = await api.get(url, { responseType: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(res.data);
+    a.download = filename;
+    a.click();
+  } catch (e) {
+    alert('Error generando reporte');
+  }
+}
+
 // Todos los inputs de texto van en mayúsculas
 const up = (e, setter) => setter(e.target.value.toUpperCase());
 
@@ -28,28 +40,14 @@ export function Cobro() {
   const { data: todosAfil=[] } = useQuery({ queryKey:['afiliados_all'], queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]) });
   const clientes = ['', ...new Set(todosAfil.map(a=>a.cliente_txt).filter(Boolean))];
 
-  const crearFactura = useMutation({
-    mutationFn: (afil) => {
-      const anio = new Date().getFullYear().toString();
-      const mes  = MESES[new Date().getMonth()];
-      return api.post('/facturas', {
-        nombre_afiliado: afil.nombre, doc: afil.doc,
-        cliente: afil.cliente, anio, mes, periodo:'30',
-        estado:'pendiente',
-        ingresos:0, costos: afil.planilla, utilidad: -afil.planilla,
-      });
-    },
-    onSuccess: () => { toast.success('Factura creada — complétala en Facturación'); qc.invalidateQueries({queryKey:['cobro']}); },
-    onError: (e) => toast.error(e.response?.data?.detail||'Error'),
-  });
-
   const colorEstado = { VENCIDO:[C.red,C.redBg], HOY:[C.green,C.greenBg], PROXIMO:[C.text2,C.surface2], COBRADO:[C.blue,C.blueBg] };
   const totales = { hoy:0, venc:0, plan:0, cobrados:0 };
   rows.forEach(r=>{ if(r.estado==='HOY') totales.hoy++; else if(r.estado==='VENCIDO'){totales.venc++;totales.plan+=r.planilla;} else if(r.estado==='COBRADO') totales.cobrados++; });
 
   return (
     <div>
-      <PageHeader title="💰 Módulo de cobro" subtitle="Estado de cobro por afiliado" />
+      <PageHeader title="💰 Módulo de cobro" subtitle="Estado de cobro por afiliado"
+        action={<Btn variant="secondary" onClick={()=>dlExcel(`/reportes/cobro?empresa=${empresa}&cliente=${cliente}&tipo=${tipo}`,'cobro.xlsx')}>📊 Exportar Excel</Btn>} />
       <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
         <StatCard label="Cobrar hoy"    value={totales.hoy}       color={C.green} />
         <StatCard label="Vencidos"      value={totales.venc}      color={C.red} />
@@ -73,15 +71,15 @@ export function Cobro() {
         <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
-              {['Nombre','Empresa','Doc.','Cliente','Día cobro','Servicios','Planilla ($)','Estado','Acción'].map(h=>(
+              {['Nombre','Empresa','Doc.','Cliente','Día cobro','Servicios','Planilla ($)','Estado'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
                   color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={9} style={{ padding:20, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>}
-            {!isLoading && rows.length===0 && <tr><td colSpan={9} style={{ padding:20, textAlign:'center', color:C.text2 }}>Sin registros</td></tr>}
+            {isLoading && <tr><td colSpan={8} style={{ padding:20, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>}
+            {!isLoading && rows.length===0 && <tr><td colSpan={8} style={{ padding:20, textAlign:'center', color:C.text2 }}>Sin registros</td></tr>}
             {rows.map(r=>{
               const [fg, bg] = colorEstado[r.estado]||[C.text2,C.surface2];
               return (
@@ -98,12 +96,6 @@ export function Cobro() {
                       {r.estado}
                     </span>
                   </td>
-                  <td style={tdc}>
-                    {r.estado !== 'COBRADO' && (
-                      <Btn size="sm" variant="primary" onClick={()=>crearFactura.mutate(r)}
-                        disabled={crearFactura.isPending}>🧾 Facturar</Btn>
-                    )}
-                  </td>
                 </tr>
               );
             })}
@@ -117,6 +109,7 @@ export function Cobro() {
 // ─── RETIROS ──────────────────────────────────────────────────────────────────
 export function Retiros() {
   const qc = useQueryClient();
+  const [tab,   setTab]  = useState('retiros');
   const [anio, setAnio] = useState('');
   const [mes,  setMes]  = useState('');
   const [modal, setModal] = useState(false);
@@ -149,47 +142,100 @@ export function Retiros() {
 
   const anios = [...new Set(rows.map(r=>r.anio).filter(Boolean))];
 
+  const { data: historial=[] } = useQuery({
+    queryKey: ['actividad','Retiros'],
+    queryFn: () => api.get('/actividad', { params:{ modulo:'Retiros' } }).then(r=>r.data),
+    enabled: tab === 'historial',
+  });
+
   return (
     <div>
       <PageHeader title="↪️ Retiros" subtitle={`${rows.length} retiros`}
-        action={<Btn variant="accent" onClick={()=>setModal(true)}>+ Aplicar retiro</Btn>} />
-      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
-        <select style={sel} value={anio} onChange={e=>setAnio(e.target.value)}>
-          {['', ...anios].map(a=><option key={a} value={a}>{a||'Todos los años'}</option>)}
-        </select>
-        <select style={sel} value={mes} onChange={e=>setMes(e.target.value)}>
-          {['', ...MESES].map(m=><option key={m} value={m}>{m||'Todos los meses'}</option>)}
-        </select>
+        action={
+          <div style={{ display:'flex', gap:8 }}>
+            <Btn variant="secondary" onClick={()=>dlExcel(`/reportes/retiros?anio=${anio}&mes=${mes}`,`retiros${anio?'_'+anio:''}${mes?'_'+mes:''}.xlsx`)}>📊 Exportar Excel</Btn>
+            <Btn variant="accent" onClick={()=>setModal(true)}>+ Aplicar retiro</Btn>
+          </div>
+        } />
+      {/* Pestañas */}
+      <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:`2px solid ${C.border}` }}>
+        {[
+          { key:'retiros',   label:`↪️ Retiros (${rows.length})` },
+          { key:'historial', label:'📋 Historial de cambios' },
+        ].map(t=>(
+          <button key={t.key} onClick={()=>setTab(t.key)} style={{
+            padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
+            background: tab===t.key ? C.primary : 'transparent',
+            color: tab===t.key ? '#fff' : C.text2,
+            fontWeight: tab===t.key ? 700 : 400, fontSize:13, cursor:'pointer',
+          }}>{t.label}</button>
+        ))}
       </div>
-      <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
-          <thead>
-            <tr style={{ background:C.surface2 }}>
-              {['#','Nombre','Empresa','Documento','Fecha','Motivo','Registrado por','Acciones'].map(h=>(
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && <tr><td colSpan={8} style={{ padding:20, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>}
-            {rows.map((r,i)=>(
-              <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}` }}>
-                <td style={tdc}>{i+1}</td>
-                <td style={tdc}>{r.nombre}</td>
-                <td style={tdc}>{r.empresa}</td>
-                <td style={tdc}>{r.doc}</td>
-                <td style={tdc}>{r.fecha}</td>
-                <td style={tdc}>{r.motivo}</td>
-                <td style={tdc}>{r.registrado_por}</td>
-                <td style={tdc}>
-                  <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar retiro?')) eliminar.mutate(r.id); }}>Eliminar</Btn>
-                </td>
+
+      {tab === 'retiros' && (<>
+        <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+          <select style={sel} value={anio} onChange={e=>setAnio(e.target.value)}>
+            {['', ...anios].map(a=><option key={a} value={a}>{a||'Todos los años'}</option>)}
+          </select>
+          <select style={sel} value={mes} onChange={e=>setMes(e.target.value)}>
+            {['', ...MESES].map(m=><option key={m} value={m}>{m||'Todos los meses'}</option>)}
+          </select>
+        </div>
+        <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+            <thead>
+              <tr style={{ background:C.surface2 }}>
+                {['#','Nombre','Empresa','Documento','Fecha','Motivo','Registrado por','Acciones'].map(h=>(
+                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+                ))}
               </tr>
-            ))}
-            {!isLoading&&rows.length===0&&<tr><td colSpan={8} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin retiros</td></tr>}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {isLoading && <tr><td colSpan={8} style={{ padding:20, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>}
+              {rows.map((r,i)=>(
+                <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                  <td style={tdc}>{i+1}</td>
+                  <td style={tdc}>{r.nombre}</td>
+                  <td style={tdc}>{r.empresa}</td>
+                  <td style={tdc}>{r.doc}</td>
+                  <td style={tdc}>{r.fecha}</td>
+                  <td style={tdc}>{r.motivo}</td>
+                  <td style={tdc}>{r.registrado_por}</td>
+                  <td style={tdc}>
+                    <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar retiro?')) eliminar.mutate(r.id); }}>Eliminar</Btn>
+                  </td>
+                </tr>
+              ))}
+              {!isLoading&&rows.length===0&&<tr><td colSpan={8} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin retiros</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </>)}
+
+      {tab === 'historial' && (
+        <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+            <thead>
+              <tr style={{ background:C.surface2 }}>
+                {['Fecha','Usuario','Acción','Detalle'].map(h=>(
+                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {historial.map((a,i)=>(
+                <tr key={i} style={{ borderBottom:`1px solid ${C.border}` }}>
+                  <td style={{ ...tdc, fontSize:11, color:C.text2, whiteSpace:'nowrap' }}>{a.fecha}</td>
+                  <td style={{ ...tdc, fontWeight:600 }}>{a.usuario}</td>
+                  <td style={tdc}>{a.accion}</td>
+                  <td style={{ ...tdc, color:C.text2, fontSize:12 }}>{a.detalle}</td>
+                </tr>
+              ))}
+              {historial.length===0&&<tr><td colSpan={4} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin historial de retiros</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
       {modal && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
           <div style={{ background:'#fff',borderRadius:14,padding:28,width:420,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
@@ -248,7 +294,8 @@ export function Facturacion() {
 
   return (
     <div>
-      <PageHeader title="🧾 Facturación" subtitle={`${rows.length} facturas`} />
+      <PageHeader title="🧾 Facturación" subtitle={`${rows.length} facturas`}
+        action={<Btn variant="secondary" onClick={()=>dlExcel(`/reportes/financiero?anio=${anio}&mes=${mes}&cliente=${cliente}&estado=${estado}`,`financiero${anio?'_'+anio:''}${mes?'_'+mes:''}.xlsx`)}>📊 Exportar Excel</Btn>} />
       <div style={{ display:'flex', gap:10, marginBottom:14, flexWrap:'wrap' }}>
         <StatCard label="Total ingresos"    value={fmt(totIng)}  color={C.primary} />
         <StatCard label="Utilidad bruta"    value={fmt(totUtil)} color={C.green} />
@@ -342,6 +389,12 @@ export function Empleados() {
     onError:(e)=>toast.error(e.response?.data?.detail||'Error'),
   });
 
+  const eliminarEmp = useMutation({
+    mutationFn:(id)=>api.delete(`/empleados/${id}`),
+    onSuccess:()=>{ toast.success('Empleado eliminado'); qc.invalidateQueries({queryKey:['empleados']}); },
+    onError:(e)=>toast.error(e.response?.data?.detail||'Error'),
+  });
+
   const [gnombre,setGnom]=useState(''); const [gvalor,setGval]=useState(0);
   const addGasto = useMutation({
     mutationFn:()=>api.post('/gastos',{nombre:gnombre,valor:+gvalor}),
@@ -385,7 +438,12 @@ export function Empleados() {
                 <td style={tdc}>{e.cargo}</td><td style={tdc}>{e.usuario||'—'}</td>
                 <td style={{ ...tdc,textAlign:'right' }}>{fmt(e.nomina)}</td>
                 <td style={tdc}><span style={{ background:e.activo?C.greenBg:C.redBg,color:e.activo?C.green:C.red,borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>{e.activo?'Activo':'Inactivo'}</span></td>
-                <td style={tdc}><Btn size="sm" variant="secondary" onClick={()=>{setForm({...e});setModal(e);}}>✏️ Editar</Btn></td>
+                <td style={tdc}>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <Btn size="sm" variant="secondary" onClick={()=>{setForm({...e});setModal(e);}}>✏️ Editar</Btn>
+                    <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm(`¿Eliminar a ${e.nombre}?`)) eliminarEmp.mutate(e.id); }}>🗑️ Eliminar</Btn>
+                  </div>
+                </td>
               </tr>
             ))}
             {emps.length===0&&<tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin empleados</td></tr>}

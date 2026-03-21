@@ -17,6 +17,7 @@ class Afiliado(Base):
     __tablename__ = "afiliados"
     id              = Column(Integer, primary_key=True, index=True)
     nombre          = Column(String(150), index=True)
+    tipo_doc        = Column(String(10), default="CC")
     doc             = Column(String(20), unique=True, index=True)
     empresa         = Column(String(80), index=True)       # índice para filtros frecuentes
     cargo           = Column(String(80))
@@ -33,6 +34,7 @@ class Afiliado(Base):
     email           = Column(String(100))
     dir             = Column(String(200))
     obs             = Column(Text)
+    novedades       = Column(Text)
     ibc             = Column(Float, nullable=True)   # IBC individual (None = usar global)
     fecha_ingreso   = Column(String(10))
     fecha_afiliacion= Column(String(10))
