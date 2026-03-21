@@ -129,7 +129,7 @@ export default function Afiliados() {
       };
       return modal==='nuevo' ? api.post('/afiliados',payload) : api.put(`/afiliados/${modal.id}`,payload);
     },
-    onSuccess: () => { toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); setModal(null); },
+    onSuccess: () => { toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['facturas']}); setModal(null); },
     onError: e => toast.error(e.response?.data?.detail||'Error'),
   });
 
@@ -261,8 +261,6 @@ export default function Afiliados() {
                       <div style={{ display:'flex',gap:4,flexWrap:'wrap' }}>
                         <Btn size="sm" variant="secondary" onClick={()=>openEditar(a)}>✏️ Editar</Btn>
                         <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/certificado`,`certificado_${a.nombre.replace(/ /g,'_')}.pdf`)}>📄 Cert.</Btn>
-                        <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/estado-cuenta`,`estado_cuenta_${a.nombre.replace(/ /g,'_')}.pdf`)}>📑 E.C.</Btn>
-                        <Btn size="sm" variant="secondary" onClick={()=>{ setDocSeleccionado(a.doc); setBusquedaPagos(a.nombre); setTab('pagos'); }}>💳</Btn>
                         <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm(`¿Eliminar a ${a.nombre}?`)) eliminar.mutate(a.id); }}>×</Btn>
                       </div>
                     </td>

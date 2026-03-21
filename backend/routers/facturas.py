@@ -126,39 +126,26 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
     txt(50, y, "SERVICIOS CONTRATADOS", size=9, bold=True, color=colors.HexColor("#1E40AF"))
     y -= 6
 
-    cfg_db = db.query(models.Config).first()
-    ibc_global = cfg_db.ibc_global if cfg_db else 1_950_905
-    pcts = json.loads(cfg_db.porcentajes or "{}") if cfg_db else {}
+    srvs_detalle = json.loads(fact.get('servicios_detalle') or '[]') if isinstance(fact.get('servicios_detalle'), str) else (fact.get('servicios_detalle') or [])
+    srvs_activos = [s for s in srvs_detalle if s.get('incluido', True) is not False]
+    row_color = [colors.HexColor("#F8FAFC"), colors.white]
 
-    afil = db.query(models.Afiliado).filter_by(doc=fact.get('doc')).first()
-    ibc = (afil.ibc if afil and afil.ibc and afil.ibc > 0 else ibc_global) if afil else ibc_global
-
+    # Encabezado tabla solo con nombre de servicio
     y -= 16
     c.setFillColor(colors.HexColor("#1E40AF"))
     c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 9)
     c.drawString(55, y, "Servicio")
-    c.drawString(360, y, "IBC")
-    c.drawString(490, y, "Valor")
 
-    srvs_detalle = json.loads(fact.get('servicios_detalle') or '[]') if isinstance(fact.get('servicios_detalle'), str) else (fact.get('servicios_detalle') or [])
-    total_planilla = 0
-    row_color = [colors.HexColor("#F8FAFC"), colors.white]
-
-    if srvs_detalle:
-        for idx, srv in enumerate(srvs_detalle):
+    if srvs_activos:
+        for idx, srv in enumerate(srvs_activos):
             y -= 16
             c.setFillColor(row_color[idx % 2])
             c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
             c.setFillColor(colors.black)
             c.setFont("Helvetica", 9)
-            nombre_srv = srv.get('servicio', srv.get('nombre', ''))
-            valor_srv  = srv.get('valor', srv.get('val30', 0))
-            total_planilla += valor_srv
-            c.drawString(55, y, nombre_srv)
-            c.drawString(360, y, money(ibc))
-            c.drawRightString(W - 55, y, money(valor_srv))
+            c.drawString(55, y, srv.get('servicio', srv.get('nombre', '')))
     else:
         y -= 16
         c.setFillColor(row_color[0])
@@ -166,36 +153,128 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
         c.setFillColor(colors.black)
         c.setFont("Helvetica", 9)
         c.drawString(55, y, "Planilla seguridad social")
-        c.drawRightString(W - 55, y, money(fact.get('costos', 0)))
-        total_planilla = fact.get('costos', 0)
 
     y -= 24
     c.setStrokeColor(colors.HexColor("#E2E8F0"))
     c.line(50, y + 8, W - 50, y + 8)
 
-    total_a_pagar = total_planilla if total_planilla else (fact.get('costos', 0) or 0)
+    ingresos = fact.get('ingresos', 0) or 0
 
+    # Fila: Valor a pagar
     y -= 4
     c.setFillColor(colors.HexColor("#1E40AF"))
     c.rect(340, y - 4, W - 390, 18, fill=1, stroke=0)
     c.setFillColor(colors.white)
     c.setFont("Helvetica-Bold", 10)
-    c.drawString(350, y, "TOTAL A PAGAR:")
-    c.drawRightString(W - 55, y, money(total_a_pagar))
+    c.drawString(350, y, "VALOR A PAGAR:")
+    c.drawRightString(W - 55, y, money(ingresos))
 
+    # ── Fecha de vencimiento ──────────────────────────────────────────────────
+    afil_obj = db.query(models.Afiliado).filter_by(doc=fact.get('doc')).first()
+    fecha_afil = afil_obj.fecha_afiliacion if afil_obj else ""
+    mes_fact   = fact.get('mes', '')
+    anio_fact  = fact.get('anio', '')
+    fecha_venc = None
+    if fecha_afil and mes_fact and anio_fact:
+        try:
+            dia = int(fecha_afil.split('-')[2])
+            if   dia >= 26 or dia <= 4:  fecha_venc = f"05 de {mes_fact} de {anio_fact}"
+            elif dia <= 9:               fecha_venc = f"10 de {mes_fact} de {anio_fact}"
+            elif dia <= 14:              fecha_venc = f"15 de {mes_fact} de {anio_fact}"
+            elif dia <= 19:              fecha_venc = f"20 de {mes_fact} de {anio_fact}"
+            elif dia <= 25:              fecha_venc = f"25 de {mes_fact} de {anio_fact}"
+        except Exception:
+            pass
+
+    # ── Días de mora ──────────────────────────────────────────────────────────
+    dias_mora = 0
+    if fecha_venc and fact.get('estado') == 'pendiente':
+        try:
+            meses_es = {'Enero':1,'Febrero':2,'Marzo':3,'Abril':4,'Mayo':5,'Junio':6,
+                        'Julio':7,'Agosto':8,'Septiembre':9,'Octubre':10,'Noviembre':11,'Diciembre':12}
+            partes_venc = fecha_venc.split(' de ')  # ['05', 'Marzo', '2026']
+            d_venc = datetime(int(partes_venc[2]), meses_es[partes_venc[1]], int(partes_venc[0]))
+            dias_mora = max(0, (datetime.now() - d_venc).days)
+        except Exception:
+            pass
+
+    y -= 16
+    c.setStrokeColor(colors.HexColor("#E2E8F0"))
+    c.setLineWidth(0.7)
+    c.line(50, y, W - 50, y)
+
+    # Fecha vencimiento y mora
+    if fecha_venc:
+        y -= 16
+        c.setFillColor(colors.black)
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(50, y, "Fecha de vencimiento:")
+        c.setFont("Helvetica", 9)
+        c.drawString(175, y, fecha_venc)
+        if dias_mora > 0:
+            c.setFillColor(colors.HexColor("#DC2626"))
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(350, y, f"⚠ {dias_mora} día{'s' if dias_mora != 1 else ''} de mora")
+            c.setFillColor(colors.black)
+
+    # Novedades
     if fact.get('novedades'):
-        y -= 28
+        y -= 16
         c.setFillColor(colors.HexColor("#FFFBEB"))
-        c.rect(50, y - 6, W - 100, 20, fill=1, stroke=0)
+        c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
         c.setFillColor(colors.HexColor("#92400E"))
         c.setFont("Helvetica-Bold", 9)
         c.drawString(55, y, f"Novedades: {fact.get('novedades','')}")
-
-    if fact.get('banco'):
-        y -= 26
         c.setFillColor(colors.black)
-        c.setFont("Helvetica", 9)
-        c.drawString(50, y, f"Banco / Cuenta: {fact.get('banco','')}")
+
+    # ── Formas de pago ────────────────────────────────────────────────────────
+    bancos_lista = []
+    try:
+        lista_bancos = db.query(models.Lista).filter_by(nombre='bancos').first()
+        if lista_bancos:
+            bancos_lista = [b for b in json.loads(lista_bancos.items or "[]")
+                            if b.strip().lower() not in ('efectivo', 'cash')]
+    except Exception:
+        pass
+
+    if bancos_lista:
+        y -= 22
+        c.setFillColor(colors.HexColor("#1E40AF"))
+        c.setFont("Helvetica-Bold", 9)
+        c.drawString(50, y, "Formas de pago:")
+
+        # Encabezado de columnas
+        y -= 18
+        c.setFillColor(colors.HexColor("#1E40AF"))
+        c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(58, y, "Entidad")
+        c.drawString(280, y, "N° Cuenta / Referencia")
+
+        for banco in bancos_lista:
+            y -= 18
+            if ' - ' in banco:
+                nombre_b, cuenta_b = banco.split(' - ', 1)
+            else:
+                nombre_b, cuenta_b = banco, ''
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica", 8)
+            c.drawString(58, y, nombre_b)
+            if cuenta_b:
+                c.setFont("Helvetica-Bold", 8)
+                c.drawString(280, y, cuenta_b)
+            # Línea separadora
+            c.setStrokeColor(colors.HexColor("#E2E8F0"))
+            c.setLineWidth(0.4)
+            c.line(50, y - 6, W - 50, y - 6)
+
+    # Banco seleccionado en la factura
+    if fact.get('banco'):
+        y -= 18
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.HexColor("#374151"))
+        c.drawString(50, y, f"Pago registrado en: {fact.get('banco','')}")
 
     c.save()
 

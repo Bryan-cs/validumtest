@@ -1,0 +1,156 @@
+================================================================
+  GUIA: COMO CAMBIAR EL MENSAJE DE WHATSAPP - BBC FILE
+================================================================
+
+ARCHIVO A EDITAR:
+  frontend/src/pages/Facturacion.jsx
+
+----------------------------------------------------------------
+ESTRUCTURA ACTUAL DEL MENSAJE (aprox. linea 577)
+----------------------------------------------------------------
+
+${saludo}!.
+Señor@: ${f.nombre_afiliado}
+
+ Estimado cliente;
+Reciban un cordial saludo, por parte de CARSECOOP Y COOPERATIVA
+DE SERVICIOS GLOBALES TECHCOOP, identificado con Nit 901921756,
+por parte de Carsecoop le deseamos un excelente dia.
+
+Recordatorio de pago de su seguridad social del mes de
+${f.mes} ${f.anio}, agradecemos su pago oportuno.
+
+Fecha Emision: ${fechaEmision}
+Fecha de Vencimiento: ${fechaVenc}
+
+TOTAL: $${f.costos}
+${serviciosTexto}
+
+*Medios de pago:*
+-Nequi / Daviplata: 3170296773
+-Davivienda (Ahorros): 0550108900642357
+-Banco de Bogota (Ahorros): 462547688
+-Llave Banco Bogota: @BBJMF23103
+-Bancolombia (Ahorros): 91270274485
+
+----------------------------------------------------------------
+VARIABLES DISPONIBLES EN EL MENSAJE
+----------------------------------------------------------------
+
+  ${f.nombre_afiliado}  -> Nombre completo del afiliado
+  ${f.mes}              -> Mes de la factura (ej: "Marzo")
+  ${f.anio}             -> Ano de la factura (ej: "2026")
+  ${f.costos}           -> Total a pagar en pesos
+  ${serviciosTexto}     -> Lista de servicios (EPS, AFP, ARL, etc.)
+  ${fechaEmision}       -> Fecha actual (dia que se envia el mensaje)
+  ${fechaVenc}          -> Fecha maxima de pago (calculada automaticamente
+                           segun fecha de afiliacion del cliente)
+  ${saludo}             -> Buenos dias / Buenas tardes / Buenas noches
+                           (segun la hora en que se hace clic)
+
+----------------------------------------------------------------
+LOGICA DE FECHA DE VENCIMIENTO (funcion calcularFechaVencimiento)
+----------------------------------------------------------------
+
+Se calcula segun el dia del campo "Fecha afiliacion" del afiliado:
+
+  Dia de afiliacion 26 al 31 o del 01 al 04  ->  vence el 05
+  Dia de afiliacion 05 al 09                  ->  vence el 10
+  Dia de afiliacion 10 al 14                  ->  vence el 15
+  Dia de afiliacion 15 al 19                  ->  vence el 20
+  Dia de afiliacion 20 al 25                  ->  vence el 25
+
+  Si el afiliado no tiene "Fecha afiliacion" registrada,
+  la linea de vencimiento NO aparece en el mensaje.
+
+Para cambiar estas reglas editar la funcion calcularFechaVencimiento
+ubicada aprox. en la linea 24 del mismo archivo.
+
+----------------------------------------------------------------
+COMO CAMBIAR DATOS FIJOS DEL MENSAJE
+----------------------------------------------------------------
+
+NOMBRE DE LA EMPRESA:
+  Buscar: "CARSECOOP Y COOPERATIVA DE SERVICIOS GLOBALES TECHCOOP"
+  Reemplazar con el nuevo nombre.
+
+NIT:
+  Buscar: "Nit 901921756"
+  Reemplazar con el nuevo NIT.
+
+MEDIOS DE PAGO:
+  Son texto fijo al final del mensaje. Editar directamente:
+  - Nequi / Daviplata: cambiar el numero
+  - Davivienda: cambiar el numero de cuenta
+  - Banco de Bogota: cambiar el numero de cuenta
+  - Llave Banco Bogota: cambiar el alias
+  - Bancolombia: cambiar el numero de cuenta
+
+----------------------------------------------------------------
+RECOMENDACIONES PARA PRODUCCION
+----------------------------------------------------------------
+
+PROBLEMA ACTUAL:
+  El texto del mensaje (empresa, NIT, medios de pago) esta
+  "quemado" directamente en el codigo. Cada vez que se quiera
+  cambiar un dato hay que editar el archivo, hacer build y
+  redesplegar la app.
+
+RECOMENDACION 1 - MEJOR OPCION: Mover el mensaje a la tabla Config
+  La app ya tiene una tabla "Config" en la base de datos
+  (backend/models.py) que guarda configuracion del sistema.
+  Se puede agregar un campo "plantilla_whatsapp" donde el admin
+  edite el mensaje directamente desde la interfaz, sin tocar codigo.
+
+  Pasos:
+  1. Agregar campo "plantilla_whatsapp" en backend/models.py (Config)
+  2. Crear endpoint PUT /config para guardar la plantilla
+  3. En la pagina de Configuracion del frontend, agregar un
+     textarea donde el admin escriba el mensaje con variables
+     como {{nombre}}, {{mes}}, {{total}}, etc.
+  4. En Facturacion.jsx, leer la plantilla desde /config y
+     reemplazar las variables antes de enviar.
+
+RECOMENDACION 2 - OPCION RAPIDA: Archivo de constantes separado
+  Crear el archivo:
+    frontend/src/utils/mensajeWhatsapp.js
+
+  Contenido:
+    export const EMPRESA = "CARSECOOP Y COOPERATIVA...";
+    export const NIT = "901921756";
+    export const MEDIOS_PAGO = `
+      -Nequi / Daviplata: 3170296773
+      -Davivienda (Ahorros): 0550108900642357
+      ...
+    `;
+    export function buildMensaje(datos) { ... }
+
+  Ventaja: todos los textos editables en un solo lugar,
+  sin buscar dentro del codigo de la pagina.
+
+RECOMENDACION 3 - PARA MULTIPLES EMPRESAS:
+  Si en el futuro la app maneja mas de una empresa con
+  mensajes distintos, usar la tabla "Empresa" que ya existe
+  en la base de datos y agregar ahi la plantilla de mensaje
+  por empresa.
+
+----------------------------------------------------------------
+FLUJO TECNICO DEL MENSAJE (para referencia)
+----------------------------------------------------------------
+
+1. Usuario hace clic en "WhatsApp" en Facturacion
+2. Se ejecuta el onClick en Facturacion.jsx (aprox. linea 567)
+3. Se calcula fechaEmision (fecha actual)
+4. Se calcula fechaVenc usando calcularFechaVencimiento()
+   con f.fecha_afiliacion que viene del backend
+5. Se construye el string del mensaje con template literal
+6. Se codifica con encodeURIComponent()
+7. Se abre: https://wa.me/57{telefono}?text={mensaje}
+8. WhatsApp Web/App abre con el mensaje prellenado
+   (el usuario aun debe presionar Enviar manualmente)
+
+NOTA: f.fecha_afiliacion llega al frontend porque el endpoint
+GET /facturas (backend/crud.py) hace un JOIN con la tabla
+Afiliado para traer ese campo junto con el telefono.
+
+================================================================

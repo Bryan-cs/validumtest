@@ -21,62 +21,6 @@ from slowapi.errors import RateLimitExceeded
 
 limiter = Limiter(key_func=get_remote_address)
 
-# ─── EMAIL / SCHEDULER ────────────────────────────────────────────────────────
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-from apscheduler.schedulers.background import BackgroundScheduler
-
-SMTP_HOST    = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT    = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER    = os.getenv("SMTP_USER", "")
-SMTP_PASS    = os.getenv("SMTP_PASS", "")
-NOTIFY_EMAIL = os.getenv("NOTIFY_EMAIL", SMTP_USER)
-
-
-def send_vencidos_email():
-    if not SMTP_USER or not SMTP_PASS:
-        return
-    from database import SessionLocal
-    db = SessionLocal()
-    try:
-        cobro_rows = crud.get_cobro(db)
-        vencidos = [r for r in cobro_rows if r.get('estado') == 'VENCIDO']
-        hoy      = [r for r in cobro_rows if r.get('estado') == 'HOY']
-        if not vencidos and not hoy:
-            return
-        html  = "<h2>BBC File — Resumen de cobros</h2>"
-        html += f"<p><strong>Cobrar hoy:</strong> {len(hoy)} afiliados</p>"
-        html += f"<p><strong>Vencidos:</strong> {len(vencidos)} afiliados</p>"
-        if hoy:
-            html += "<h3>Cobrar hoy:</h3><ul>"
-            for r in hoy[:20]:
-                html += f"<li>{r.get('nombre')} — {r.get('empresa')} — ${r.get('planilla',0):,.0f}</li>"
-            html += "</ul>"
-        if vencidos:
-            html += "<h3>Vencidos:</h3><ul>"
-            for r in vencidos[:20]:
-                html += f"<li>{r.get('nombre')} — {r.get('mes')} {r.get('anio')} — ${r.get('planilla',0):,.0f}</li>"
-            html += "</ul>"
-
-        msg = MIMEMultipart("alternative")
-        msg["Subject"] = f"BBC File — {len(hoy)} para cobrar hoy, {len(vencidos)} vencidos"
-        msg["From"]    = SMTP_USER
-        msg["To"]      = NOTIFY_EMAIL
-        msg.attach(MIMEText(html, "html"))
-
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, NOTIFY_EMAIL, msg.as_string())
-    except Exception as e:
-        print(f"Error enviando email de notificación: {e}")
-    finally:
-        db.close()
-
-
-scheduler = BackgroundScheduler()
-scheduler.add_job(send_vencidos_email, 'cron', hour=8, minute=0)
 
 # ─── AUTH CONFIG ──────────────────────────────────────────────────────────────
 _default_key = None if os.getenv("RAILWAY_ENVIRONMENT") else "dev-only-key-do-not-use-in-prod"
@@ -91,9 +35,7 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    scheduler.start()
     yield
-    scheduler.shutdown()
 
 
 app = FastAPI(title="BBC File API", version="1.0.0", lifespan=lifespan)
@@ -144,11 +86,13 @@ from routers import auth as auth_router
 from routers import afiliados as afiliados_router
 from routers import facturas as facturas_router
 from routers import reportes as reportes_router
+from routers import tareas as tareas_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
 app.include_router(facturas_router.router)
 app.include_router(reportes_router.router)
+app.include_router(tareas_router.router)
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
@@ -375,16 +319,6 @@ def update_lista(nombre: str, data: schemas.ListaUpdate,
                  db: Session = Depends(get_db), token=Depends(require_admin)):
     return crud.update_lista(db, nombre, data.items)
 
-
-# ─── NOTIFICACIONES ───────────────────────────────────────────────────────────
-@app.post("/notificaciones/test")
-def test_notificacion(token=Depends(require_admin)):
-    """Envía email de notificación de cobros manualmente (para pruebas)."""
-    if not SMTP_USER:
-        raise HTTPException(400, "SMTP no configurado. Configure SMTP_USER y SMTP_PASS en variables de entorno.")
-    import threading
-    threading.Thread(target=send_vencidos_email, daemon=True).start()
-    return {"ok": True, "message": "Notificación enviada en segundo plano"}
 
 
 # ─── REPORTES EXCEL (streaming responses, kept in main for backward compat) ───

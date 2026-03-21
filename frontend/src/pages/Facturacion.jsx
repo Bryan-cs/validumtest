@@ -21,6 +21,20 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const TIPOS_CONCEPTO = ['Bono','Comision','Ajuste','Descuento','Otro ingreso','Deduccion'];
 
+function calcularFechaVencimiento(fecha_afiliacion, mes, anio) {
+  if (!fecha_afiliacion || !mes || !anio) return null;
+  const partes = fecha_afiliacion.split('-');
+  if (partes.length !== 3) return null;
+  const dia = parseInt(partes[2], 10);
+  if (isNaN(dia)) return null;
+  if (dia >= 26 || dia <= 4)        return `05 de ${mes} de ${anio}`;
+  if (dia >= 5  && dia <= 9)        return `10 de ${mes} de ${anio}`;
+  if (dia >= 10 && dia <= 14)       return `15 de ${mes} de ${anio}`;
+  if (dia >= 15 && dia <= 19)       return `20 de ${mes} de ${anio}`;
+  if (dia >= 20 && dia <= 25)       return `25 de ${mes} de ${anio}`;
+  return null;
+}
+
 // Cálculo de planilla idéntico al .py
 function calcPlanilla(afiliado, config, dias) {
   const ceil100 = v => Math.ceil(v / 100) * 100;
@@ -326,7 +340,18 @@ function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado }) {
                   borderBottom:`1px solid ${C.border}`,background: inc?'#fff':C.surface2 }}>
                   <div style={{ padding:'8px 10px',display:'flex',alignItems:'center' }}>
                     <input type="checkbox" checked={inc}
-                      onChange={() => setMarcados(m => ({...m,[p.servicio]:!inc}))} /></div>
+                      onChange={() => {
+                        const esArl = p.servicio.startsWith('ARL');
+                        setMarcados(m => {
+                          const next = { ...m, [p.servicio]: !inc };
+                          if (esArl && !inc) {
+                            planilla.forEach(s => {
+                              if (s.servicio !== p.servicio && s.servicio.startsWith('ARL')) next[s.servicio] = false;
+                            });
+                          }
+                          return next;
+                        });
+                      }} /></div>
                   <div style={{ padding:'8px 10px',fontSize:13,color:inc?C.text:C.text2,
                     textDecoration:inc?'none':'line-through' }}>{p.servicio}</div>
                   <div style={{ padding:'8px 10px',fontSize:12,color:C.text2 }}>
@@ -553,9 +578,26 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                         const tel = (f.tel||'').replace(/\D/g,'');
                         if (!tel) { alert('El afiliado no tiene teléfono registrado'); return; }
                         const phone = tel.startsWith('57') ? tel : `57${tel}`;
-                        const msg = encodeURIComponent(`Hola ${f.nombre_afiliado}, le enviamos su factura ${f.codigo} del período ${f.mes} ${f.anio} por valor de $${Number(f.costos||0).toLocaleString('es-CO')}. Por favor comuníquese con nosotros para más información.`);
+                        const horaActual = new Date().getHours();
+                        const saludo = horaActual < 12 ? 'Buenos días' : horaActual < 18 ? 'Buenas tardes' : 'Buenas noches';
+                        const fechaEmision = new Date().toLocaleDateString('es-CO',{day:'2-digit',month:'short',year:'numeric'});
+                        const fechaVenc = calcularFechaVencimiento(f.fecha_afiliacion, f.mes, f.anio);
+                        const serviciosTexto = (f.servicios_detalle||[]).filter(s=>s.incluido!==false).map(s=>`-${s.servicio}`).join('\n');
+                        const plantilla = config.plantilla_whatsapp || '';
+                        const texto = plantilla
+                          .replace('{{saludo}}', saludo)
+                          .replace('{{nombre}}', f.nombre_afiliado||'')
+                          .replace('{{mes}}', f.mes||'')
+                          .replace('{{anio}}', f.anio||'')
+                          .replace('{{fecha_emision}}', fechaEmision)
+                          .replace('{{vencimiento}}', fechaVenc ? `Fecha de Vencimiento: ${fechaVenc}` : '')
+                          .replace('{{total}}', Number(f.costos||0).toLocaleString('es-CO'))
+                          .replace('{{servicios}}', serviciosTexto ? `Servicios contratados:\n${serviciosTexto}` : '');
+                        const msg = encodeURIComponent(texto);
                         window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
                       }}>💬 WhatsApp</Btn>
+                      <Btn size="sm" variant="secondary"
+                        onClick={()=>dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.codigo}.pdf`)}>📄 PDF</Btn>
                       <Btn size="sm" variant="danger"
                         onClick={()=>{ if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
                     </div>

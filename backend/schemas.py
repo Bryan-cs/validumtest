@@ -108,6 +108,17 @@ class UsuarioCreate(BaseModel):
 class ConfigUpdate(BaseModel):
     ibc_global: Optional[float] = None
     porcentajes: Optional[dict] = None
+    plantilla_whatsapp: Optional[str] = None
 
 class ListaUpdate(BaseModel):
     items: List[str]
+
+class TareaCreate(BaseModel):
+    titulo: str
+    descripcion: str = ""
+    asignado_a: str
+    creado_por: str = ""
+
+class TareaComentarioCreate(BaseModel):
+    texto: str
+    usuario: str = ""

@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../hooks/useAuth';
+import api from '../utils/api';
 
 const C_PRIMARY = '#0D3B6E';
 const C_ACCENT  = '#E89B2A';
@@ -9,6 +11,7 @@ const navItems = (rol) => [
   { to: '/',            label: '🏠 Dashboard',           section: 'PRINCIPAL' },
   { to: '/afiliados',   label: '👥 Afiliados',            section: 'GESTIÓN' },
   { to: '/retiros',     label: '↪️ Retiros',               section: null },
+  { to: '/tareas',      label: '✅ Tareas',                section: null },
   { to: '/facturacion', label: '🧾 Facturación',           section: 'FINANCIERO' },
   { to: '/cobro',       label: '💰 Módulo de cobro',       section: null },
   ...(rol === 'admin' ? [
@@ -22,7 +25,25 @@ const navItems = (rol) => [
 export default function Layout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const qc = useQueryClient();
   const [collapsed, setCollapsed] = useState(false);
+  const [showNotifs, setShowNotifs] = useState(false);
+
+  const { data: notifs = [] } = useQuery({
+    queryKey: ['notificaciones'],
+    queryFn: () => api.get('/tareas/notificaciones').then(r => r.data),
+    refetchInterval: 30_000,
+  });
+  const noLeidas = notifs.filter(n => !n.leida).length;
+
+  const abrirNotifs = () => {
+    setShowNotifs(v => !v);
+    if (noLeidas > 0) {
+      api.put('/tareas/notificaciones/leer').then(() =>
+        qc.invalidateQueries({ queryKey: ['notificaciones'] })
+      );
+    }
+  };
 
   const handleLogout = () => { logout(); navigate('/login'); };
   const items = navItems(user?.rol);
@@ -48,7 +69,7 @@ export default function Layout() {
 
         {/* Nav */}
         <nav style={{ flex: 1, overflowY: 'auto', paddingBottom: 12 }}>
-          {items.map((item, idx) => (
+          {items.map((item) => (
             <React.Fragment key={item.to}>
               {item.section && !collapsed && (
                 <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', padding: '14px 16px 4px', fontWeight: 600, letterSpacing: '0.1em' }}>
@@ -69,6 +90,55 @@ export default function Layout() {
             </React.Fragment>
           ))}
         </nav>
+
+        {/* Notificaciones */}
+        <div style={{ position: 'relative', padding: '6px 14px', borderTop: '1px solid rgba(255,255,255,.1)' }}>
+          <button onClick={abrirNotifs} style={{
+            background: 'none', border: 'none', color: 'rgba(255,255,255,.8)',
+            cursor: 'pointer', fontSize: 20, position: 'relative', padding: '4px 6px',
+          }}>
+            🔔
+            {noLeidas > 0 && (
+              <span style={{
+                position: 'absolute', top: 0, right: 0,
+                background: '#E53E3E', color: 'white', borderRadius: '50%',
+                width: 17, height: 17, fontSize: 10, fontWeight: 700,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {noLeidas > 9 ? '9+' : noLeidas}
+              </span>
+            )}
+          </button>
+          {!collapsed && <span style={{ color: 'rgba(255,255,255,.5)', fontSize: 12, verticalAlign: 'middle' }}>Notificaciones</span>}
+
+          {showNotifs && (
+            <div style={{
+              position: 'absolute', bottom: 44, left: 8,
+              width: 300, background: 'white', borderRadius: 10,
+              boxShadow: '0 8px 30px rgba(0,0,0,.25)', zIndex: 300,
+              maxHeight: 360, overflowY: 'auto',
+            }}>
+              <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid #eee', color: '#1E293B' }}>
+                Notificaciones
+                <button onClick={() => setShowNotifs(false)} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 16 }}>×</button>
+              </div>
+              {notifs.length === 0
+                ? <p style={{ padding: 14, color: '#888', fontSize: 13, margin: 0 }}>Sin notificaciones</p>
+                : notifs.map(n => (
+                  <div key={n.id} style={{
+                    padding: '10px 14px', borderBottom: '1px solid #f0f0f0',
+                    fontSize: 12, background: n.leida ? 'white' : '#EBF8FF',
+                  }}>
+                    <div style={{ color: '#1E293B' }}>{n.mensaje}</div>
+                    <div style={{ color: '#888', fontSize: 11, marginTop: 2 }}>
+                      {new Date(n.creado).toLocaleString('es-CO')}
+                    </div>
+                  </div>
+                ))
+              }
+            </div>
+          )}
+        </div>
 
         {/* User */}
         <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,.1)' }}>

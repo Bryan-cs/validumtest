@@ -225,16 +225,23 @@ def get_facturas(db, anio="", mes="", cliente="", estado="", banco="",
     if limit > 0:
         q = q.offset(skip).limit(limit)
     items = q.all()
-    # Obtener teléfonos de afiliados en una sola consulta
+    # Obtener teléfonos y fecha_afiliacion de afiliados en una sola consulta
     docs = list({f.doc for f in items if f.doc})
     tels = {}
+    fechas_afiliacion = {}
     if docs:
-        for a in db.query(models.Afiliado.doc, models.Afiliado.tel).filter(models.Afiliado.doc.in_(docs)).all():
+        for a in db.query(
+            models.Afiliado.doc,
+            models.Afiliado.tel,
+            models.Afiliado.fecha_afiliacion
+        ).filter(models.Afiliado.doc.in_(docs)).all():
             tels[a.doc] = a.tel or ""
+            fechas_afiliacion[a.doc] = a.fecha_afiliacion or ""
     result = []
     for f in items:
         d = _factura_to_dict(f)
         d["tel"] = tels.get(f.doc, "")
+        d["fecha_afiliacion"] = fechas_afiliacion.get(f.doc, "")
         result.append(d)
     return {"total": total, "items": result}
 
@@ -394,8 +401,12 @@ def delete_gasto(db, id, user=""):
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 def get_config(db):
     c = db.query(models.Config).first()
-    if not c: return {"ibc_global":1_950_905,"porcentajes":{}}
-    return {"ibc_global":c.ibc_global,"porcentajes":json.loads(c.porcentajes or "{}")}
+    if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":""}
+    return {
+        "ibc_global": c.ibc_global,
+        "porcentajes": json.loads(c.porcentajes or "{}"),
+        "plantilla_whatsapp": c.plantilla_whatsapp or ""
+    }
 
 def update_config(db, data: schemas.ConfigUpdate):
     c = db.query(models.Config).first()
@@ -404,6 +415,7 @@ def update_config(db, data: schemas.ConfigUpdate):
         db.add(c)
     if data.ibc_global is not None: c.ibc_global = data.ibc_global
     if data.porcentajes is not None: c.porcentajes = json.dumps(data.porcentajes)
+    if data.plantilla_whatsapp is not None: c.plantilla_whatsapp = data.plantilla_whatsapp
     db.commit(); return get_config(db)
 
 # ─── LISTAS ───────────────────────────────────────────────────────────────────
@@ -635,3 +647,66 @@ def get_cobro(db, empresa="", cliente="", tipo=""):
     rows.sort(key=lambda r: (orden.get(r["estado"], 4), r["nombre"], r["anio"], r["mes"]))
     _cache_set(cache_key, rows)
     return rows
+
+# ─── TAREAS ───────────────────────────────────────────────────────────────────
+def _tarea_to_dict(db, t):
+    comentarios = db.query(models.TareaComentario).filter_by(tarea_id=t.id)\
+                    .order_by(models.TareaComentario.creado).all()
+    return {
+        "id": t.id, "titulo": t.titulo, "descripcion": t.descripcion,
+        "asignado_a": t.asignado_a, "creado_por": t.creado_por,
+        "estado": t.estado,
+        "creado": t.creado.isoformat(),
+        "completado_en": t.completado_en.isoformat() if t.completado_en else None,
+        "comentarios": [{"id": c.id, "usuario": c.usuario, "texto": c.texto,
+                         "creado": c.creado.isoformat()} for c in comentarios]
+    }
+
+def create_tarea(db, data: schemas.TareaCreate):
+    t = models.Tarea(**data.dict())
+    db.add(t); db.commit(); db.refresh(t)
+    db.add(models.Notificacion(
+        usuario=data.asignado_a,
+        mensaje=f"Nueva tarea asignada: {data.titulo}",
+        tarea_id=t.id
+    ))
+    db.commit()
+    return _tarea_to_dict(db, t)
+
+def get_tareas(db, username: str, rol: str):
+    q = db.query(models.Tarea)
+    if rol != "admin":
+        q = q.filter_by(asignado_a=username)
+    return [_tarea_to_dict(db, t) for t in q.order_by(models.Tarea.creado.desc()).all()]
+
+def completar_tarea(db, tarea_id: int, usuario: str, nota: str = ""):
+    t = db.query(models.Tarea).filter_by(id=tarea_id).first()
+    if not t: return None
+    t.estado = "completada"
+    t.completado_en = datetime.utcnow()
+    if nota:
+        db.add(models.TareaComentario(tarea_id=tarea_id, usuario=usuario, texto=nota))
+    db.add(models.Notificacion(
+        usuario=t.creado_por,
+        mensaje=f"{usuario} completó la tarea: {t.titulo}",
+        tarea_id=tarea_id
+    ))
+    db.commit()
+    return _tarea_to_dict(db, t)
+
+def add_comentario(db, tarea_id: int, data: schemas.TareaComentarioCreate):
+    c = models.TareaComentario(tarea_id=tarea_id, **data.dict())
+    db.add(c); db.commit(); db.refresh(c)
+    return {"id": c.id, "tarea_id": c.tarea_id, "usuario": c.usuario,
+            "texto": c.texto, "creado": c.creado.isoformat()}
+
+def get_notificaciones(db, username: str):
+    items = db.query(models.Notificacion).filter_by(usuario=username)\
+               .order_by(models.Notificacion.creado.desc()).limit(50).all()
+    return [{"id": n.id, "mensaje": n.mensaje, "leida": n.leida,
+             "tarea_id": n.tarea_id, "creado": n.creado.isoformat()} for n in items]
+
+def marcar_notificaciones_leidas(db, username: str):
+    db.query(models.Notificacion).filter_by(usuario=username, leida=False)\
+      .update({"leida": True})
+    db.commit()

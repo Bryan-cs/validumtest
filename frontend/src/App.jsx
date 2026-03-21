@@ -15,6 +15,7 @@ import Empleados   from './pages/Empleados';
 import Usuarios    from './pages/Usuarios';
 import Listas      from './pages/Listas';
 import Calculadora from './pages/Calculadora';
+import Tareas      from './pages/Tareas';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
 
@@ -36,6 +37,7 @@ export default function App() {
             <Route index element={<Dashboard />} />
             <Route path="afiliados"   element={<Afiliados />} />
             <Route path="retiros"     element={<Retiros />} />
+            <Route path="tareas"      element={<Tareas />} />
             <Route path="facturacion" element={<Facturacion />} />
             <Route path="cobro"       element={<Cobro />} />
             {/* Admin only */}

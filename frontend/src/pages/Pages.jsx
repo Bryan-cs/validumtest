@@ -531,7 +531,7 @@ export function Usuarios() {
       return api.post('/usuarios',{nombre:form.nombre,username:form.username,password:form.password,rol:form.rol});
     },
     onSuccess:()=>{ toast.success('Usuario creado'); qc.invalidateQueries({queryKey:['usuarios']}); setModal(false); setErr(''); },
-    onError:(e)=>{ if(e?.response) setErr(e.response?.data?.detail||'Error'); },
+    onError:(e)=>{ if(e?.response){ const d=e.response?.data?.detail; setErr(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); } },
   });
 
   const eliminar = useMutation({
@@ -644,16 +644,41 @@ export function Listas() {
 }
 
 // ─── CALCULADORA ──────────────────────────────────────────────────────────────
+const PLANTILLA_DEFAULT =
+`{{saludo}}!.
+Señor@: {{nombre}}
+
+ Estimado cliente;
+Reciban un cordial saludo, por parte de CARSECOOP Y COOPERATIVA DE SERVICIOS GLOBALES TECHCOOP, identificado con Nit 901921756, por parte de Carsecoop le deseamos un excelente día.
+
+Recordatorio de pago de su seguridad social del mes de {{mes}} {{anio}}, agradecemos su pago oportuno.
+
+Fecha Emisión: {{fecha_emision}}
+{{vencimiento}}
+TOTAL: \${{total}}
+{{servicios}}
+*Medios de pago:*
+-Nequi / Daviplata: 3170296773
+-Davivienda (Ahorros): 0550108900642357
+-Banco de Bogotá (Ahorros): 462547688
+-Llave Banco Bogotá: @BBJMF23103
+-Bancolombia (Ahorros): 91270274485`;
+
 export function Calculadora() {
   const qc = useQueryClient();
   const { data: cfg={} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
   const [ibc, setIbc] = useState('');
   const [pcts, setPcts] = useState({});
+  const [plantilla, setPlantilla] = useState('');
 
-  React.useEffect(()=>{ if(cfg.ibc_global) setIbc(cfg.ibc_global); if(cfg.porcentajes) setPcts({...cfg.porcentajes}); },[cfg]);
+  React.useEffect(()=>{
+    if(cfg.ibc_global) setIbc(cfg.ibc_global);
+    if(cfg.porcentajes) setPcts({...cfg.porcentajes});
+    if(cfg.plantilla_whatsapp !== undefined) setPlantilla(cfg.plantilla_whatsapp || PLANTILLA_DEFAULT);
+  },[cfg]);
 
   const guardar = useMutation({
-    mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts }),
+    mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts, plantilla_whatsapp:plantilla }),
     onSuccess:()=>{ toast.success('Configuración actualizada'); qc.invalidateQueries({queryKey:['config']}); },
   });
 
@@ -698,6 +723,21 @@ export function Calculadora() {
             })}
           </tbody>
         </table>
+      </div>
+      <div style={{ background:'#fff',borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
+        <h3 style={{ margin:'0 0 8px',color:C.primary }}>Plantilla mensaje WhatsApp</h3>
+        <p style={{ margin:'0 0 12px',fontSize:12,color:C.text2 }}>
+          Variables disponibles: <code>{'{{saludo}}'}</code> <code>{'{{nombre}}'}</code> <code>{'{{mes}}'}</code> <code>{'{{anio}}'}</code> <code>{'{{fecha_emision}}'}</code> <code>{'{{vencimiento}}'}</code> <code>{'{{total}}'}</code> <code>{'{{servicios}}'}</code>
+        </p>
+        <textarea
+          rows={20}
+          style={{ ...inp, fontFamily:'monospace', fontSize:12, resize:'vertical', whiteSpace:'pre' }}
+          value={plantilla}
+          onChange={e=>setPlantilla(e.target.value)}
+        />
+        <Btn size="sm" variant="secondary" style={{ marginTop:8 }} onClick={()=>setPlantilla(PLANTILLA_DEFAULT)}>
+          Restaurar plantilla por defecto
+        </Btn>
       </div>
       <Btn onClick={()=>guardar.mutate()} disabled={guardar.isPending}>
         {guardar.isPending?'Guardando...':'💾 Guardar configuración'}

@@ -30,6 +30,13 @@ def get_db():
 def init_db():
     import models
     Base.metadata.create_all(bind=engine)
+    # Migración: agregar columnas nuevas a tablas existentes
+    with engine.connect() as conn:
+        try:
+            conn.execute(__import__('sqlalchemy').text("ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT"))
+            conn.commit()
+        except Exception:
+            pass  # Columna ya existe
     # Seed data inicial si la DB está vacía
     from sqlalchemy.orm import Session
     db = SessionLocal()

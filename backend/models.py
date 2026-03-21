@@ -118,9 +118,10 @@ class Gasto(Base):
 
 class Config(Base):
     __tablename__ = "config"
-    id           = Column(Integer, primary_key=True, default=1)
-    ibc_global   = Column(Float, default=1_950_905)
-    porcentajes  = Column(Text)    # JSON dict
+    id                 = Column(Integer, primary_key=True, default=1)
+    ibc_global         = Column(Float, default=1_950_905)
+    porcentajes        = Column(Text)    # JSON dict
+    plantilla_whatsapp = Column(Text)    # Plantilla del mensaje de WhatsApp
 
 class Lista(Base):
     __tablename__ = "listas"
@@ -136,3 +137,31 @@ class Actividad(Base):
     modulo  = Column(String(60))
     detalle = Column(String(200))
     fecha   = Column(DateTime, default=datetime.utcnow)
+
+class Tarea(Base):
+    __tablename__ = "tareas"
+    id            = Column(Integer, primary_key=True)
+    titulo        = Column(String(200))
+    descripcion   = Column(Text, default="")
+    asignado_a    = Column(String(60), index=True)
+    creado_por    = Column(String(60))
+    estado        = Column(String(20), default="pendiente", index=True)
+    creado        = Column(DateTime, default=datetime.utcnow)
+    completado_en = Column(DateTime, nullable=True)
+
+class TareaComentario(Base):
+    __tablename__ = "tarea_comentarios"
+    id       = Column(Integer, primary_key=True)
+    tarea_id = Column(Integer, index=True)
+    usuario  = Column(String(60))
+    texto    = Column(Text)
+    creado   = Column(DateTime, default=datetime.utcnow)
+
+class Notificacion(Base):
+    __tablename__ = "notificaciones"
+    id       = Column(Integer, primary_key=True)
+    usuario  = Column(String(60), index=True)
+    mensaje  = Column(String(300))
+    leida    = Column(Boolean, default=False)
+    tarea_id = Column(Integer, nullable=True)
+    creado   = Column(DateTime, default=datetime.utcnow)
