@@ -7,6 +7,8 @@ import jwt
 
 _default_key = None if os.getenv("RAILWAY_ENVIRONMENT") else "dev-only-key-do-not-use-in-prod"
 SECRET_KEY = os.getenv("SECRET_KEY", _default_key)
+if not SECRET_KEY:
+    raise RuntimeError("SECRET_KEY env var is required in production")
 ALGORITHM  = "HS256"
 TOKEN_EXPIRE_HOURS = 12
 REFRESH_TOKEN_EXPIRE_DAYS = 7

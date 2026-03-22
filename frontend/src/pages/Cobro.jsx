@@ -12,7 +12,8 @@ async function dlExcel(url, filename) {
     a.download = filename;
     a.click();
   } catch (e) {
-    alert('Error generando reporte');
+    const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
+    alert(typeof msg === 'string' ? msg : 'Error generando reporte');
   }
 }
 
@@ -26,18 +27,25 @@ const ESTADO_CONFIG = {
   COBRADO: { bg:C.blueBg,   fg:C.blue,  label:'COBRADO',    orden:3 },
 };
 
+const ANIOS = [String(new Date().getFullYear()), String(new Date().getFullYear() - 1)];
+const POR_PAG = 50;
+
 export default function Cobro() {
   const [filtros, setFiltros] = useState({ empresa:[], cliente:[], estado:[], subtipo:[] });
   const [expanded, setExp] = useState(null);
+  const [novedadModal, setNovedadModal] = useState(null);
+  const [mesFiltro,  setMesFiltro]  = useState('');
+  const [anioFiltro, setAnioFiltro] = useState('');
+  const [pagina, setPagina] = useState(1);
 
-  const setFiltro = (key, vals) => setFiltros(f => ({ ...f, [key]: vals }));
-  const limpiar   = () => setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] });
+  const setFiltro = (key, vals) => { setFiltros(f => ({ ...f, [key]: vals })); setPagina(1); };
+  const limpiar   = () => { setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] }); setPagina(1); };
 
   const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
   const { data: config = {} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['cobro'],
-    queryFn: () => api.get('/cobro', { params:{ empresa:'', cliente:'', tipo:'' } }).then(r=>r.data),
+    queryKey: ['cobro', mesFiltro, anioFiltro],
+    queryFn: () => api.get('/cobro', { params:{ empresa:'', cliente:'', tipo:'', mes: mesFiltro, anio: anioFiltro } }).then(r=>r.data),
     refetchInterval: 60_000,
   });
 
@@ -55,6 +63,9 @@ export default function Cobro() {
     if (filtros.subtipo.length  && !filtros.subtipo.includes(r.subtipo))    return false;
     return true;
   });
+
+  const totalPags   = Math.max(1, Math.ceil(rowsFiltrados.length / POR_PAG));
+  const rowsPagina  = rowsFiltrados.slice((pagina - 1) * POR_PAG, pagina * POR_PAG);
 
   const nHoy     = rowsFiltrados.filter(r=>r.estado==='HOY').length;
   const nVenc    = rowsFiltrados.filter(r=>r.estado==='VENCIDO').length;
@@ -74,6 +85,26 @@ export default function Cobro() {
         <StatCard label="Planilla pend."   value={fmt(planPend)} color={C.amber} />
         <StatCard label="Cobrados mes"     value={nCobr}         color={C.blue} />
         <StatCard label="Total mostrados"  value={rowsFiltrados.length} color={C.primary} />
+      </div>
+
+      {/* Filtro mes / año */}
+      <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
+        <select value={mesFiltro} onChange={e=>{ setMesFiltro(e.target.value); setPagina(1); }}
+          style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, fontSize:13, color:C.text, background:'#fff' }}>
+          <option value="">Todos los meses</option>
+          {MESES.map(m=><option key={m} value={m}>{m}</option>)}
+        </select>
+        <select value={anioFiltro} onChange={e=>{ setAnioFiltro(e.target.value); setPagina(1); }}
+          style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, fontSize:13, color:C.text, background:'#fff' }}>
+          <option value="">Todos los años</option>
+          {ANIOS.map(a=><option key={a} value={a}>{a}</option>)}
+        </select>
+        {(mesFiltro||anioFiltro) && (
+          <button onClick={()=>{ setMesFiltro(''); setAnioFiltro(''); setPagina(1); }}
+            style={{ padding:'7px 14px', borderRadius:7, border:`1px solid ${C.border}`, background:C.surface2, fontSize:12, cursor:'pointer', color:C.text2 }}>
+            ✕ Limpiar período
+          </button>
+        )}
       </div>
 
       <BarraFiltros
@@ -103,7 +134,7 @@ export default function Cobro() {
             {!isLoading && rowsFiltrados.length===0 && (
               <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
             )}
-            {rowsFiltrados.map(r => {
+            {rowsPagina.map(r => {
               const cfg  = ESTADO_CONFIG[r.estado]||ESTADO_CONFIG.PROXIMO;
               const isExp= expanded===r.id;
               return (
@@ -135,8 +166,16 @@ export default function Cobro() {
                         {cfg.label}
                       </span>
                     </td>
-                    <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:180,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
-                      {r.novedades||'—'}
+                    <td style={{ ...tdc, maxWidth:180 }}
+                      title={r.novedades || undefined}>
+                      {r.novedades ? (
+                        <span
+                          onClick={() => setNovedadModal({ nombre: r.nombre, texto: r.novedades })}
+                          style={{ fontSize:11, color:C.amber, fontWeight:600, cursor:'pointer',
+                            display:'block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                          📝 {r.novedades}
+                        </span>
+                      ) : <span style={{ fontSize:11, color:C.text2 }}>—</span>}
                     </td>
                   </tr>
                   {isExp && (
@@ -152,6 +191,44 @@ export default function Cobro() {
           </tbody>
         </table>
       </div>
+
+      {/* Paginación */}
+      {totalPags > 1 && (
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:6, marginTop:14, flexWrap:'wrap' }}>
+          <button onClick={()=>setPagina(1)} disabled={pagina===1} style={btnPag}>«</button>
+          <button onClick={()=>setPagina(p=>Math.max(1,p-1))} disabled={pagina===1} style={btnPag}>‹</button>
+          {[...Array(Math.min(5, totalPags))].map((_,i) => {
+            const p = pagina <= 3 ? i+1 : pagina - 2 + i;
+            if (p < 1 || p > totalPags) return null;
+            return <button key={p} onClick={()=>setPagina(p)} style={{ ...btnPag, fontWeight: p===pagina?700:400, background: p===pagina ? C.primary : C.surface2, color: p===pagina ? '#fff' : C.text }}>{p}</button>;
+          })}
+          <button onClick={()=>setPagina(p=>Math.min(totalPags,p+1))} disabled={pagina===totalPags} style={btnPag}>›</button>
+          <button onClick={()=>setPagina(totalPags)} disabled={pagina===totalPags} style={btnPag}>»</button>
+          <span style={{ fontSize:12, color:C.text2, marginLeft:4 }}>Pág {pagina}/{totalPags} · {rowsFiltrados.length} total</span>
+        </div>
+      )}
+
+      {/* Modal novedades completas */}
+      {novedadModal && (
+        <div onClick={() => setNovedadModal(null)}
+          style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000,
+            display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:520, width:'90%',
+              boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
+              <span style={{ fontWeight:700, fontSize:14, color:C.primary }}>
+                📝 Novedades — {novedadModal.nombre}
+              </span>
+              <button onClick={() => setNovedadModal(null)}
+                style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:C.text2 }}>✕</button>
+            </div>
+            <p style={{ margin:0, fontSize:14, color:'#1E293B', lineHeight:1.6, whiteSpace:'pre-wrap' }}>
+              {novedadModal.texto}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -236,4 +313,5 @@ function PlanillaDetalle({ afiliado, cobroRow, config }) {
   );
 }
 
-const tdc = { padding:'10px 12px',fontSize:13,color:'#1E293B',verticalAlign:'middle' };
+const tdc   = { padding:'10px 12px',fontSize:13,color:'#1E293B',verticalAlign:'middle' };
+const btnPag = { padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:'pointer', fontSize:13, color:C.text };

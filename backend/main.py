@@ -2,17 +2,18 @@
 BBC File — Backend FastAPI
 Ejecutar: uvicorn main:app --reload
 """
-from fastapi import FastAPI, HTTPException, Depends, status, Request
+from dotenv import load_dotenv
+load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
+
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from contextlib import asynccontextmanager
-import os, json, math, io
-from datetime import datetime, timedelta
-from typing import Optional
-import jwt
+import os
+from datetime import datetime
 from database import get_db, init_db
 from sqlalchemy.orm import Session
 import models, schemas, crud
+from routers.deps import verify_token, require_admin
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -22,19 +23,18 @@ from slowapi.errors import RateLimitExceeded
 limiter = Limiter(key_func=get_remote_address)
 
 
-# ─── AUTH CONFIG ──────────────────────────────────────────────────────────────
-_default_key = None if os.getenv("RAILWAY_ENVIRONMENT") else "dev-only-key-do-not-use-in-prod"
-SECRET_KEY = os.getenv("SECRET_KEY", _default_key)
-if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY env var is required in production")
-ALGORITHM  = "HS256"
-TOKEN_EXPIRE_HOURS       = 12
-REFRESH_TOKEN_EXPIRE_DAYS = 7
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    # Backup automático diario a las 2:00 AM (solo si existe bbcfile.db)
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from backup import run_backup
+        _scheduler = BackgroundScheduler()
+        _scheduler.add_job(run_backup, "cron", hour=2, minute=0)
+        _scheduler.start()
+    except Exception:
+        pass
     yield
 
 
@@ -51,35 +51,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-security = HTTPBearer()
-
-# ─── AUTH HELPERS ─────────────────────────────────────────────────────────────
-def create_token(data: dict, expires: timedelta = None):
-    payload = data.copy()
-    if expires is None:
-        expires = timedelta(hours=TOKEN_EXPIRE_HOURS)
-    payload["exp"] = datetime.utcnow() + expires
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
-
-
-def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        # Reject refresh tokens used as access tokens
-        if payload.get("type") == "refresh":
-            raise HTTPException(status_code=401, detail="Token de refresco no válido como token de acceso")
-        return payload
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token expirado")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Token inválido")
-
-
-def require_admin(token=Depends(verify_token)):
-    if token.get("rol") != "admin":
-        raise HTTPException(status_code=403, detail="Requiere rol administrador")
-    return token
 
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 from routers import auth as auth_router
@@ -271,7 +242,7 @@ def get_config(db: Session = Depends(get_db), token=Depends(verify_token)):
 @app.put("/config")
 def update_config(data: schemas.ConfigUpdate,
                   db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.update_config(db, data)
+    return crud.update_config(db, data, user=token.get("sub", "sistema"))
 
 
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
@@ -290,8 +261,10 @@ def dashboard_meses(db: Session = Depends(get_db), token=Depends(verify_token)):
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
 @app.get("/cobro")
 def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
+          mes: str = "", anio: str = "",
           db: Session = Depends(get_db), token=Depends(verify_token)):
-    return crud.get_cobro(db, empresa=empresa, cliente=cliente, tipo=tipo)
+    return crud.get_cobro(db, empresa=empresa, cliente=cliente, tipo=tipo,
+                          mes=mes, anio=anio)
 
 
 # ─── ACTIVIDAD ────────────────────────────────────────────────────────────────
@@ -317,14 +290,8 @@ def get_listas(db: Session = Depends(get_db), token=Depends(verify_token)):
 @app.put("/listas/{nombre}")
 def update_lista(nombre: str, data: schemas.ListaUpdate,
                  db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.update_lista(db, nombre, data.items)
+    return crud.update_lista(db, nombre, data.items, user=token.get("sub", "sistema"))
 
-
-
-# ─── REPORTES EXCEL (streaming responses, kept in main for backward compat) ───
-from fastapi.responses import StreamingResponse
-import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 
 
 if __name__ == "__main__":

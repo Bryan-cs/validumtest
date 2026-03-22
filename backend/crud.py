@@ -408,7 +408,7 @@ def get_config(db):
         "plantilla_whatsapp": c.plantilla_whatsapp or ""
     }
 
-def update_config(db, data: schemas.ConfigUpdate):
+def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
     c = db.query(models.Config).first()
     if not c:
         c = models.Config()
@@ -416,16 +416,19 @@ def update_config(db, data: schemas.ConfigUpdate):
     if data.ibc_global is not None: c.ibc_global = data.ibc_global
     if data.porcentajes is not None: c.porcentajes = json.dumps(data.porcentajes)
     if data.plantilla_whatsapp is not None: c.plantilla_whatsapp = data.plantilla_whatsapp
+    _log(db, user, "actualizó configuración global", "Config", "")
     db.commit(); return get_config(db)
 
 # ─── LISTAS ───────────────────────────────────────────────────────────────────
 def get_listas(db):
     return {l.nombre: json.loads(l.items or "[]") for l in db.query(models.Lista).all()}
 
-def update_lista(db, nombre, items):
+def update_lista(db, nombre, items, user="sistema"):
     l = db.query(models.Lista).filter_by(nombre=nombre).first()
     if not l: l = models.Lista(nombre=nombre); db.add(l)
-    l.items = json.dumps(items); db.commit()
+    l.items = json.dumps(items)
+    _log(db, user, "actualizó lista", "Listas", nombre)
+    db.commit()
     return {"nombre":nombre,"items":items}
 
 # ─── ACTIVIDAD ────────────────────────────────────────────────────────────────
@@ -537,12 +540,12 @@ def cache_invalidar(prefijo: str = ""):
         del _cache[k]
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
-def get_cobro(db, empresa="", cliente="", tipo=""):
+def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio=""):
     """Calcula el estado de cobro por afiliado y mes (últimos 6 meses).
     Genera una fila por cada mes pendiente de cada afiliado.
     El caché se invalida automáticamente al crear/editar/eliminar facturas o afiliados.
     """
-    cache_key = f"cobro:{empresa}:{cliente}:{tipo}"
+    cache_key = f"cobro:{empresa}:{cliente}:{tipo}:{mes}:{anio}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -638,6 +641,8 @@ def get_cobro(db, empresa="", cliente="", tipo=""):
 
     if empresa: rows = [r for r in rows if r["empresa"] == empresa]
     if cliente: rows = [r for r in rows if r["cliente"] == cliente]
+    if mes:     rows = [r for r in rows if r["mes"] == mes]
+    if anio:    rows = [r for r in rows if r["anio"] == anio]
     if tipo == "HOY":     rows = [r for r in rows if r["estado"] == "HOY"]
     elif tipo == "VENCIDO": rows = [r for r in rows if r["estado"] == "VENCIDO"]
     elif tipo == "PROXIMO": rows = [r for r in rows if r["estado"] == "PROXIMO"]
@@ -663,7 +668,7 @@ def _tarea_to_dict(db, t):
     }
 
 def create_tarea(db, data: schemas.TareaCreate):
-    t = models.Tarea(**data.dict())
+    t = models.Tarea(**data.model_dump())
     db.add(t); db.commit(); db.refresh(t)
     db.add(models.Notificacion(
         usuario=data.asignado_a,
@@ -695,7 +700,7 @@ def completar_tarea(db, tarea_id: int, usuario: str, nota: str = ""):
     return _tarea_to_dict(db, t)
 
 def add_comentario(db, tarea_id: int, data: schemas.TareaComentarioCreate):
-    c = models.TareaComentario(tarea_id=tarea_id, **data.dict())
+    c = models.TareaComentario(tarea_id=tarea_id, **data.model_dump())
     db.add(c); db.commit(); db.refresh(c)
     return {"id": c.id, "tarea_id": c.tarea_id, "usuario": c.usuario,
             "texto": c.texto, "creado": c.creado.isoformat()}

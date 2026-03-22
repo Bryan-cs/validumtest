@@ -15,7 +15,8 @@ async function dlExcel(url, filename) {
     a.download = filename;
     a.click();
   } catch (e) {
-    alert('Error generando reporte');
+    const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
+    alert(typeof msg === 'string' ? msg : 'Error generando reporte');
   }
 }
 
@@ -132,7 +133,7 @@ export function Retiros() {
       qc.invalidateQueries({queryKey:['retiros']}); qc.invalidateQueries({queryKey:['afiliados']});
       setModal(false); setDoc(''); setObs('');
     },
-    onError:(e)=>toast.error(e.response?.data?.detail||'Afiliado no encontrado'),
+    onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Afiliado no encontrado')); },
   });
 
   const eliminar = useMutation({
@@ -386,13 +387,13 @@ export function Empleados() {
   const guardarEmp = useMutation({
     mutationFn:()=>modal==='nuevo'?api.post('/empleados',form):api.put(`/empleados/${modal.id}`,form),
     onSuccess:()=>{ toast.success('Empleado guardado'); qc.invalidateQueries({queryKey:['empleados']}); setModal(null); },
-    onError:(e)=>toast.error(e.response?.data?.detail||'Error'),
+    onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const eliminarEmp = useMutation({
     mutationFn:(id)=>api.delete(`/empleados/${id}`),
     onSuccess:()=>{ toast.success('Empleado eliminado'); qc.invalidateQueries({queryKey:['empleados']}); },
-    onError:(e)=>toast.error(e.response?.data?.detail||'Error'),
+    onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const [gnombre,setGnom]=useState(''); const [gvalor,setGval]=useState(0);
@@ -537,7 +538,7 @@ export function Usuarios() {
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/usuarios/${id}`),
     onSuccess:()=>{ toast.success('Usuario eliminado'); qc.invalidateQueries({queryKey:['usuarios']}); },
-    onError:(e)=>toast.error(e.response?.data?.detail||'Error'),
+    onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   return (

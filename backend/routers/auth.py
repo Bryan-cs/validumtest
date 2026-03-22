@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from datetime import timedelta
-import jwt
+import jwt, time
 from database import get_db
 import schemas, crud
 from .deps import (
@@ -12,20 +12,50 @@ from .deps import (
 from fastapi.security import HTTPAuthorizationCredentials
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from logger import logger
 
 _limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+# ── Protección contra fuerza bruta ────────────────────────────────────────────
+_login_attempts: dict = {}   # { ip: {"count": int, "last": float} }
+_MAX_ATTEMPTS  = 5
+_BLOCK_WINDOW  = 300         # segundos (5 minutos)
+
+def _get_ip(request: Request) -> str:
+    xff = request.headers.get("X-Forwarded-For", "")
+    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+
 
 @router.post("/login")
 @_limiter.limit("20/minute")
 def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(get_db)):
+    ip  = _get_ip(request)
+    now = time.time()
+    rec = _login_attempts.get(ip, {"count": 0, "last": 0.0})
+
+    if rec["count"] >= _MAX_ATTEMPTS and now - rec["last"] < _BLOCK_WINDOW:
+        secs_left = int(_BLOCK_WINDOW - (now - rec["last"]))
+        logger.warning(f"Login bloqueado para IP {ip} — {rec['count']} intentos fallidos")
+        raise HTTPException(
+            status_code=429,
+            detail=f"Demasiados intentos fallidos. Espera {secs_left // 60}m {secs_left % 60}s"
+        )
+
     user = crud.get_user_by_username(db, data.username)
     if not user or not user.activo:
+        rec = {"count": rec["count"] + 1, "last": now}
+        _login_attempts[ip] = rec
         raise HTTPException(status_code=401, detail="Usuario no encontrado o inactivo")
     if not user.password or not crud.verify_password(data.password, user.password):
+        rec = {"count": rec["count"] + 1, "last": now}
+        _login_attempts[ip] = rec
+        logger.warning(f"Contraseña incorrecta para usuario '{data.username}' desde IP {ip} (intento {rec['count']})")
         raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+    # Login exitoso — limpiar intentos fallidos
+    _login_attempts.pop(ip, None)
+
     # Migrar passwords en texto plano a bcrypt
     if user.password and not user.password.startswith("$2"):
         user.password = crud.hash_password(data.password)

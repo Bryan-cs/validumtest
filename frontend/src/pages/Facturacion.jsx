@@ -14,7 +14,10 @@ async function dlExcel(url, filename) {
     a.href = URL.createObjectURL(res.data);
     a.download = filename;
     a.click();
-  } catch { alert('Error generando reporte'); }
+  } catch (e) {
+    const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
+    alert(typeof msg === 'string' ? msg : 'Error generando reporte');
+  }
 }
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -26,7 +29,7 @@ function calcularFechaVencimiento(fecha_afiliacion, mes, anio) {
   const partes = fecha_afiliacion.split('-');
   if (partes.length !== 3) return null;
   const dia = parseInt(partes[2], 10);
-  if (isNaN(dia)) return null;
+  if (isNaN(dia) || dia < 1 || dia > 31) return null;
   if (dia >= 26 || dia <= 4)        return `05 de ${mes} de ${anio}`;
   if (dia >= 5  && dia <= 9)        return `10 de ${mes} de ${anio}`;
   if (dia >= 10 && dia <= 14)       return `15 de ${mes} de ${anio}`;
@@ -105,11 +108,12 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       api.get('/afiliados', { params: { q: prefill.doc } }).then(r => {
         const found = (r.data.items||[]).find(a => a.doc === prefill.doc) || r.data.items?.[0];
         if (found) { setAfiliado(found); setErrorBusq(''); }
-      }).catch(() => {});
+      }).catch(() => toast.error('Error buscando afiliado'));
     }
   }, [open, prefill]);
 
   const planilla = calcPlanilla(afiliado, config, dias);
+  const planillaKey = planilla.map(p => p.servicio + ':' + p.valor).join(',');
 
   useEffect(() => {
     if (planilla.length > 0) {
@@ -117,7 +121,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       planilla.forEach(p => { m[p.servicio] = true; });
       setMarcados(m);
     }
-  }, [JSON.stringify(planilla.map(p => p.servicio + p.valor))]);
+  }, [planillaKey]);
 
   const buscar = async () => {
     if (!cedula.trim()) return;
@@ -151,7 +155,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       });
     },
     onSuccess: () => { toast.success('Factura guardada'); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['cobro']}); onClose(); },
-    onError: e => toast.error(e.response?.data?.detail || e.message || 'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||e.message||'Error')); },
   });
 
   return (
@@ -248,7 +252,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       if (factura.doc) {
         api.get('/afiliados', { params: { q: factura.doc } })
           .then(r => { const f = (r.data.items||[]).find(a => a.doc === factura.doc); if (f) setAfiliado(f); })
-          .catch(() => {});
+          .catch(() => toast.error('Error buscando afiliado'));
       }
     }
   }, [open, factura?.id]);
@@ -274,7 +278,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       conceptos_detalle: conceptos,
     }),
     onSuccess: () => { toast.success('Factura actualizada'); qc.invalidateQueries({queryKey:['facturas']}); onClose(); },
-    onError: e => toast.error(e.response?.data?.detail || 'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   if (!factura) return null;

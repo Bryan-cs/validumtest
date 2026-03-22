@@ -46,7 +46,7 @@ api.interceptors.response.use(
 
       const refreshToken = localStorage.getItem('refresh_token');
 
-      if (refreshToken && (msg.includes('expirad') || msg.includes('inválid') || msg === '')) {
+      if (refreshToken && (msg.includes('expirad') || msg.includes('inválid'))) {
         if (_isRefreshing) {
           // Queue this request until refresh completes
           return new Promise((resolve, reject) => {

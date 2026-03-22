@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
-import { C, Btn, Modal, PageHeader, statusBadge } from '../components/UI';
+import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5'];
@@ -15,7 +15,8 @@ async function dlExcel(url, filename) {
     a.download = filename;
     a.click();
   } catch (e) {
-    alert('Error generando reporte');
+    const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
+    alert(typeof msg === 'string' ? msg : 'Error generando reporte');
   }
 }
 const ESTADOS_SRV = ['ACTIVO','SUSPENDIDO','DOBLE AFILIACION','EN ESPERA DE ACTIVACION',
@@ -54,6 +55,7 @@ export default function Afiliados() {
   const [busqueda, setBusqueda] = useState('');
   const [filtros,  setFiltros]  = useState({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
   const [modal,    setModal]    = useState(null);
+  const [confirm,  setConfirm]  = useState(null);  // { title, message, onConfirm }
   const [form,     setForm]     = useState({});
 
   // Pagos tab state
@@ -130,25 +132,25 @@ export default function Afiliados() {
       return modal==='nuevo' ? api.post('/afiliados',payload) : api.put(`/afiliados/${modal.id}`,payload);
     },
     onSuccess: () => { toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['facturas']}); setModal(null); },
-    onError: e => toast.error(e.response?.data?.detail||'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/afiliados/${id}`),
     onSuccess: res => { const n=res.data?.facturas_pendientes; toast.success(n?`Eliminado. ${n} factura(s) conservadas`:'Afiliado eliminado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['eliminados']}); },
-    onError: e => toast.error(e.response?.data?.detail||'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const restaurar = useMutation({
     mutationFn: id => api.post(`/eliminados/${id}/restaurar`),
-    onSuccess: res => { toast.success(`✅ ${res.data.nombre} restaurado como ACTIVO`); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['eliminados']}); },
-    onError: e => toast.error(e.response?.data?.detail||'Error al restaurar'),
+    onSuccess: res => { toast.success(`${res.data.nombre} restaurado como ACTIVO`); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['eliminados']}); },
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error al restaurar')); },
   });
 
   const borrarPermanente = useMutation({
     mutationFn: id => api.delete(`/eliminados/${id}`),
     onSuccess: () => { toast.success('Eliminado permanentemente'); qc.invalidateQueries({queryKey:['eliminados']}); },
-    onError: e => toast.error(e.response?.data?.detail||'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   // Historial filtrado por afiliado seleccionado
@@ -261,7 +263,8 @@ export default function Afiliados() {
                       <div style={{ display:'flex',gap:4,flexWrap:'wrap' }}>
                         <Btn size="sm" variant="secondary" onClick={()=>openEditar(a)}>✏️ Editar</Btn>
                         <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/certificado`,`certificado_${a.nombre.replace(/ /g,'_')}.pdf`)}>📄 Cert.</Btn>
-                        <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm(`¿Eliminar a ${a.nombre}?`)) eliminar.mutate(a.id); }}>×</Btn>
+                        <Btn size="sm" variant="danger" disabled={eliminar.isPending}
+                          onClick={()=>setConfirm({ title:'Eliminar afiliado', message:`¿Eliminar a ${a.nombre}? El registro quedará en la sección de eliminados.`, onConfirm:()=>eliminar.mutate(a.id) })}>×</Btn>
                       </div>
                     </td>
                   </tr>
@@ -305,12 +308,12 @@ export default function Afiliados() {
                     <td style={tdc}>
                       <div style={{ display:'flex', gap:6 }}>
                         <Btn size="sm" variant="success"
-                          onClick={() => { if(window.confirm(`¿Restaurar a ${e.nombre} como ACTIVO?`)) restaurar.mutate(e.id); }}
+                          onClick={() => setConfirm({ title:'Restaurar afiliado', message:`¿Restaurar a ${e.nombre} como ACTIVO?`, confirmLabel:'Restaurar', variant:'success', onConfirm:()=>restaurar.mutate(e.id) })}
                           disabled={restaurar.isPending}>
                           ↩ Restaurar
                         </Btn>
                         <Btn size="sm" variant="danger"
-                          onClick={() => { if(window.confirm(`¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`)) borrarPermanente.mutate(e.id); }}
+                          onClick={() => setConfirm({ title:'Eliminar permanentemente', message:`¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`, confirmLabel:'Eliminar para siempre', onConfirm:()=>borrarPermanente.mutate(e.id) })}
                           disabled={borrarPermanente.isPending}>
                           🗑️ Borrar
                         </Btn>
@@ -482,6 +485,16 @@ export default function Afiliados() {
           )}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!confirm}
+        title={confirm?.title}
+        message={confirm?.message}
+        confirmLabel={confirm?.confirmLabel || 'Eliminar'}
+        variant={confirm?.variant || 'danger'}
+        onConfirm={() => { confirm?.onConfirm(); setConfirm(null); }}
+        onCancel={() => setConfirm(null)}
+      />
 
       {/* ─── MODAL FORMULARIO ─── */}
       <Modal open={!!modal} onClose={()=>setModal(null)} width={720}

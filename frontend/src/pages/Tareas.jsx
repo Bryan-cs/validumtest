@@ -3,12 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
-
-const C = {
-  primary: '#0D3B6E', accent: '#E89B2A', green: '#16A34A', greenBg: '#DCFCE7',
-  red: '#DC2626', redBg: '#FEE2E2', blue: '#2563EB', blueBg: '#DBEAFE',
-  border: '#E2E8F0', surface2: '#F8FAFC', text2: '#64748B',
-};
+import { C } from '../components/UI';
 const inp = { width: '100%', padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1E293B' };
 const lbl = { display: 'block', fontSize: 12, color: C.text2, fontWeight: 500, marginBottom: 4 };
 
@@ -57,7 +52,7 @@ export default function Tareas() {
       setModalNueva(false);
       setForm({ titulo: '', descripcion: '', asignado_a: '' });
     },
-    onError: e => toast.error(e.response?.data?.detail || 'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const completar = useMutation({
@@ -67,7 +62,7 @@ export default function Tareas() {
       qc.invalidateQueries({ queryKey: ['tareas'] });
       qc.invalidateQueries({ queryKey: ['notificaciones'] });
     },
-    onError: e => toast.error(e.response?.data?.detail || 'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const comentar = useMutation({
@@ -77,7 +72,7 @@ export default function Tareas() {
       qc.invalidateQueries({ queryKey: ['tareas'] });
       setTextoComentario(prev => ({ ...prev, [id]: '' }));
     },
-    onError: e => toast.error(e.response?.data?.detail || 'Error'),
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const toLocalDateStr = iso => {

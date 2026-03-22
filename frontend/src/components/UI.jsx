@@ -1,4 +1,5 @@
 // Shared UI Components for BBC File
+import { useEffect } from 'react';
 
 export const C = {
   primary:  '#0D3B6E',
@@ -115,6 +116,12 @@ export function Table({ headers, rows, loading }) {
 }
 
 export function Modal({ open, onClose, title, children, width=540 }) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, onClose]);
   if (!open) return null;
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000,
@@ -163,3 +170,27 @@ export function statusBadge(estado) {
 }
 
 export const fmt = (n) => n == null ? '$ 0' : '$ ' + Math.round(n).toLocaleString('es-CO');
+
+export function ConfirmModal({ open, title, message, confirmLabel = 'Eliminar', variant = 'danger', onConfirm, onCancel }) {
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (e.key === 'Escape') onCancel(); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [open, onCancel]);
+  if (!open) return null;
+  return (
+    <div onClick={onCancel} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
+      zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:14,
+        maxWidth:400, width:'100%', padding:28, boxShadow:'0 25px 80px rgba(0,0,0,.3)' }}>
+        <h3 style={{ margin:'0 0 8px', color:C.text, fontSize:16, fontWeight:700 }}>{title}</h3>
+        <p style={{ margin:'0 0 22px', color:C.text2, fontSize:14, lineHeight:1.5 }}>{message}</p>
+        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+          <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
+          <Btn variant={variant} onClick={onConfirm}>{confirmLabel}</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}

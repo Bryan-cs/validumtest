@@ -146,21 +146,21 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
     c.save()
 
     content_buf.seek(0)
-    content_pdf  = PyPDF2.PdfReader(content_buf)
-    plantilla_file = open(plantilla_path, 'rb')
-    plantilla_pdf  = PyPDF2.PdfReader(plantilla_file)
+    content_pdf = PyPDF2.PdfReader(content_buf)
 
-    writer = PyPDF2.PdfWriter()
-    base_page = plantilla_pdf.pages[0]
-    base_page.merge_page(content_pdf.pages[0])
-    writer.add_page(base_page)
-    if len(plantilla_pdf.pages) > 1:
-        writer.add_page(plantilla_pdf.pages[1])
+    with open(plantilla_path, 'rb') as plantilla_file:
+        plantilla_pdf = PyPDF2.PdfReader(plantilla_file)
 
-    out_buf = io.BytesIO()
-    writer.write(out_buf)
-    out_buf.seek(0)
-    plantilla_file.close()
+        writer = PyPDF2.PdfWriter()
+        base_page = plantilla_pdf.pages[0]
+        base_page.merge_page(content_pdf.pages[0])
+        writer.add_page(base_page)
+        if len(plantilla_pdf.pages) > 1:
+            writer.add_page(plantilla_pdf.pages[1])
+
+        out_buf = io.BytesIO()
+        writer.write(out_buf)
+        out_buf.seek(0)
 
     nombre_archivo = nombre.replace(" ", "_")[:30]
     return StreamingResponse(
@@ -202,7 +202,7 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     def money(v):
         try:
             return f"$ {int(v):,}".replace(",", ".")
-        except:
+        except (ValueError, TypeError):
             return "$ 0"
 
     def txt(x, y, text, size=10, bold=False, color=colors.black, align="left"):
@@ -311,20 +311,20 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     # Combinar con plantilla
     content_buf.seek(0)
     content_pdf = PyPDF2.PdfReader(content_buf)
-    plantilla_file = open(plantilla_path, 'rb')
-    plantilla_pdf = PyPDF2.PdfReader(plantilla_file)
 
-    writer = PyPDF2.PdfWriter()
-    base_page = plantilla_pdf.pages[0]
-    base_page.merge_page(content_pdf.pages[0])
-    writer.add_page(base_page)
-    if len(plantilla_pdf.pages) > 1:
-        writer.add_page(plantilla_pdf.pages[1])
+    with open(plantilla_path, 'rb') as plantilla_file:
+        plantilla_pdf = PyPDF2.PdfReader(plantilla_file)
 
-    out_buf = io.BytesIO()
-    writer.write(out_buf)
-    out_buf.seek(0)
-    plantilla_file.close()
+        writer = PyPDF2.PdfWriter()
+        base_page = plantilla_pdf.pages[0]
+        base_page.merge_page(content_pdf.pages[0])
+        writer.add_page(base_page)
+        if len(plantilla_pdf.pages) > 1:
+            writer.add_page(plantilla_pdf.pages[1])
+
+        out_buf = io.BytesIO()
+        writer.write(out_buf)
+        out_buf.seek(0)
 
     nombre_archivo = a.get('nombre', '').replace(" ", "_")[:30]
     return StreamingResponse(
