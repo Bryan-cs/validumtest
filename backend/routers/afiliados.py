@@ -348,6 +348,16 @@ def create_afiliado(data: schemas.AfiliadoCreate,
     existing = crud.get_afiliado_by_doc(db, data.doc)
     if existing:
         raise HTTPException(400, f"Ya existe un afiliado con documento {data.doc}: {existing.nombre}")
+    # Verificar si existe un afiliado inactivo (eliminado) con el mismo doc
+    inactivo = db.query(models.Afiliado).filter_by(doc=data.doc, activo=False).first()
+    if inactivo:
+        eliminado = db.query(models.Eliminado).filter_by(doc=data.doc).first()
+        if eliminado:
+            raise HTTPException(400,
+                f"Existe un afiliado eliminado con documento {data.doc} ({inactivo.nombre}). "
+                "Restáurelo desde la sección de eliminados en lugar de crear uno nuevo.")
+        # Si no hay registro en Eliminado, reactivar el inactivo
+        inactivo.activo = False  # será tratado por create_afiliado
     data.registrado_por = token.get("sub", "sistema")
     return crud.create_afiliado(db, data)
 

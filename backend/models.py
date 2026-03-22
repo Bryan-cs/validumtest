@@ -64,6 +64,7 @@ class Factura(Base):
     servicios_detalle= Column(Text, default="[]")   # JSON
     conceptos_detalle= Column(Text, default="[]")   # JSON
     afiliado_eliminado = Column(Boolean, default=False)
+    pagado_en        = Column(DateTime, nullable=True)
     creado_por       = Column(String(60))
     creado           = Column(DateTime, default=datetime.utcnow)
     actualizado      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -145,9 +146,12 @@ class Tarea(Base):
     descripcion   = Column(Text, default="")
     asignado_a    = Column(String(60), index=True)
     creado_por    = Column(String(60))
-    estado        = Column(String(20), default="pendiente", index=True)
+    estado        = Column(String(20), default="pendiente", index=True)  # pendiente|en_proceso|completada|finalizada
+    fecha_limite  = Column(String(10), nullable=True)
     creado        = Column(DateTime, default=datetime.utcnow)
     completado_en = Column(DateTime, nullable=True)
+    finalizado_en = Column(DateTime, nullable=True)
+    finalizado_por= Column(String(60), nullable=True)
 
 class TareaComentario(Base):
     __tablename__ = "tarea_comentarios"

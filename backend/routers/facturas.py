@@ -55,9 +55,15 @@ def pagar_factura(id: int, db: Session = Depends(get_db), token=Depends(verify_t
 
 
 @router.delete("/{id}")
-def delete_factura(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    if not crud.get_factura(db, id):
+def delete_factura(id: int, force: bool = False,
+                   db: Session = Depends(get_db), token=Depends(verify_token)):
+    f = crud.get_factura(db, id)
+    if not f:
         raise HTTPException(404, "Factura no encontrada")
+    if f.estado == "pagado" and not force:
+        raise HTTPException(400,
+            "No se puede eliminar una factura pagada. "
+            "Use force=true si realmente desea eliminarla.")
     crud.delete_factura(db, id, user=token.get("sub", "sistema"))
     return {"ok": True}
 

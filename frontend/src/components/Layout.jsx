@@ -19,6 +19,7 @@ const navItems = (rol) => [
     { to: '/usuarios',    label: '⚙️ Usuarios',             section: null },
     { to: '/listas',      label: '📋 Listas y opciones',   section: null },
     { to: '/calculadora', label: '🧮 Calculadora aportes', section: null },
+    { to: '/actividad',   label: '📜 Registro actividad',  section: null },
   ] : []),
 ];
 

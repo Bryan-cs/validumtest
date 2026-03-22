@@ -92,15 +92,48 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(ve
     if not e: raise HTTPException(404, "No encontrado")
     existing = db.query(models.Afiliado).filter_by(doc=e.doc, activo=True).first()
     if existing: raise HTTPException(400, f"Ya existe un afiliado activo con documento {e.doc}")
-    datos = _json.loads(e.datos_completos or "{}")
+
+    # Validar integridad del snapshot JSON
+    try:
+        datos = _json.loads(e.datos_completos or "{}")
+        if not datos or not datos.get("nombre") or not datos.get("doc"):
+            raise ValueError("Datos incompletos")
+    except (ValueError, _json.JSONDecodeError):
+        raise HTTPException(400, "Los datos del afiliado eliminado están corruptos y no se puede restaurar")
+
     srvs = datos.get("servicios", [])
     srvs_str = _json.dumps(srvs) if isinstance(srvs, list) else (srvs or "[]")
+    registrado_original = datos.get("registrado_por", token.get("sub", "sistema"))
+
+    # Buscar afiliado inactivo con mismo doc
     a = db.query(models.Afiliado).filter_by(doc=e.doc).first()
     if a:
-        a.activo = True; a.estado = "ACTIVO"; a.estado_srv = "ACTIVO"
+        # Restaurar todos los campos desde el snapshot, no solo activo/estado
+        a.activo = True
+        a.estado = "ACTIVO"
+        a.estado_srv = "ACTIVO"
+        a.nombre = datos.get("nombre", a.nombre)
+        a.empresa = datos.get("empresa", a.empresa)
+        a.servicios = srvs_str
+        a.eps = datos.get("eps", "")
+        a.arl = datos.get("arl", "")
+        a.ccf = datos.get("ccf", "")
+        a.afp = datos.get("afp", "")
+        a.subtipo = datos.get("subtipo", "0")
+        a.cliente_txt = datos.get("cliente_txt", "")
+        a.cargo = datos.get("cargo", "")
+        a.tel = datos.get("tel", "")
+        a.email = datos.get("email", "")
+        a.obs = datos.get("obs", "")
+        a.novedades = datos.get("novedades", "")
+        a.ibc = datos.get("ibc")
+        a.fecha_ingreso = datos.get("fecha_ingreso", "")
+        a.fecha_afiliacion = datos.get("fecha_afiliacion", "")
+        a.registrado_por = registrado_original
     else:
         a = models.Afiliado(
-            nombre=e.nombre, doc=e.doc, empresa=e.empresa,
+            nombre=datos.get("nombre", e.nombre), doc=e.doc,
+            empresa=datos.get("empresa", e.empresa),
             estado="ACTIVO", estado_srv="ACTIVO", activo=True,
             servicios=srvs_str,
             eps=datos.get("eps",""), arl=datos.get("arl",""),
@@ -109,13 +142,20 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(ve
             cliente_txt=datos.get("cliente_txt",""),
             cargo=datos.get("cargo",""), tel=datos.get("tel",""),
             email=datos.get("email",""), obs=datos.get("obs",""),
+            novedades=datos.get("novedades",""),
             ibc=datos.get("ibc"), fecha_ingreso=datos.get("fecha_ingreso",""),
             fecha_afiliacion=datos.get("fecha_afiliacion",""),
-            registrado_por=token.get("sub","sistema"),
+            registrado_por=registrado_original,
         )
         db.add(a)
+
+    # Reactivar facturas que fueron marcadas como huérfanas
+    db.query(models.Factura).filter_by(doc=e.doc, afiliado_eliminado=True).update(
+        {"afiliado_eliminado": False})
+
     db.delete(e)
     crud._log(db, token.get("sub","sistema"), "restauró un afiliado eliminado", "Afiliados", e.nombre)
+    crud.cache_invalidar("cobro:")
     db.commit()
     return {"ok": True, "nombre": e.nombre}
 
@@ -267,12 +307,12 @@ def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
                           mes=mes, anio=anio)
 
 
-# ─── ACTIVIDAD ────────────────────────────────────────────────────────────────
+# ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────
 @app.get("/actividad")
 def actividad(modulo: str = "", usuario: str = "",
-              dia: str = "", mes: str = "", anio: str = "",
-              db: Session = Depends(get_db), token=Depends(verify_token)):
-    return crud.get_actividad(db, modulo=modulo, usuario=usuario, dia=dia, mes=mes, anio=anio)
+              desde: str = "", hasta: str = "",
+              db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.get_actividad(db, modulo=modulo, usuario=usuario, desde=desde, hasta=hasta)
 
 
 @app.delete("/actividad")

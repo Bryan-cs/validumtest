@@ -264,7 +264,15 @@ export default function Afiliados() {
                         <Btn size="sm" variant="secondary" onClick={()=>openEditar(a)}>✏️ Editar</Btn>
                         <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/certificado`,`certificado_${a.nombre.replace(/ /g,'_')}.pdf`)}>📄 Cert.</Btn>
                         <Btn size="sm" variant="danger" disabled={eliminar.isPending}
-                          onClick={()=>setConfirm({ title:'Eliminar afiliado', message:`¿Eliminar a ${a.nombre}? El registro quedará en la sección de eliminados.`, onConfirm:()=>eliminar.mutate(a.id) })}>×</Btn>
+                          onClick={async()=>{
+                            let msg = `¿Eliminar a "${a.nombre}" (${a.doc})? Esta acción moverá al afiliado a eliminados.`;
+                            try {
+                              const r = await api.get('/facturas', { params: { doc: a.doc, estado: 'pendiente', limit: 0 } });
+                              const pend = r.data?.total || 0;
+                              if (pend > 0) msg += `\n\n⚠️ ATENCIÓN: Este afiliado tiene ${pend} factura${pend !== 1 ? 's' : ''} pendiente${pend !== 1 ? 's' : ''} de pago.`;
+                            } catch {}
+                            setConfirm({ title:'Eliminar afiliado', message: msg, onConfirm:()=>eliminar.mutate(a.id) });
+                          }}>×</Btn>
                       </div>
                     </td>
                   </tr>
@@ -532,8 +540,9 @@ export default function Afiliados() {
             options={['', ...(listas.empresas||[])].map(e=>({value:e,label:e||'— Seleccionar'}))} />
           <Sel label="Subtipo" value={form.subtipo||'0'} onChange={v=>sf('subtipo',v)}
             options={['0','3','4','20','22'].map(s=>({value:s,label:`Subtipo ${s}`}))} />
-          <InputUp label="Cliente (empresa o persona que contrata)" value={form.cliente_txt||''}
-            onChange={v=>sf('cliente_txt',v)} style={{ gridColumn:'1/-1' }} />
+          <Sel label="Cliente (empresa o persona que contrata)" value={form.cliente_txt||''}
+            onChange={v=>sf('cliente_txt',v)} style={{ gridColumn:'1/-1' }}
+            options={['', ...(listas.clientes||[])].map(c=>({value:c, label:c||'— Seleccionar cliente'}))} />
         </div>
 
         <Seccion title="Afiliaciones SS" />

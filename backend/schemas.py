@@ -31,6 +31,13 @@ class AfiliadoCreate(BaseModel):
     fecha_afiliacion: str = ""
     registrado_por: str = ""
 
+    @field_validator('empresa', 'cargo', 'cliente_txt', 'eps', 'arl', 'ccf', 'afp',
+                     'subtipo', 'tel', 'email', 'dir', 'obs', 'novedades',
+                     'fecha_ingreso', 'fecha_afiliacion', 'registrado_por', mode='before')
+    @classmethod
+    def none_to_str(cls, v):
+        return v if v is not None else ""
+
 class FacturaCreate(BaseModel):
     codigo: str = ""
     nombre_afiliado: str = ""
@@ -51,6 +58,20 @@ class FacturaCreate(BaseModel):
     conceptos_detalle: List[Any] = []
     creado_por: str = ""
 
+    @field_validator('ingresos', 'costos', 'costo_adm', 'conceptos_extra', mode='before')
+    @classmethod
+    def no_negativos(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('El valor no puede ser negativo')
+        return v or 0
+
+    @field_validator('estado', mode='before')
+    @classmethod
+    def estado_valido(cls, v):
+        if v is not None and v not in ('pendiente', 'pagado'):
+            raise ValueError('Estado debe ser "pendiente" o "pagado"')
+        return v or 'pendiente'
+
 class FacturaUpdate(BaseModel):
     cliente: Optional[str] = None
     mes: Optional[str] = None
@@ -66,6 +87,20 @@ class FacturaUpdate(BaseModel):
     novedades: Optional[str] = None
     servicios_detalle: Optional[List[Any]] = None
     conceptos_detalle: Optional[List[Any]] = None
+
+    @field_validator('ingresos', 'costos', 'costo_adm', 'conceptos_extra', mode='before')
+    @classmethod
+    def no_negativos(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('El valor no puede ser negativo')
+        return v
+
+    @field_validator('estado', mode='before')
+    @classmethod
+    def estado_valido(cls, v):
+        if v is not None and v not in ('pendiente', 'pagado'):
+            raise ValueError('Estado debe ser "pendiente" o "pagado"')
+        return v
 
 class RetiroCreate(BaseModel):
     doc: str
@@ -118,6 +153,7 @@ class TareaCreate(BaseModel):
     descripcion: str = ""
     asignado_a: str
     creado_por: str = ""
+    fecha_limite: str = ""
 
 class TareaComentarioCreate(BaseModel):
     texto: str

@@ -16,6 +16,7 @@ import Usuarios    from './pages/Usuarios';
 import Listas      from './pages/Listas';
 import Calculadora from './pages/Calculadora';
 import Tareas      from './pages/Tareas';
+import Actividad   from './pages/Actividad';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
 
@@ -45,6 +46,7 @@ export default function App() {
             <Route path="usuarios"    element={<PrivateRoute adminOnly><Usuarios /></PrivateRoute>} />
             <Route path="listas"      element={<PrivateRoute adminOnly><Listas /></PrivateRoute>} />
             <Route path="calculadora" element={<PrivateRoute adminOnly><Calculadora /></PrivateRoute>} />
+            <Route path="actividad"   element={<PrivateRoute adminOnly><Actividad /></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

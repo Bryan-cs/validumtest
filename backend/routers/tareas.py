@@ -19,20 +19,7 @@ def create_tarea(data: schemas.TareaCreate, db: Session = Depends(get_db), token
     return crud.create_tarea(db, data)
 
 
-@router.put("/{id}/completar")
-def completar(id: int, body: dict = {}, db: Session = Depends(get_db), token=Depends(verify_token)):
-    t = crud.completar_tarea(db, id, token["sub"], body.get("nota", ""))
-    if not t:
-        raise HTTPException(404, "Tarea no encontrada")
-    return t
-
-
-@router.post("/{id}/comentarios", status_code=201)
-def comentar(id: int, data: schemas.TareaComentarioCreate,
-             db: Session = Depends(get_db), token=Depends(verify_token)):
-    data.usuario = token["sub"]
-    return crud.add_comentario(db, id, data)
-
+# ── Rutas estáticas ANTES de las dinámicas ────────────────────────────────────
 
 @router.get("/notificaciones")
 def notificaciones(db: Session = Depends(get_db), token=Depends(verify_token)):
@@ -43,3 +30,46 @@ def notificaciones(db: Session = Depends(get_db), token=Depends(verify_token)):
 def leer_notificaciones(db: Session = Depends(get_db), token=Depends(verify_token)):
     crud.marcar_notificaciones_leidas(db, token["sub"])
     return {"ok": True}
+
+
+@router.put("/finalizar-lote")
+def finalizar_lote(body: dict, db: Session = Depends(get_db), token=Depends(require_admin)):
+    """Admin finaliza varias tareas completadas a la vez."""
+    ids = body.get("ids", [])
+    if not ids:
+        raise HTTPException(400, "Lista de IDs vacía")
+    resultados = []
+    for tid in ids:
+        t = crud.finalizar_tarea(db, tid, token["sub"])
+        if t:
+            resultados.append(t)
+    return {"finalizadas": len(resultados), "tareas": resultados}
+
+
+# ── Rutas dinámicas ───────────────────────────────────────────────────────────
+
+@router.put("/{id}/estado")
+def cambiar_estado(id: int, body: dict = {}, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Empleado cambia estado: pendiente → en_proceso → completada."""
+    nuevo = body.get("estado", "")
+    nota  = body.get("nota", "")
+    t = crud.cambiar_estado_tarea(db, id, nuevo, token["sub"], nota)
+    if not t:
+        raise HTTPException(400, "Estado inválido o tarea no encontrada")
+    return t
+
+
+@router.put("/{id}/finalizar")
+def finalizar(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+    """Admin finaliza una tarea completada. Queda en historial."""
+    t = crud.finalizar_tarea(db, id, token["sub"])
+    if not t:
+        raise HTTPException(404, "Tarea no encontrada")
+    return t
+
+
+@router.post("/{id}/comentarios", status_code=201)
+def comentar(id: int, data: schemas.TareaComentarioCreate,
+             db: Session = Depends(get_db), token=Depends(verify_token)):
+    data.usuario = token["sub"]
+    return crud.add_comentario(db, id, data)
