@@ -32,6 +32,13 @@ def leer_notificaciones(db: Session = Depends(get_db), token=Depends(verify_toke
     return {"ok": True}
 
 
+@router.delete("/notificaciones")
+def limpiar_notificaciones(db: Session = Depends(get_db), token=Depends(verify_token)):
+    db.query(models.Notificacion).filter_by(usuario=token["sub"]).delete()
+    db.commit()
+    return {"ok": True}
+
+
 @router.put("/finalizar-lote")
 def finalizar_lote(body: dict, db: Session = Depends(get_db), token=Depends(require_admin)):
     """Admin finaliza varias tareas completadas a la vez."""

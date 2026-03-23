@@ -61,7 +61,7 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
         user.password = crud.hash_password(data.password)
         db.commit()
 
-    token_data = {"sub": user.username, "rol": user.rol, "nombre": user.nombre}
+    token_data = {"sub": user.username, "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
     access_token = create_token(token_data)
     refresh_token = create_token(
         {**token_data, "type": "refresh"},
@@ -74,6 +74,7 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
         "rol": user.rol,
         "nombre": user.nombre,
         "username": user.username,
+        "cliente_ref": user.cliente_ref or "",
     }
 
 
@@ -92,7 +93,7 @@ def refresh_token(body: dict):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Refresh token inválido")
 
-    new_access = create_token({"sub": payload["sub"], "rol": payload["rol"], "nombre": payload.get("nombre", "")})
+    new_access = create_token({"sub": payload["sub"], "rol": payload["rol"], "nombre": payload.get("nombre", ""), "cliente_ref": payload.get("cliente_ref", "")})
     return {"access_token": new_access, "token_type": "bearer"}
 
 

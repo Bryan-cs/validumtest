@@ -132,6 +132,7 @@ class UsuarioCreate(BaseModel):
     username: str
     password: str
     rol: str = "empleado"
+    cliente_ref: Optional[str] = None
 
     @field_validator('password')
     @classmethod
@@ -139,6 +140,32 @@ class UsuarioCreate(BaseModel):
         if len(v) < 6:
             raise ValueError('La contraseña debe tener al menos 6 caracteres')
         return v
+
+    @field_validator('rol')
+    @classmethod
+    def rol_valido(cls, v):
+        if v not in ('admin', 'empleado', 'cliente'):
+            raise ValueError('Rol debe ser admin, empleado o cliente')
+        return v
+
+
+class SolicitudNovedadCreate(BaseModel):
+    afiliado_doc: str
+    tipo: str
+    descripcion: str
+
+
+class NovedadPagoCreate(BaseModel):
+    mes: str
+    anio: str
+    afiliados_docs: List[str]
+    obs: str = ""
+
+
+class SolicitudRetiroCreate(BaseModel):
+    afiliado_doc: str
+    motivo: str
+    obs: str = ""
 
 class ConfigUpdate(BaseModel):
     ibc_global: Optional[float] = None

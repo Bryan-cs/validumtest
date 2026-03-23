@@ -5,13 +5,14 @@ from datetime import datetime
 
 class Usuario(Base):
     __tablename__ = "usuarios"
-    id       = Column(Integer, primary_key=True, index=True)
-    nombre   = Column(String(120))
-    username = Column(String(60), unique=True, index=True)
-    password = Column(String(120), nullable=True)
-    rol      = Column(String(20), default="empleado")   # admin | empleado
-    activo   = Column(Boolean, default=True)
-    creado   = Column(DateTime, default=datetime.utcnow)
+    id          = Column(Integer, primary_key=True, index=True)
+    nombre      = Column(String(120))
+    username    = Column(String(60), unique=True, index=True)
+    password    = Column(String(120), nullable=True)
+    rol         = Column(String(20), default="empleado")   # admin | empleado | cliente
+    cliente_ref = Column(String(120), nullable=True)       # para rol=cliente: valor de cliente_txt
+    activo      = Column(Boolean, default=True)
+    creado      = Column(DateTime, default=datetime.utcnow)
 
 class Afiliado(Base):
     __tablename__ = "afiliados"
@@ -129,6 +130,49 @@ class Lista(Base):
     id     = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(60), unique=True)
     items  = Column(Text)    # JSON list
+
+class SolicitudNovedad(Base):
+    __tablename__ = "solicitudes_novedad"
+    id               = Column(Integer, primary_key=True, index=True)
+    cliente_ref      = Column(String(120), index=True)
+    username_cliente = Column(String(60), index=True)
+    afiliado_doc     = Column(String(20))
+    afiliado_nombre  = Column(String(150))
+    tipo             = Column(String(80))
+    descripcion      = Column(Text)
+    estado           = Column(String(20), default="pendiente")  # pendiente | atendido
+    respuesta        = Column(Text, nullable=True)
+    creado           = Column(DateTime, default=datetime.utcnow)
+
+
+class NovedadPago(Base):
+    __tablename__ = "novedades_pago"
+    id               = Column(Integer, primary_key=True, index=True)
+    cliente_ref      = Column(String(120), index=True)
+    username_cliente = Column(String(60), index=True)
+    mes              = Column(String(20))
+    anio             = Column(String(4))
+    afiliados_docs   = Column(Text)    # JSON list de docs
+    afiliados_nombres= Column(Text)    # JSON list de nombres
+    obs              = Column(Text, default="")
+    estado           = Column(String(20), default="pendiente")  # pendiente | procesado
+    respuesta        = Column(Text, nullable=True)
+    creado           = Column(DateTime, default=datetime.utcnow)
+
+
+class SolicitudRetiro(Base):
+    __tablename__ = "solicitudes_retiro"
+    id               = Column(Integer, primary_key=True, index=True)
+    cliente_ref      = Column(String(120), index=True)
+    username_cliente = Column(String(60), index=True)
+    afiliado_doc     = Column(String(20))
+    afiliado_nombre  = Column(String(150))
+    motivo           = Column(String(200))
+    obs              = Column(Text, default="")
+    estado           = Column(String(20), default="pendiente")  # pendiente | ejecutado | rechazado
+    respuesta        = Column(Text, nullable=True)
+    creado           = Column(DateTime, default=datetime.utcnow)
+
 
 class Actividad(Base):
     __tablename__ = "actividad"

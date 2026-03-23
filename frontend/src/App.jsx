@@ -4,27 +4,44 @@ import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import useAuthStore from './hooks/useAuth';
 
-import Login       from './pages/Login';
-import Layout      from './components/Layout';
-import Dashboard   from './pages/Dashboard';
-import Afiliados   from './pages/Afiliados';
-import Retiros     from './pages/Retiros';
-import Facturacion from './pages/Facturacion';
-import Cobro       from './pages/Cobro';
-import Empleados   from './pages/Empleados';
-import Usuarios    from './pages/Usuarios';
-import Listas      from './pages/Listas';
-import Calculadora from './pages/Calculadora';
-import Tareas      from './pages/Tareas';
-import Actividad   from './pages/Actividad';
+import Login          from './pages/Login';
+import Layout         from './components/Layout';
+import Dashboard      from './pages/Dashboard';
+import Afiliados      from './pages/Afiliados';
+import Retiros        from './pages/Retiros';
+import Facturacion    from './pages/Facturacion';
+import Cobro          from './pages/Cobro';
+import Empleados      from './pages/Empleados';
+import Usuarios       from './pages/Usuarios';
+import Listas         from './pages/Listas';
+import Calculadora    from './pages/Calculadora';
+import Tareas         from './pages/Tareas';
+import Actividad      from './pages/Actividad';
+import PortalCliente       from './pages/PortalCliente';
+import NovedadesClientes   from './pages/NovedadesClientes';
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 30_000 } } });
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { token, user } = useAuthStore();
   if (!token) return <Navigate to="/login" replace />;
+  // Clientes solo pueden acceder al portal
+  if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
   if (adminOnly && user?.rol !== 'admin') return <Navigate to="/" replace />;
   return children;
+}
+
+function ClienteOnlyRoute({ children }) {
+  const { token, user } = useAuthStore();
+  if (!token) return <Navigate to="/login" replace />;
+  if (user?.rol !== 'cliente' && user?.rol !== 'admin') return <Navigate to="/" replace />;
+  return children;
+}
+
+function DefaultRedirect() {
+  const { user } = useAuthStore();
+  if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
+  return <Dashboard />;
 }
 
 export default function App() {
@@ -34,8 +51,12 @@ export default function App() {
         <Toaster position="bottom-center" toastOptions={{ duration: 3000 }} />
         <Routes>
           <Route path="/login" element={<Login />} />
+
+          {/* Portal de Cliente — layout propio */}
+          <Route path="/portal" element={<ClienteOnlyRoute><PortalCliente /></ClienteOnlyRoute>} />
+
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<DefaultRedirect />} />
             <Route path="afiliados"   element={<Afiliados />} />
             <Route path="retiros"     element={<Retiros />} />
             <Route path="tareas"      element={<Tareas />} />
@@ -46,7 +67,8 @@ export default function App() {
             <Route path="usuarios"    element={<PrivateRoute adminOnly><Usuarios /></PrivateRoute>} />
             <Route path="listas"      element={<PrivateRoute adminOnly><Listas /></PrivateRoute>} />
             <Route path="calculadora" element={<PrivateRoute adminOnly><Calculadora /></PrivateRoute>} />
-            <Route path="actividad"   element={<PrivateRoute adminOnly><Actividad /></PrivateRoute>} />
+            <Route path="actividad"        element={<PrivateRoute adminOnly><Actividad /></PrivateRoute>} />
+            <Route path="novedades-clientes" element={<PrivateRoute adminOnly><NovedadesClientes /></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
