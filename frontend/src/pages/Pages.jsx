@@ -524,12 +524,14 @@ export function Usuarios() {
   const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
 
   const { data: users=[] } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data) });
+  const { data: clientes=[] } = useQuery({ queryKey:['clientes'], queryFn:()=>api.get('/clientes').then(r=>r.data) });
 
   const crear = useMutation({
     mutationFn:()=>{
       if(!form.nombre||!form.username||!form.password){setErr('Todos los campos son obligatorios.');return Promise.reject();}
       if(form.password!==form.password2){setErr('Las contraseñas no coinciden.');return Promise.reject();}
-      return api.post('/usuarios',{nombre:form.nombre,username:form.username,password:form.password,rol:form.rol});
+      if(form.rol==='cliente'&&!form.cliente_ref){setErr('Para rol cliente debes indicar el Cliente (cliente_ref).');return Promise.reject();}
+      return api.post('/usuarios',{nombre:form.nombre,username:form.username,password:form.password,rol:form.rol,cliente_ref:form.cliente_ref||null});
     },
     onSuccess:()=>{ toast.success('Usuario creado'); qc.invalidateQueries({queryKey:['usuarios']}); setModal(false); setErr(''); },
     onError:(e)=>{ if(e?.response){ const d=e.response?.data?.detail; setErr(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); } },
@@ -548,7 +550,7 @@ export function Usuarios() {
       <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
         <table style={{ width:'100%',borderCollapse:'collapse',background:'#fff' }}>
           <thead><tr style={{ background:C.surface2 }}>
-            {['Nombre','Usuario','Rol','Estado','Acciones'].map(h=>(
+            {['Nombre','Usuario','Rol','Cliente Ref','Estado','Acciones'].map(h=>(
               <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.text2,borderBottom:`1px solid ${C.border}` }}>{h}</th>
             ))}
           </tr></thead>
@@ -556,7 +558,8 @@ export function Usuarios() {
             {users.map(u=>(
               <tr key={u.id} style={{ borderBottom:`1px solid ${C.border}` }}>
                 <td style={tdc}>{u.nombre}</td><td style={tdc}>{u.username}</td>
-                <td style={tdc}><span style={{ background:u.rol==='admin'?C.blueBg:C.greenBg,color:u.rol==='admin'?C.blue:C.green,borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>{u.rol}</span></td>
+                <td style={tdc}><span style={{ background:u.rol==='admin'?C.blueBg:u.rol==='cliente'?'#FEF3C7':C.greenBg,color:u.rol==='admin'?C.blue:u.rol==='cliente'?'#92400E':C.green,borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>{u.rol}</span></td>
+                <td style={tdc}><span style={{ fontSize:12,color:C.text2 }}>{u.cliente_ref||'—'}</span></td>
                 <td style={tdc}><span style={{ color:u.activo?C.green:C.red,fontWeight:600 }}>{u.activo?'Activo':'Inactivo'}</span></td>
                 <td style={tdc}>{u.username!=='admin'&&<Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar usuario?')) eliminar.mutate(u.id); }}>Eliminar</Btn>}</td>
               </tr>
@@ -576,8 +579,19 @@ export function Usuarios() {
             ))}
             <label style={lbl}>Rol</label>
             <select style={inp} value={form.rol||'empleado'} onChange={e=>sf('rol',e.target.value)}>
-              <option value="admin">Admin</option><option value="empleado">Empleado</option>
+              <option value="admin">Admin</option>
+              <option value="empleado">Empleado</option>
+              <option value="cliente">Cliente (Portal)</option>
             </select>
+            {form.rol==='cliente'&&(
+              <div style={{ marginTop:10 }}>
+                <label style={lbl}>Cliente *</label>
+                <select style={inp} value={form.cliente_ref||''} onChange={e=>sf('cliente_ref',e.target.value)}>
+                  <option value="">— Seleccionar cliente —</option>
+                  {clientes.map(c=><option key={c} value={c}>{c}</option>)}
+                </select>
+              </div>
+            )}
             {err&&<p style={{ color:C.red,fontSize:12,margin:'8px 0 0' }}>{err}</p>}
             <div style={{ display:'flex',gap:10,marginTop:16,justifyContent:'flex-end' }}>
               <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>
@@ -753,6 +767,267 @@ const sel = { padding:'8px 12px', border:'1px solid #E2E8F0', borderRadius:7, fo
 const sel_s = { padding:'8px 12px', border:'1px solid #E2E8F0', borderRadius:7, fontSize:13, outline:'none', background:'#fff', color:'#1E293B' };
 const lbl = { display:'block', fontSize:12, color:'#64748B', fontWeight:500, marginBottom:4 };
 const inp = { width:'100%', padding:'9px 12px', border:'1px solid #E2E8F0', borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box', color:'#1E293B' };
+
+// ─── NOVEDADES DE CLIENTES (solo admin) ───────────────────────────────────────
+export function NovedadesClientes() {
+  const qc = useQueryClient();
+  const [tabNov, setTabNov] = useState('novedades');
+  const [filtroCliente, setFiltroCliente] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('');
+  const hoy = new Date().toISOString().slice(0,10);
+  const [filtroFecha, setFiltroFecha] = useState('');
+
+  // Modal para responder al resolver
+  const [modalResp, setModalResp] = useState(null); // { tipo, id, estado, label }
+  const [respTexto, setRespTexto] = useState('');
+
+  const { data: novedades=[], isLoading: loadNov } = useQuery({
+    queryKey:['admin-novedades-pago'],
+    queryFn:()=>api.get('/portal/novedades-pago').then(r=>r.data),
+    refetchInterval:30_000,
+  });
+  const { data: solicitudes=[], isLoading: loadSol } = useQuery({
+    queryKey:['admin-solicitudes-retiro'],
+    queryFn:()=>api.get('/portal/solicitudes-retiro').then(r=>r.data),
+    refetchInterval:30_000,
+  });
+  const { data: novedadesAfil=[], isLoading: loadNovAfil } = useQuery({
+    queryKey:['admin-novedades-afil'],
+    queryFn:()=>api.get('/portal/solicitudes-novedad').then(r=>r.data),
+    refetchInterval:30_000,
+  });
+
+  const cerrarModalResp = () => { setModalResp(null); setRespTexto(''); };
+
+  const updNovedad = useMutation({
+    mutationFn:({id,estado,respuesta})=>api.patch(`/portal/novedades-pago/${id}/estado`,{estado,respuesta}),
+    onSuccess:()=>{ toast.success('Estado actualizado'); qc.invalidateQueries({queryKey:['admin-novedades-pago']}); cerrarModalResp(); },
+    onError:()=>toast.error('Error al actualizar'),
+  });
+  const updSolicitud = useMutation({
+    mutationFn:({id,estado,respuesta})=>api.patch(`/portal/solicitudes-retiro/${id}/estado`,{estado,respuesta}),
+    onSuccess:()=>{ toast.success('Estado actualizado'); qc.invalidateQueries({queryKey:['admin-solicitudes-retiro']}); cerrarModalResp(); },
+    onError:()=>toast.error('Error al actualizar'),
+  });
+  const updNovedadAfil = useMutation({
+    mutationFn:({id,estado,respuesta})=>api.patch(`/portal/solicitudes-novedad/${id}/estado`,{estado,respuesta}),
+    onSuccess:()=>{ toast.success('Estado actualizado'); qc.invalidateQueries({queryKey:['admin-novedades-afil']}); cerrarModalResp(); },
+    onError:()=>toast.error('Error al actualizar'),
+  });
+
+  const confirmarRespuesta = () => {
+    if(!modalResp) return;
+    const payload = { id: modalResp.id, estado: modalResp.estado, respuesta: respTexto };
+    if(modalResp.tipo==='novedad') updNovedad.mutate(payload);
+    else if(modalResp.tipo==='retiro') updSolicitud.mutate(payload);
+    else updNovedadAfil.mutate(payload);
+  };
+
+
+  const clientesNov = [...new Set(novedades.map(n=>n.username_cliente))].sort();
+  const clientesSol = [...new Set(solicitudes.map(s=>s.username_cliente||s.cliente_ref))].sort();
+
+  const aplicarFiltros = (lista, getCli) => lista.filter(r => {
+    if(filtroCliente && getCli(r) !== filtroCliente) return false;
+    if(filtroEstado  && r.estado !== filtroEstado) return false;
+    if(filtroFecha   && r.creado?.slice(0,10) !== filtroFecha) return false;
+    return true;
+  });
+
+  const novFiltradas     = aplicarFiltros(novedades,     n => n.username_cliente);
+  const solFiltradas     = aplicarFiltros(solicitudes,   s => s.username_cliente||s.cliente_ref);
+  const novAfilFiltradas = aplicarFiltros(novedadesAfil, n => n.username_cliente||n.cliente_ref);
+
+  const badgeEstado = (est) => {
+    const map = {
+      pendiente:  { bg:'#FEF3C7', color:'#92400E' },
+      procesado:  { bg:C.greenBg, color:C.green },
+      ejecutado:  { bg:C.greenBg, color:C.green },
+      rechazado:  { bg:C.redBg,   color:C.red },
+    };
+    const s = map[est] || { bg:C.surface2, color:C.text2 };
+    return <span style={{ background:s.bg, color:s.color, borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600 }}>{est}</span>;
+  };
+
+  const limpiar = () => { setFiltroCliente(''); setFiltroEstado(''); setFiltroFecha(''); };
+
+  return (
+    <div>
+      <PageHeader title="📬 Novedades de Clientes" />
+
+      {/* Tabs */}
+      <div style={{ display:'flex', gap:4, marginBottom:16 }}>
+        {[['novedades',`Novedades de Pago (${novedades.filter(n=>n.estado==='pendiente').length} pendientes)`],['solicitudes',`Solicitudes de Retiro (${solicitudes.filter(s=>s.estado==='pendiente').length} pendientes)`],['novedades-afil',`Novedades Afiliados (${novedadesAfil.filter(n=>n.estado==='pendiente').length} pendientes)`]].map(([id,label])=>(
+          <button key={id} onClick={()=>{ setTabNov(id); limpiar(); }}
+            style={{ padding:'8px 18px', borderRadius:8, border:'none', fontSize:13, fontWeight:600,
+              cursor:'pointer', background:tabNov===id?C.primary:'#fff',
+              color:tabNov===id?'#fff':C.text2, boxShadow:tabNov===id?'none':'0 1px 3px rgba(0,0,0,.1)' }}>
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {/* Filtros */}
+      <div style={{ background:'#fff', borderRadius:10, border:`1px solid ${C.border}`, padding:'12px 16px', marginBottom:16 }}>
+        <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
+          <div>
+            <label style={lbl}>Cliente</label>
+            <select style={sel} value={filtroCliente} onChange={e=>setFiltroCliente(e.target.value)}>
+              <option value="">Todos</option>
+              {(tabNov==='novedades'?clientesNov:clientesSol).map(c=><option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Estado</label>
+            <select style={sel} value={filtroEstado} onChange={e=>setFiltroEstado(e.target.value)}>
+              <option value="">Todos</option>
+              {tabNov==='novedades'
+                ? [['pendiente','Pendiente'],['procesado','Procesado']].map(([v,l])=><option key={v} value={v}>{l}</option>)
+                : [['pendiente','Pendiente'],['ejecutado','Ejecutado'],['rechazado','Rechazado']].map(([v,l])=><option key={v} value={v}>{l}</option>)
+              }
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Fecha</label>
+            <input type="date" style={sel} value={filtroFecha} onChange={e=>setFiltroFecha(e.target.value)} />
+          </div>
+          {(filtroCliente||filtroEstado||filtroFecha) && <Btn variant="secondary" onClick={limpiar}>Limpiar</Btn>}
+        </div>
+      </div>
+
+      {/* Tabla Novedades de Pago */}
+      {tabNov==='novedades'&&(
+        loadNov ? <p style={{ color:C.text2 }}>Cargando...</p> :
+        novFiltradas.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades{(filtroCliente||filtroEstado||filtroFecha)?' con estos filtros':''}.</p> :
+        <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+            <thead><tr style={{ background:C.surface2 }}>
+              {['Cliente','Período','Afiliados','Observaciones','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
+                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {novFiltradas.map(n=>(
+                <tr key={n.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                  <td style={tdc}><strong>{n.username_cliente}</strong>{n.cliente_ref&&<div style={{ fontSize:11,color:C.text2 }}>{n.cliente_ref}</div>}</td>
+                  <td style={tdc}>{n.mes} {n.anio}</td>
+                  <td style={tdc}>
+                    <div style={{ fontSize:12 }}>{n.afiliados.length} persona(s)</div>
+                    <div style={{ fontSize:11, color:C.text2, maxWidth:220 }}>{n.afiliados.slice(0,3).join(', ')}{n.afiliados.length>3?` +${n.afiliados.length-3} más`:''}</div>
+                  </td>
+                  <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{n.obs||'—'}</span></td>
+                  <td style={tdc}>{badgeEstado(n.estado)}</td>
+                  <td style={tdc}><span style={{ fontSize:11,color:n.respuesta?C.blue:C.text2 }}>{n.respuesta||'—'}</span></td>
+                  <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(n.creado).toLocaleString('es-CO')}</span></td>
+                  <td style={tdc}>
+                    {n.estado==='pendiente'
+                      ? <Btn size="sm" variant="success" onClick={()=>{ setModalResp({tipo:'novedad',id:n.id,estado:'procesado',label:`Novedad de pago ${n.mes} ${n.anio}`}); setRespTexto(n.respuesta||''); }}>Marcar procesado</Btn>
+                      : <Btn size="sm" variant="secondary" onClick={()=>updNovedad.mutate({id:n.id,estado:'pendiente',respuesta:n.respuesta})} disabled={updNovedad.isPending}>Reabrir</Btn>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Tabla Solicitudes de Retiro */}
+      {tabNov==='solicitudes'&&(
+        loadSol ? <p style={{ color:C.text2 }}>Cargando...</p> :
+        solFiltradas.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin solicitudes{(filtroCliente||filtroEstado||filtroFecha)?' con estos filtros':''}.</p> :
+        <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+            <thead><tr style={{ background:C.surface2 }}>
+              {['Cliente','Afiliado','Documento','Motivo','Observaciones','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
+                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {solFiltradas.map(s=>(
+                <tr key={s.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                  <td style={tdc}><strong>{s.username_cliente||s.cliente_ref}</strong></td>
+                  <td style={tdc}>{s.afiliado_nombre}</td>
+                  <td style={tdc}><span style={{ color:C.text2, fontSize:12 }}>{s.afiliado_doc}</span></td>
+                  <td style={tdc}>{s.motivo}</td>
+                  <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{s.obs||'—'}</span></td>
+                  <td style={tdc}>{badgeEstado(s.estado)}</td>
+                  <td style={tdc}><span style={{ fontSize:11,color:s.respuesta?C.blue:C.text2 }}>{s.respuesta||'—'}</span></td>
+                  <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(s.creado).toLocaleString('es-CO')}</span></td>
+                  <td style={tdc}>
+                    {s.estado==='pendiente'&&(
+                      <div style={{ display:'flex', gap:6 }}>
+                        <Btn size="sm" variant="success" onClick={()=>{ setModalResp({tipo:'retiro',id:s.id,estado:'ejecutado',label:`Retiro de ${s.afiliado_nombre}`}); setRespTexto(s.respuesta||''); }}>Ejecutado</Btn>
+                        <Btn size="sm" variant="danger"  onClick={()=>{ setModalResp({tipo:'retiro',id:s.id,estado:'rechazado',label:`Retiro de ${s.afiliado_nombre}`}); setRespTexto(s.respuesta||''); }}>Rechazar</Btn>
+                      </div>
+                    )}
+                    {s.estado!=='pendiente'&&<Btn size="sm" variant="secondary" onClick={()=>updSolicitud.mutate({id:s.id,estado:'pendiente',respuesta:s.respuesta})} disabled={updSolicitud.isPending}>Reabrir</Btn>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Tabla Novedades de Afiliados */}
+      {tabNov==='novedades-afil'&&(
+        loadNovAfil ? <p style={{ color:C.text2 }}>Cargando...</p> :
+        novAfilFiltradas.length===0
+          ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades{(filtroCliente||filtroEstado||filtroFecha)?' con estos filtros':''}.</p> :
+        <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+            <thead><tr style={{ background:C.surface2 }}>
+              {['Cliente','Afiliado','Documento','Tipo','Descripción','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
+                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+              ))}
+            </tr></thead>
+            <tbody>
+              {novAfilFiltradas.map(n=>(
+                <tr key={n.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                  <td style={tdc}><strong>{n.username_cliente||n.cliente_ref}</strong></td>
+                  <td style={tdc}>{n.afiliado_nombre}</td>
+                  <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{n.afiliado_doc}</span></td>
+                  <td style={tdc}><span style={{ fontWeight:600, color:C.blue, fontSize:12 }}>{n.tipo}</span></td>
+                  <td style={{ ...tdc, maxWidth:220 }}><span style={{ fontSize:12, color:C.text2 }}>{n.descripcion}</span></td>
+                  <td style={tdc}>{badgeEstado(n.estado)}</td>
+                  <td style={tdc}><span style={{ fontSize:11,color:n.respuesta?C.blue:C.text2 }}>{n.respuesta||'—'}</span></td>
+                  <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(n.creado).toLocaleString('es-CO')}</span></td>
+                  <td style={tdc}>
+                    {n.estado==='pendiente'
+                      ? <Btn size="sm" variant="success" onClick={()=>{ setModalResp({tipo:'novedad-afil',id:n.id,estado:'atendido',label:`Novedad ${n.tipo} — ${n.afiliado_nombre}`}); setRespTexto(n.respuesta||''); }}>Marcar atendido</Btn>
+                      : <Btn size="sm" variant="secondary" onClick={()=>updNovedadAfil.mutate({id:n.id,estado:'pendiente',respuesta:n.respuesta})} disabled={updNovedadAfil.isPending}>Reabrir</Btn>
+                    }
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Modal respuesta al resolver ── */}
+      {modalResp&&(
+        <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
+          <div style={{background:'#fff',borderRadius:14,padding:28,width:440,maxWidth:'95vw',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
+            <h3 style={{margin:'0 0 6px',fontSize:15,fontWeight:700}}>Resolver solicitud</h3>
+            <p style={{margin:'0 0 16px',fontSize:13,color:C.text2}}>{modalResp.label}</p>
+            <div style={{marginBottom:16}}>
+              <label style={lbl}>Nota / respuesta para el cliente <span style={{fontWeight:400,color:C.text2}}>(opcional)</span></label>
+              <textarea style={{...inp,height:90,resize:'vertical'}} placeholder="Ej: Se procesó el pago, se ejecutó el retiro el día..." value={respTexto} onChange={e=>setRespTexto(e.target.value)} autoFocus />
+            </div>
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <Btn variant="secondary" onClick={cerrarModalResp}>Cancelar</Btn>
+              <Btn variant="success" onClick={confirmarRespuesta} disabled={updNovedad.isPending||updSolicitud.isPending||updNovedadAfil.isPending}>
+                Confirmar y notificar cliente
+              </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Re-exports
 export default Cobro;

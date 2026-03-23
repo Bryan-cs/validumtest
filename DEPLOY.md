@@ -39,6 +39,8 @@ git push -u origin main
 En Settings → Variables, agregar:
 ```
 SECRET_KEY=cambia_esto_por_algo_seguro_aleatorio_largo
+ENVIRONMENT=production
+ALLOWED_ORIGINS=https://tu-app.netlify.app
 ```
 `DATABASE_URL` y `PORT` los pone Railway automáticamente.
 
@@ -150,9 +152,8 @@ npm start
 ## Notas de seguridad para producción
 
 1. **Cambiar SECRET_KEY** — usa una cadena aleatoria de 32+ caracteres
-2. **Cambiar contraseñas** — admin1234 es solo para primer login
-3. **CORS** — en producción cambiar `allow_origins=["*"]` por tu dominio específico en main.py:
-   ```python
-   allow_origins=["https://tu-app.netlify.app"]
-   ```
-4. **HTTPS** — Railway y Netlify lo proveen automáticamente
+2. **Cambiar contraseñas** — admin1234 es solo para primer login (el sistema muestra advertencia en logs si no se cambia)
+3. **CORS** — configurar `ALLOWED_ORIGINS=https://tu-app.netlify.app` como variable de entorno en Railway
+4. **ENVIRONMENT** — configurar `ENVIRONMENT=production` en Railway para bloquear el arranque sin SECRET_KEY
+5. **HTTPS** — Railway y Netlify lo proveen automáticamente
+6. **Tests locales** — usar `pip install -r requirements-dev.txt` en vez de `requirements.txt`

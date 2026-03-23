@@ -122,11 +122,11 @@ def _factura_to_dict(f: models.Factura) -> dict:
 # ─── USUARIOS ─────────────────────────────────────────────────────────────────
 def get_user_by_username(db, username): return db.query(models.Usuario).filter_by(username=username).first()
 def get_usuario(db, id): return db.query(models.Usuario).filter_by(id=id).first()
-def get_usuarios(db): return [{"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"activo":u.activo} for u in db.query(models.Usuario).all()]
+def get_usuarios(db): return [{"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"activo":u.activo,"cliente_ref":u.cliente_ref} for u in db.query(models.Usuario).all()]
 def create_usuario(db, data: schemas.UsuarioCreate):
-    u = models.Usuario(nombre=data.nombre, username=data.username, password=hash_password(data.password), rol=data.rol)
+    u = models.Usuario(nombre=data.nombre, username=data.username, password=hash_password(data.password), rol=data.rol, cliente_ref=data.cliente_ref)
     db.add(u); db.commit(); db.refresh(u)
-    return {"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol}
+    return {"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"cliente_ref":u.cliente_ref}
 def delete_usuario(db, id, user=""):
     u = db.query(models.Usuario).filter_by(id=id).first()
     if u:

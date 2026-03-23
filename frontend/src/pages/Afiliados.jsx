@@ -51,7 +51,7 @@ const Sel = ({ label, value, onChange, options=[], style }) => (
 
 export default function Afiliados() {
   const qc = useQueryClient();
-  const [tab, setTab]           = useState('activos'); // 'activos' | 'eliminados' | 'historial' | 'pagos'
+  const [tab, setTab]           = useState('activos'); // 'activos' | 'eliminados' | 'pagos'
   const [busqueda, setBusqueda] = useState('');
   const [filtros,  setFiltros]  = useState({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
   const [modal,    setModal]    = useState(null);
@@ -154,10 +154,6 @@ export default function Afiliados() {
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
-  // Historial filtrado por afiliado seleccionado
-  const [afilSelHist, setAfilSelHist] = useState(null);
-  const histAfil = actividad.filter(a => afilSelHist && a.detalle?.includes(afilSelHist));
-
   // Filtro por año y totales
   const aniosDisponibles = [...new Set(factAfil.map(f => String(f.anio)).filter(Boolean))].sort().reverse();
   const factAfil_filtradas = anioFiltro === 'Todos' ? factAfil : factAfil.filter(f => String(f.anio) === anioFiltro);
@@ -188,7 +184,6 @@ export default function Afiliados() {
         {[
           { key:'activos',    label:`👥 Activos (${totalReg})` },
           { key:'eliminados', label:`🗑️ Eliminados (${eliminados.length || '...'})` },
-          { key:'historial',  label:'📋 Historial de cambios' },
           { key:'pagos',      label:'💳 Historial de pagos' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
@@ -332,51 +327,6 @@ export default function Afiliados() {
                     </td>
                   </tr>
                 ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ TAB: HISTORIAL ═══ */}
-      {tab === 'historial' && (
-        <div>
-          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:14, flexWrap:'wrap' }}>
-            <span style={{ fontSize:13, color:C.text2 }}>Filtrar por afiliado:</span>
-            <input placeholder="Escribe el nombre del afiliado..."
-              value={afilSelHist||''} onChange={e=>setAfilSelHist(e.target.value)}
-              style={{ padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                fontSize:13,outline:'none',width:260 }} />
-            {afilSelHist && <Btn size="sm" variant="secondary" onClick={()=>setAfilSelHist(null)}>✕ Limpiar</Btn>}
-            <span style={{ fontSize:11, color:C.text2, marginLeft:'auto' }}>
-              💡 También puedes hacer clic en el nombre de un afiliado en la tabla para ver su historial
-            </span>
-          </div>
-          <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
-              <thead>
-                <tr style={{ background:C.surface2 }}>
-                  {['Fecha','Usuario','Acción','Módulo','Detalle'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                      color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {(afilSelHist ? histAfil : actividad).slice(0,100).map((a,i)=>(
-                  <tr key={i} style={{ borderBottom:`1px solid ${C.border}` }}>
-                    <td style={{ ...tdc,fontSize:11,color:C.text2,whiteSpace:'nowrap' }}>{a.fecha}</td>
-                    <td style={{ ...tdc,fontWeight:600 }}>{a.usuario}</td>
-                    <td style={tdc}>{a.accion}</td>
-                    <td style={{ ...tdc,color:C.blue }}>{a.modulo}</td>
-                    <td style={{ ...tdc,color:C.text2,fontSize:12 }}>{a.detalle}</td>
-                  </tr>
-                ))}
-                {(afilSelHist ? histAfil : actividad).length===0 && (
-                  <tr><td colSpan={5} style={{ padding:20,textAlign:'center',color:C.text2 }}>
-                    {afilSelHist ? `Sin historial para "${afilSelHist}"` : 'Sin actividad registrada'}
-                  </td></tr>
-                )}
               </tbody>
             </table>
           </div>

@@ -23,18 +23,47 @@ from slowapi.errors import RateLimitExceeded
 limiter = Limiter(key_func=get_remote_address)
 
 
+def _limpiar_notificaciones_diario():
+    """Elimina todas las notificaciones del día anterior al iniciar un nuevo día."""
+    from database import SessionLocal
+    from datetime import date
+    db = SessionLocal()
+    try:
+        hoy = datetime.combine(date.today(), datetime.min.time())
+        db.query(models.Notificacion).filter(models.Notificacion.creado < hoy).delete()
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    # Backup automático diario a las 2:00 AM (solo si existe bbcfile.db)
+    # Advertencia si las credenciales por defecto no han sido cambiadas
+    try:
+        from database import SessionLocal
+        _db = SessionLocal()
+        _admin = _db.query(models.Usuario).filter_by(username="admin").first()
+        if _admin and crud.verify_password("admin1234", _admin.password or ""):
+            from logger import logger as _log
+            _log.warning("⚠️  SEGURIDAD: El usuario 'admin' tiene la contraseña por defecto 'admin1234'. Cámbiela inmediatamente.")
+        _db.close()
+    except Exception:
+        pass
+    # Backup automático diario a las 2:00 AM
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from backup import run_backup
+        from logger import logger as _log
         _scheduler = BackgroundScheduler()
         _scheduler.add_job(run_backup, "cron", hour=2, minute=0)
+        _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
         _scheduler.start()
-    except Exception:
-        pass
+    except Exception as e:
+        from logger import logger as _log
+        _log.error(f"APScheduler no pudo iniciar: {e}")
     yield
 
 
@@ -44,9 +73,14 @@ app = FastAPI(title="BBC File API", version="1.0.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# En producción: ALLOWED_ORIGINS=https://tu-app.netlify.app
+# En desarrollo: dejar vacío → permite cualquier origen
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -58,16 +92,18 @@ from routers import afiliados as afiliados_router
 from routers import facturas as facturas_router
 from routers import reportes as reportes_router
 from routers import tareas as tareas_router
+from routers import portal as portal_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
 app.include_router(facturas_router.router)
 app.include_router(reportes_router.router)
 app.include_router(tareas_router.router)
+app.include_router(portal_router.router)
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
-def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
+def list_eliminados(db: Session = Depends(get_db), token=Depends(require_admin)):
     rows = db.query(models.Eliminado).order_by(models.Eliminado.id.desc()).all()
     return [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
              "fecha_eliminacion":r.fecha_eliminacion,"mes":r.mes,
@@ -75,7 +111,7 @@ def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
 
 
 @app.delete("/eliminados/{id}")
-def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     e = db.query(models.Eliminado).filter_by(id=id).first()
     if not e: raise HTTPException(404, "No encontrado")
     nombre = e.nombre
@@ -86,7 +122,7 @@ def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verif
 
 
 @app.post("/eliminados/{id}/restaurar")
-def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     import json as _json
     e = db.query(models.Eliminado).filter_by(id=id).first()
     if not e: raise HTTPException(404, "No encontrado")
@@ -319,6 +355,18 @@ def actividad(modulo: str = "", usuario: str = "",
 def clear_actividad(db: Session = Depends(get_db), token=Depends(require_admin)):
     crud.clear_actividad(db, user=token.get("sub", "sistema"))
     return {"ok": True}
+
+
+# ─── CLIENTES ÚNICOS ──────────────────────────────────────────────────────────
+@app.get("/clientes")
+def list_clientes(db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Retorna la lista de clientes únicos (cliente_txt) de afiliados activos."""
+    rows = (db.query(models.Afiliado.cliente_txt)
+              .filter(models.Afiliado.activo == True, models.Afiliado.cliente_txt != None, models.Afiliado.cliente_txt != "")
+              .distinct()
+              .order_by(models.Afiliado.cliente_txt)
+              .all())
+    return [r[0] for r in rows]
 
 
 # ─── LISTAS DE REFERENCIA ─────────────────────────────────────────────────────

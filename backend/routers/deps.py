@@ -5,10 +5,13 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta
 import jwt
 
-_default_key = None if os.getenv("RAILWAY_ENVIRONMENT") else "dev-only-key-do-not-use-in-prod"
-SECRET_KEY = os.getenv("SECRET_KEY", _default_key)
+SECRET_KEY = os.getenv("SECRET_KEY")
 if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY env var is required in production")
+    # En cualquier entorno sin SECRET_KEY configurada se usa clave de desarrollo
+    # En producción (ENVIRONMENT=production) se bloquea el arranque
+    if os.getenv("ENVIRONMENT", "development") == "production":
+        raise RuntimeError("SECRET_KEY env var is required in production")
+    SECRET_KEY = "dev-only-key-do-not-use-in-prod"
 ALGORITHM  = "HS256"
 TOKEN_EXPIRE_HOURS = 12
 REFRESH_TOKEN_EXPIRE_DAYS = 7

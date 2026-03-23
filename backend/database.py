@@ -31,12 +31,19 @@ def init_db():
     import models
     Base.metadata.create_all(bind=engine)
     # Migración: agregar columnas nuevas a tablas existentes
+    _sql = __import__('sqlalchemy').text
     with engine.connect() as conn:
-        try:
-            conn.execute(__import__('sqlalchemy').text("ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT"))
-            conn.commit()
-        except Exception:
-            pass  # Columna ya existe
+        for stmt in [
+            "ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT",
+            "ALTER TABLE usuarios ADD COLUMN cliente_ref VARCHAR(120)",
+            "ALTER TABLE novedades_pago ADD COLUMN respuesta TEXT",
+            "ALTER TABLE solicitudes_retiro ADD COLUMN respuesta TEXT",
+            "ALTER TABLE solicitudes_novedad ADD COLUMN respuesta TEXT",
+        ]:
+            try:
+                conn.execute(_sql(stmt)); conn.commit()
+            except Exception:
+                pass  # Columna ya existe
     # Seed data inicial si la DB está vacía
     from sqlalchemy.orm import Session
     db = SessionLocal()

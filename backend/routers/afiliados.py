@@ -24,6 +24,12 @@ def list_afiliados(
     Sin limit devuelve todos (usado por exportaciones Excel).
     Respuesta: {"total": N, "items": [...]}
     """
+    # Clientes solo ven sus propios afiliados (mismo filtro que /portal/afiliados)
+    if token.get("rol") == "cliente":
+        cliente_ref = (token.get("cliente_ref") or "").strip()
+        if not cliente_ref:
+            return {"total": 0, "items": []}
+        cliente = cliente_ref  # forzar filtro por su cliente_ref
     return crud.get_afiliados(db, q=q, estado=estado, empresa=empresa,
                                cliente=cliente, subtipo=subtipo,
                                skip=skip, limit=limit)
