@@ -594,12 +594,12 @@ def cache_invalidar(prefijo: str = ""):
         del _cache[k]
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
-def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio=""):
+def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     """Calcula el estado de cobro por afiliado y mes (últimos 6 meses).
     Genera una fila por cada mes pendiente de cada afiliado.
     El caché se invalida automáticamente al crear/editar/eliminar facturas o afiliados.
     """
-    cache_key = f"cobro:{empresa}:{cliente}:{tipo}:{mes}:{anio}"
+    cache_key = f"cobro:{empresa}:{cliente}:{tipo}:{mes}:{anio}:{doc}"
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
@@ -693,6 +693,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio=""):
                 "subtipo":  a.subtipo or "",
             })
 
+    if doc:     rows = [r for r in rows if r["doc"] == doc]
     if empresa: rows = [r for r in rows if r["empresa"] == empresa]
     if cliente: rows = [r for r in rows if r["cliente"] == cliente]
     if mes:     rows = [r for r in rows if r["mes"] == mes]

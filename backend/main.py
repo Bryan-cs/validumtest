@@ -301,10 +301,10 @@ def dashboard_meses(db: Session = Depends(get_db), token=Depends(verify_token)):
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
 @app.get("/cobro")
 def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
-          mes: str = "", anio: str = "",
+          mes: str = "", anio: str = "", doc: str = "",
           db: Session = Depends(get_db), token=Depends(verify_token)):
     return crud.get_cobro(db, empresa=empresa, cliente=cliente, tipo=tipo,
-                          mes=mes, anio=anio)
+                          mes=mes, anio=anio, doc=doc)
 
 
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────

@@ -2,6 +2,7 @@
 import io
 import os
 import json
+import copy
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -245,31 +246,43 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     c.drawString(320, y, f"Fecha:  {fecha_hoy}")
 
     # Tabla de facturas
+    col_x = [55, 140, 210, 310, 390, 460]
+    headers_tabla = ["Período", "Código", "Servicios ($)", "Total", "Estado", "Banco"]
+    row_colors = [colors.HexColor("#F8FAFC"), colors.white]
+
+    def draw_cabecera_tabla():
+        nonlocal y
+        c.setFillColor(colors.HexColor("#1E40AF"))
+        c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
+        c.setFillColor(colors.white)
+        c.setFont("Helvetica-Bold", 8)
+        for hdr, cx in zip(headers_tabla, col_x):
+            c.drawString(cx, y, hdr)
+        y -= 16
+
     y -= 30
     txt(50, y, "DETALLE DE FACTURAS", size=9, bold=True, color=colors.HexColor("#1E40AF"))
     y -= 6
-
-    # Cabecera de tabla
     y -= 16
-    c.setFillColor(colors.HexColor("#1E40AF"))
-    c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont("Helvetica-Bold", 8)
-    col_x = [55, 140, 210, 310, 390, 460]
-    headers = ["Período", "Código", "Servicios ($)", "Total", "Estado", "Banco"]
-    for hdr, cx in zip(headers, col_x):
-        c.drawString(cx, y, hdr)
+    draw_cabecera_tabla()
 
-    row_colors = [colors.HexColor("#F8FAFC"), colors.white]
     total_pagado = 0
     total_pendiente = 0
 
     for idx, f in enumerate(facturas):
-        y -= 16
         if y < 80:
-            # Si nos quedamos sin espacio, continuar en nueva página no implementado
-            # por simplicidad mostramos hasta donde alcance
-            break
+            # Nueva página
+            c.showPage()
+            y = H - 120
+            txt(W/2, y, "ESTADO DE CUENTA (continuación)", size=11, bold=True,
+                color=colors.HexColor("#1E40AF"), align="center")
+            y -= 10
+            c.setStrokeColor(colors.HexColor("#1E40AF"))
+            c.setLineWidth(1.5)
+            c.line(80, y, W - 80, y)
+            y -= 20
+            draw_cabecera_tabla()
+
         c.setFillColor(row_colors[idx % 2])
         c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
         c.setFillColor(colors.black)
@@ -293,8 +306,14 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
         else:
             total_pendiente += total_val
 
-    # Resumen
-    y -= 24
+        y -= 16
+
+    # Resumen — nueva página si no hay espacio
+    if y < 60:
+        c.showPage()
+        y = H - 120
+
+    y -= 8
     c.setStrokeColor(colors.HexColor("#E2E8F0"))
     c.line(50, y + 8, W - 50, y + 8)
 
@@ -308,7 +327,7 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
 
     c.save()
 
-    # Combinar con plantilla
+    # Combinar con plantilla — cada página de contenido se fusiona con la plantilla
     content_buf.seek(0)
     content_pdf = PyPDF2.PdfReader(content_buf)
 
@@ -316,11 +335,10 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
         plantilla_pdf = PyPDF2.PdfReader(plantilla_file)
 
         writer = PyPDF2.PdfWriter()
-        base_page = plantilla_pdf.pages[0]
-        base_page.merge_page(content_pdf.pages[0])
-        writer.add_page(base_page)
-        if len(plantilla_pdf.pages) > 1:
-            writer.add_page(plantilla_pdf.pages[1])
+        for content_page in content_pdf.pages:
+            base_page = copy.deepcopy(plantilla_pdf.pages[0])
+            base_page.merge_page(content_page)
+            writer.add_page(base_page)
 
         out_buf = io.BytesIO()
         writer.write(out_buf)

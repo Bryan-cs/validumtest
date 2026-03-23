@@ -36,16 +36,18 @@ export default function Cobro() {
   const [novedadModal, setNovedadModal] = useState(null);
   const [mesFiltro,  setMesFiltro]  = useState('');
   const [anioFiltro, setAnioFiltro] = useState('');
+  const [docBuscar, setDocBuscar] = useState('');
+  const [docFiltro, setDocFiltro] = useState('');
   const [pagina, setPagina] = useState(1);
 
   const setFiltro = (key, vals) => { setFiltros(f => ({ ...f, [key]: vals })); setPagina(1); };
-  const limpiar   = () => { setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] }); setPagina(1); };
+  const limpiar   = () => { setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] }); setDocBuscar(''); setDocFiltro(''); setPagina(1); };
 
   const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
   const { data: config = {} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
   const { data: rows = [], isLoading } = useQuery({
-    queryKey: ['cobro', mesFiltro, anioFiltro],
-    queryFn: () => api.get('/cobro', { params:{ empresa:'', cliente:'', tipo:'', mes: mesFiltro, anio: anioFiltro } }).then(r=>r.data),
+    queryKey: ['cobro', mesFiltro, anioFiltro, docFiltro],
+    queryFn: () => api.get('/cobro', { params:{ empresa:'', cliente:'', tipo:'', mes: mesFiltro, anio: anioFiltro, doc: docFiltro } }).then(r=>r.data),
     refetchInterval: 60_000,
   });
 
@@ -87,8 +89,38 @@ export default function Cobro() {
         <StatCard label="Total mostrados"  value={rowsFiltrados.length} color={C.primary} />
       </div>
 
-      {/* Filtro mes / año */}
+      {/* Búsqueda por documento */}
       <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:12, flexWrap:'wrap' }}>
+        <div style={{ position:'relative', flex:'0 0 auto' }}>
+          <input
+            type="text"
+            value={docBuscar}
+            onChange={e => setDocBuscar(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') { setDocFiltro(docBuscar.trim()); setPagina(1); } }}
+            placeholder="🔍 Buscar por N° documento..."
+            style={{ padding:'7px 12px', paddingRight:70, borderRadius:7, border:`1px solid ${C.border}`,
+              fontSize:13, color:C.text, background:'#fff', width:260 }}
+          />
+          <button
+            onClick={() => { setDocFiltro(docBuscar.trim()); setPagina(1); }}
+            style={{ position:'absolute', right:4, top:'50%', transform:'translateY(-50%)',
+              padding:'4px 12px', borderRadius:5, border:'none', background:C.primary,
+              color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+            Buscar
+          </button>
+        </div>
+        {docFiltro && (
+          <div style={{ display:'flex', alignItems:'center', gap:6, background:C.blueBg,
+            border:`1px solid ${C.blue}`, borderRadius:7, padding:'5px 12px' }}>
+            <span style={{ fontSize:12, color:C.blue, fontWeight:600 }}>
+              Doc: {docFiltro}
+            </span>
+            <button onClick={() => { setDocBuscar(''); setDocFiltro(''); setPagina(1); }}
+              style={{ background:'none', border:'none', cursor:'pointer', fontSize:14, color:C.blue, padding:0 }}>✕</button>
+          </div>
+        )}
+
+        {/* Filtro mes / año */}
         <select value={mesFiltro} onChange={e=>{ setMesFiltro(e.target.value); setPagina(1); }}
           style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, fontSize:13, color:C.text, background:'#fff' }}>
           <option value="">Todos los meses</option>
@@ -99,10 +131,10 @@ export default function Cobro() {
           <option value="">Todos los años</option>
           {ANIOS.map(a=><option key={a} value={a}>{a}</option>)}
         </select>
-        {(mesFiltro||anioFiltro) && (
-          <button onClick={()=>{ setMesFiltro(''); setAnioFiltro(''); setPagina(1); }}
+        {(mesFiltro||anioFiltro||docFiltro) && (
+          <button onClick={()=>{ setMesFiltro(''); setAnioFiltro(''); setDocBuscar(''); setDocFiltro(''); setPagina(1); }}
             style={{ padding:'7px 14px', borderRadius:7, border:`1px solid ${C.border}`, background:C.surface2, fontSize:12, cursor:'pointer', color:C.text2 }}>
-            ✕ Limpiar período
+            ✕ Limpiar filtros
           </button>
         )}
       </div>

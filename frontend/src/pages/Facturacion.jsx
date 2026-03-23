@@ -97,7 +97,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   useEffect(() => {
     if (!open) {
       setCedula(''); setAfiliado(null); setErrorBusq(''); setDias(30);
-      setMes(MESES[new Date().getMonth()]); setEstado('pendiente');
+      setMes(MESES[new Date().getMonth()]); setAnio(String(new Date().getFullYear())); setEstado('pendiente');
       setBanco(''); setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
     }
   }, [open]);
@@ -160,7 +160,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
 
   return (
     <Modal open={open} onClose={onClose} width={820} title="Nueva factura por afiliado">
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:10, marginBottom:10 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', gap:10, marginBottom:10 }}>
         <div>
           <label style={lbl}>Cédula del afiliado *</label>
           <div style={{ display:'flex', gap:6 }}>
@@ -175,6 +175,12 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         <div><label style={lbl}>Mes</label>
           <select style={inp} value={mes} onChange={e => setMes(e.target.value)}>
             {MESES.map(m => <option key={m}>{m}</option>)}</select></div>
+        <div><label style={lbl}>Año</label>
+          <select style={inp} value={anio} onChange={e => setAnio(e.target.value)}>
+            {Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - 2 + i)).map(a => (
+              <option key={a}>{a}</option>
+            ))}
+          </select></div>
         <div><label style={lbl}>Estado</label>
           <select style={inp} value={estado} onChange={e => setEstado(e.target.value)}>
             <option value="pendiente">Pendiente</option><option value="pagado">Pagado</option></select></div>
