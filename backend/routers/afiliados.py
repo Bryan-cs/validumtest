@@ -2,7 +2,6 @@
 import io
 import os
 import json
-import copy
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -246,32 +245,29 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     c.drawString(320, y, f"Fecha:  {fecha_hoy}")
 
     # Tabla de facturas
-    col_x = [55, 140, 210, 310, 390, 460]
-    headers_tabla = ["Período", "Código", "Servicios ($)", "Total", "Estado", "Banco"]
-    row_colors = [colors.HexColor("#F8FAFC"), colors.white]
+    col_x  = [55, 140, 210, 310, 390, 460]
+    hdrs   = ["Período", "Código", "Servicios", "Total", "Estado", "Banco"]
+    row_bg = [colors.HexColor("#F8FAFC"), colors.white]
 
-    def draw_cabecera_tabla():
-        nonlocal y
+    def cabecera(yy):
         c.setFillColor(colors.HexColor("#1E40AF"))
-        c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
+        c.rect(50, yy - 4, W - 100, 16, fill=1, stroke=0)
         c.setFillColor(colors.white)
         c.setFont("Helvetica-Bold", 8)
-        for hdr, cx in zip(headers_tabla, col_x):
-            c.drawString(cx, y, hdr)
-        y -= 16
+        for hdr, cx in zip(hdrs, col_x):
+            c.drawString(cx, yy, hdr)
+        return yy - 16
 
     y -= 30
     txt(50, y, "DETALLE DE FACTURAS", size=9, bold=True, color=colors.HexColor("#1E40AF"))
-    y -= 6
-    y -= 16
-    draw_cabecera_tabla()
+    y -= 22
+    y = cabecera(y)
 
-    total_pagado = 0
+    total_pagado   = 0
     total_pendiente = 0
 
-    for idx, f in enumerate(facturas):
+    for idx, fac in enumerate(facturas):
         if y < 80:
-            # Nueva página
             c.showPage()
             y = H - 120
             txt(W/2, y, "ESTADO DE CUENTA (continuación)", size=11, bold=True,
@@ -281,27 +277,37 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
             c.setLineWidth(1.5)
             c.line(80, y, W - 80, y)
             y -= 20
-            draw_cabecera_tabla()
+            y = cabecera(y)
 
-        c.setFillColor(row_colors[idx % 2])
+        # Parsear servicios
+        try:
+            srvs = json.loads(fac.servicios_detalle or "[]")
+            if not isinstance(srvs, list):
+                srvs = []
+        except (json.JSONDecodeError, TypeError):
+            srvs = []
+        nombres_srvs = ", ".join(s.get("servicio", "") for s in srvs if s.get("incluido", True))
+
+        total_val    = fac.costos or 0
+        estado_color = colors.HexColor("#16A34A") if fac.estado == "pagado" else colors.HexColor("#DC2626")
+
+        c.setFillColor(row_bg[idx % 2])
         c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
         c.setFillColor(colors.black)
         c.setFont("Helvetica", 8)
-
-        periodo = f"{f.mes} {f.anio}"
-        total_val = f.costos or 0
-        estado_color = colors.HexColor("#16A34A") if f.estado == "pagado" else colors.HexColor("#DC2626")
-
-        c.drawString(col_x[0], y, periodo[:18])
-        c.drawString(col_x[1], y, str(f.codigo or '')[:14])
-        c.drawString(col_x[2], y, money(f.ingresos or 0))
+        c.drawString(col_x[0], y, str(fac.mes or '') + " " + str(fac.anio or ''))
+        c.drawString(col_x[1], y, str(fac.codigo or '')[:14])
+        c.setFont("Helvetica", 7)
+        c.drawString(col_x[2], y, nombres_srvs[:30] if nombres_srvs else "")
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.black)
         c.drawString(col_x[3], y, money(total_val))
         c.setFillColor(estado_color)
-        c.drawString(col_x[4], y, str(f.estado or '').upper()[:10])
+        c.drawString(col_x[4], y, str(fac.estado or '').upper()[:10])
         c.setFillColor(colors.black)
-        c.drawString(col_x[5], y, str(f.banco or '')[:12])
+        c.drawString(col_x[5], y, str(fac.banco or '')[:12])
 
-        if f.estado == "pagado":
+        if fac.estado == "pagado":
             total_pagado += total_val
         else:
             total_pendiente += total_val
@@ -332,17 +338,19 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     content_pdf = PyPDF2.PdfReader(content_buf)
 
     with open(plantilla_path, 'rb') as plantilla_file:
-        plantilla_pdf = PyPDF2.PdfReader(plantilla_file)
+        plantilla_bytes = plantilla_file.read()
 
-        writer = PyPDF2.PdfWriter()
-        for content_page in content_pdf.pages:
-            base_page = copy.deepcopy(plantilla_pdf.pages[0])
-            base_page.merge_page(content_page)
-            writer.add_page(base_page)
+    writer = PyPDF2.PdfWriter()
+    for content_page in content_pdf.pages:
+        plantilla_buf = io.BytesIO(plantilla_bytes)
+        plantilla_pdf = PyPDF2.PdfReader(plantilla_buf)
+        base_page = plantilla_pdf.pages[0]
+        base_page.merge_page(content_page)
+        writer.add_page(base_page)
 
-        out_buf = io.BytesIO()
-        writer.write(out_buf)
-        out_buf.seek(0)
+    out_buf = io.BytesIO()
+    writer.write(out_buf)
+    out_buf.seek(0)
 
     nombre_archivo = a.get('nombre', '').replace(" ", "_")[:30]
     return StreamingResponse(

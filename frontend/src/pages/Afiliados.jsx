@@ -61,6 +61,7 @@ export default function Afiliados() {
   // Pagos tab state
   const [docSeleccionado, setDocSeleccionado] = useState('');
   const [busquedaPagos,   setBusquedaPagos]   = useState('');
+  const [anioFiltro,      setAnioFiltro]      = useState('Todos');
 
   const setFiltro = (key,vals) => setFiltros(f=>({...f,[key]:vals}));
   const limpiar   = () => setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
@@ -157,9 +158,11 @@ export default function Afiliados() {
   const [afilSelHist, setAfilSelHist] = useState(null);
   const histAfil = actividad.filter(a => afilSelHist && a.detalle?.includes(afilSelHist));
 
-  // Totales facturas del afiliado seleccionado
-  const totalPagado    = factAfil.filter(f=>f.estado==='pagado').reduce((s,f)=>s+(f.costos||0),0);
-  const totalPendiente = factAfil.filter(f=>f.estado!=='pagado').reduce((s,f)=>s+(f.costos||0),0);
+  // Filtro por año y totales
+  const aniosDisponibles = [...new Set(factAfil.map(f => String(f.anio)).filter(Boolean))].sort().reverse();
+  const factAfil_filtradas = anioFiltro === 'Todos' ? factAfil : factAfil.filter(f => String(f.anio) === anioFiltro);
+  const totalPagado    = factAfil_filtradas.filter(f=>f.estado==='pagado').reduce((s,f)=>s+(f.costos||0),0);
+  const totalPendiente = factAfil_filtradas.filter(f=>f.estado!=='pagado').reduce((s,f)=>s+(f.costos||0),0);
 
   return (
     <div>
@@ -408,8 +411,15 @@ export default function Afiliados() {
                 </div>
               )}
             </div>
+            {docSeleccionado && aniosDisponibles.length > 0 && (
+              <select value={anioFiltro} onChange={e => setAnioFiltro(e.target.value)}
+                style={{ padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,outline:'none',background:'#fff' }}>
+                <option value="Todos">Todos los años</option>
+                {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+            )}
             {docSeleccionado && (
-              <Btn size="sm" variant="secondary" onClick={()=>{ setDocSeleccionado(''); setBusquedaPagos(''); }}>
+              <Btn size="sm" variant="secondary" onClick={()=>{ setDocSeleccionado(''); setBusquedaPagos(''); setAnioFiltro('Todos'); }}>
                 ✕ Limpiar
               </Btn>
             )}
@@ -458,10 +468,12 @@ export default function Afiliados() {
                   </thead>
                   <tbody>
                     {loadFact && <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
-                    {!loadFact && factAfil.length===0 && (
-                      <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas registradas</td></tr>
+                    {!loadFact && factAfil_filtradas.length===0 && (
+                      <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>
+                        {anioFiltro !== 'Todos' ? `Sin facturas para el año ${anioFiltro}` : 'Sin facturas registradas'}
+                      </td></tr>
                     )}
-                    {factAfil.map((f,i)=>(
+                    {factAfil_filtradas.map((f,i)=>(
                       <tr key={f.id} style={{ borderBottom:`1px solid ${C.border}`,
                         background: f.estado==='pagado' ? '#F0FDF4' : '#FFF5F5' }}>
                         <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{f.codigo}</td>
