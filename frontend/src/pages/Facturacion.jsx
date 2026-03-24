@@ -604,7 +604,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                           .replace('{{anio}}', f.anio||'')
                           .replace('{{fecha_emision}}', fechaEmision)
                           .replace('{{vencimiento}}', fechaVenc ? `Fecha de Vencimiento: ${fechaVenc}` : '')
-                          .replace('{{total}}', Number(f.costos||0).toLocaleString('es-CO'))
+                          .replace('{{total}}', Number(f.ingresos||0).toLocaleString('es-CO'))
                           .replace('{{servicios}}', serviciosTexto ? `Servicios contratados:\n${serviciosTexto}` : '');
                         const msg = encodeURIComponent(texto);
                         window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');

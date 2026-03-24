@@ -103,7 +103,7 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
             except Exception:
                 afil_obj = None
 
-    plantilla_path = os.path.join(os.path.dirname(__file__), '..', '..', 'plantilla.pdf')
+    plantilla_path = os.path.join(os.path.dirname(__file__), '..', 'plantilla.pdf')
     if not os.path.exists(plantilla_path):
         raise HTTPException(500, "Plantilla no encontrada")
 
