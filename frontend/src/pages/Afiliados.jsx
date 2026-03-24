@@ -4,6 +4,7 @@ import toast from 'react-hot-toast';
 import api from '../utils/api';
 import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
+import useAuthStore from '../hooks/useAuth';
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5'];
 
@@ -51,6 +52,8 @@ const Sel = ({ label, value, onChange, options=[], style }) => (
 
 export default function Afiliados() {
   const qc = useQueryClient();
+  const { user } = useAuthStore();
+  const esAdmin = user?.rol === 'admin';
   const [tab, setTab]           = useState('activos'); // 'activos' | 'eliminados' | 'pagos'
   const [busqueda, setBusqueda] = useState('');
   const [filtros,  setFiltros]  = useState({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
@@ -84,10 +87,10 @@ export default function Afiliados() {
   const data     = resp.items || [];
   const totalReg = resp.total || 0;
   const totalPags = Math.ceil(totalReg / POR_PAG);
-  const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data) });
+  const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data), enabled: esAdmin });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
-    enabled: tab === 'eliminados',
+    enabled: tab === 'eliminados' && esAdmin,
   });
 
   // Facturas del afiliado seleccionado en tab pagos
