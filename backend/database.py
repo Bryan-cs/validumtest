@@ -92,6 +92,7 @@ def _seed(db):
         "estados_srv": ["ACTIVO","SUSPENDIDO","DOBLE AFILIACION","EN ESPERA DE ACTIVACION",
                         "RETIRADO","EN MORA","NO AFILIADO","PENDIENTE"],
         "motivos_retiro": ["Renuncia","Despido","Pension","Otro"],
+        "clientes": [],
     }
     if db.query(models.Lista).count() == 0:
         import json

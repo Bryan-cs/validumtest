@@ -122,7 +122,16 @@ export default function Afiliados() {
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setModal('nuevo'); };
   const openEditar = (a) => { setForm({...a}); setModal(a); };
-  const toggleSrv  = (s) => { const srvs=form.servicios||[]; sf('servicios', srvs.includes(s)?srvs.filter(x=>x!==s):[...srvs,s]); };
+  const toggleSrv  = (s) => {
+    const srvs = form.servicios || [];
+    if (srvs.includes(s)) {
+      sf('servicios', srvs.filter(x => x !== s));
+    } else {
+      // Si es ARL, quitar cualquier otro ARL antes de agregar el nuevo
+      const base = s.startsWith('ARL') ? srvs.filter(x => !x.startsWith('ARL')) : srvs;
+      sf('servicios', [...base, s]);
+    }
+  };
 
   const guardar = useMutation({
     mutationFn: () => {
