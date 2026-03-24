@@ -37,7 +37,7 @@ function Btn({ children, onClick, disabled, variant='primary', size='md' }) {
   const styles = {
     primary:   { background:C.primary,   color:'#fff',  border:'none' },
     accent:    { background:C.accent,    color:'#fff',  border:'none' },
-    secondary: { background:'#fff',      color:C.text,  border:`1px solid ${C.border}` },
+    secondary: { background:C.surface,      color:C.text,  border:`1px solid ${C.border}` },
     danger:    { background:C.red,       color:'#fff',  border:'none' },
     success:   { background:C.green,     color:'#fff',  border:'none' },
   };
@@ -74,7 +74,7 @@ function ModalResumen({ doc, onClose }) {
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'flex-start',justifyContent:'center',paddingTop:40,overflowY:'auto' }}>
-      <div style={{ background:'#fff',borderRadius:14,padding:28,width:700,maxWidth:'95vw',boxShadow:'0 20px 60px rgba(0,0,0,.3)',margin:'0 auto 40px' }}>
+      <div style={{ background:C.surface,borderRadius:14,padding:28,width:700,maxWidth:'95vw',boxShadow:'0 20px 60px rgba(0,0,0,.3)',margin:'0 auto 40px' }}>
         <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20 }}>
           <h3 style={{ margin:0,color:C.primary,fontSize:16 }}>Resumen del Afiliado</h3>
           <button onClick={onClose} style={{ background:'none',border:'none',fontSize:20,cursor:'pointer',color:C.text2 }}>×</button>
@@ -186,7 +186,7 @@ function ModalNovedadPago({ seleccionados, afiliados, onClose, onSuccess }) {
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-      <div style={{ background:'#fff',borderRadius:14,padding:28,width:480,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
+      <div style={{ background:C.surface,borderRadius:14,padding:28,width:480,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
         <h3 style={{ margin:'0 0 16px',color:C.primary }}>Reportar Novedad de Pago SS</h3>
 
         <p style={{ fontSize:13,color:C.text2,marginBottom:12 }}>
@@ -254,7 +254,7 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-      <div style={{ background:'#fff',borderRadius:14,padding:28,width:460,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
+      <div style={{ background:C.surface,borderRadius:14,padding:28,width:460,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
         <h3 style={{ margin:'0 0 16px',color:C.primary }}>Reportar Novedad del Afiliado</h3>
 
         <div style={{ background:C.surface,borderRadius:8,padding:12,marginBottom:16 }}>
@@ -304,7 +304,7 @@ function ModalRetiro({ afiliado, onClose, onSuccess }) {
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-      <div style={{ background:'#fff',borderRadius:14,padding:28,width:440,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
+      <div style={{ background:C.surface,borderRadius:14,padding:28,width:440,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
         <h3 style={{ margin:'0 0 16px',color:C.primary }}>Solicitar Retiro</h3>
 
         <div style={{ background:C.surface,borderRadius:8,padding:12,marginBottom:16 }}>
@@ -406,7 +406,7 @@ function TabHistorial() {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {novFiltradas.map(n => (
-              <div key={n.id} style={{ background:'#fff', borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
+              <div key={n.id} style={{ background:C.surface, borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                   <span style={{ fontWeight:600, fontSize:13, color:C.text }}>{n.mes} {n.anio}</span>
                   <Badge color={n.estado==='procesado'?C.green:C.yellow} bg={n.estado==='procesado'?C.greenBg:C.yellowBg}>
@@ -452,7 +452,7 @@ function TabHistorial() {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {retFiltrados.map(r => (
-              <div key={r.id} style={{ background:'#fff', borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
+              <div key={r.id} style={{ background:C.surface, borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                   <span style={{ fontWeight:600, fontSize:13, color:C.text }}>{r.afiliado_nombre}</span>
                   <Badge color={r.estado==='ejecutado'?C.green:r.estado==='rechazado'?C.red:C.yellow}
@@ -499,7 +499,7 @@ function TabHistorial() {
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
             {novAfilFiltradas.map(n => (
-              <div key={n.id} style={{ background:'#fff', borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
+              <div key={n.id} style={{ background:C.surface, borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
                   <span style={{ fontWeight:600, fontSize:13, color:C.text }}>{n.afiliado_nombre}</span>
                   <Badge color={n.estado==='atendido'?C.green:C.yellow} bg={n.estado==='atendido'?C.greenBg:C.yellowBg}>
@@ -568,7 +568,7 @@ function CampanaNotif() {
         )}
       </button>
       {open && (
-        <div style={{ position:'absolute', right:0, top:'calc(100% + 8px)', width:340, maxHeight:420, overflowY:'auto', background:'#fff', borderRadius:12, boxShadow:'0 8px 32px rgba(0,0,0,.2)', zIndex:200, border:`1px solid ${C.border}` }}>
+        <div style={{ position:'absolute', right:0, top:'calc(100% + 8px)', width:340, maxHeight:420, overflowY:'auto', background:C.surface, borderRadius:12, boxShadow:'0 8px 32px rgba(0,0,0,.2)', zIndex:200, border:`1px solid ${C.border}` }}>
           <div style={{ padding:'12px 16px', borderBottom:`1px solid ${C.border}`, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
             <span style={{ fontWeight:700, fontSize:14, color:C.text }}>Notificaciones</span>
             {notifs.length > 0 && (
@@ -715,7 +715,7 @@ export default function PortalCliente() {
       {tab === 'afiliados' && (
         <>
           {/* Filtros */}
-          <div style={{ background:'#fff', borderRadius:10, border:`1px solid ${C.border}`, padding:'12px 16px', marginBottom:16 }}>
+          <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:'12px 16px', marginBottom:16 }}>
             <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
               <div>
                 <label style={lbl}>Buscar</label>
@@ -759,7 +759,7 @@ export default function PortalCliente() {
               {q ? `Sin resultados para "${q}"` : 'No hay afiliados registrados.'}
             </p>
           ) : (
-            <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}`, background:'#fff' }}>
+            <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}`, background:C.surface }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:C.surface2 }}>

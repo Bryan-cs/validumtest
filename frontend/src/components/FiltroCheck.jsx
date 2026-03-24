@@ -20,22 +20,22 @@ export default function FiltroCheck({ label, options = [], selected = [], onChan
 
     return (
         <div ref={ref} style={{ position: 'relative', userSelect: 'none' }}>
-            <button onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: `2px solid ${count > 0 ? C.primary : C.border}`, borderRadius: 8, background: count > 0 ? C.blueBg : '#fff', color: count > 0 ? C.primary : C.text, cursor: 'pointer', fontSize: 13, fontWeight: count > 0 ? 700 : 400, whiteSpace: 'nowrap', transition: 'all .15s', boxShadow: open ? `0 0 0 3px ${C.primary}22` : 'none' }}>
+            <button onClick={() => setOpen(!open)} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 14px', border: `2px solid ${count > 0 ? C.primary : C.border}`, borderRadius: 8, background: count > 0 ? C.blueBg : C.surface, color: count > 0 ? C.primary : C.text, cursor: 'pointer', fontSize: 13, fontWeight: count > 0 ? 700 : 400, whiteSpace: 'nowrap', transition: 'all .15s', boxShadow: open ? `0 0 0 3px ${C.primary}22` : 'none' }}>
                 <span style={{ fontSize: 12 }}>{icon}</span>
                 <span>{label}</span>
                 {count > 0 && <span style={{ background: C.primary, color: '#fff', borderRadius: 10, padding: '1px 7px', fontSize: 11, fontWeight: 700 }}>{count}</span>}
                 <span style={{ fontSize: 10, color: C.text2, marginLeft: 2 }}>{open ? '▲' : '▼'}</span>
             </button>
             {open && (
-                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 500, background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,.15)', minWidth: 220, maxWidth: 280, overflow: 'hidden' }}>
+                <div style={{ position: 'absolute', top: 'calc(100% + 6px)', left: 0, zIndex: 500, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,.15)', minWidth: 220, maxWidth: 280, overflow: 'hidden' }}>
                     {options.length > 6 && (
                         <div style={{ padding: '8px 10px', borderBottom: `1px solid ${C.border}` }}>
                             <input autoFocus placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)}
-                                style={{ width: '100%', padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none', boxSizing: 'border-box' }} />
+                                style={{ width: '100%', padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none', boxSizing: 'border-box', background: C.surface, color: C.text }} />
                         </div>
                     )}
-                    <div onClick={toggleAll} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', cursor: 'pointer', background: allSelected ? C.blueBg : '#fff', borderBottom: `1px solid ${C.border}` }}>
-                        <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${allSelected ? C.primary : C.border}`, background: allSelected ? C.primary : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <div onClick={toggleAll} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', cursor: 'pointer', background: allSelected ? C.blueBg : C.surface, borderBottom: `1px solid ${C.border}` }}>
+                        <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${allSelected ? C.primary : C.border}`, background: allSelected ? C.primary : C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                             {allSelected && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
                         </div>
                         <span style={{ fontSize: 13, fontWeight: 600, color: allSelected ? C.primary : C.text }}>Todos</span>
@@ -45,8 +45,8 @@ export default function FiltroCheck({ label, options = [], selected = [], onChan
                         {filtered.map(opt => {
                             const isChecked = selected.includes(opt);
                             return (
-                                <div key={opt} onClick={() => toggle(opt)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', cursor: 'pointer', background: isChecked ? C.blueBg : '#fff', borderBottom: `1px solid ${C.border}`, transition: 'background .1s' }}>
-                                    <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${isChecked ? C.primary : C.border}`, background: isChecked ? C.primary : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                <div key={opt} onClick={() => toggle(opt)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 12px', cursor: 'pointer', background: isChecked ? C.blueBg : C.surface, borderBottom: `1px solid ${C.border}`, transition: 'background .1s' }}>
+                                    <div style={{ width: 16, height: 16, borderRadius: 4, border: `2px solid ${isChecked ? C.primary : C.border}`, background: isChecked ? C.primary : C.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                         {isChecked && <span style={{ color: '#fff', fontSize: 10, fontWeight: 700 }}>✓</span>}
                                     </div>
                                     <span style={{ fontSize: 13, color: isChecked ? C.primary : C.text, fontWeight: isChecked ? 600 : 400 }}>{opt}</span>
@@ -69,7 +69,7 @@ export default function FiltroCheck({ label, options = [], selected = [], onChan
 export function BarraFiltros({ filtros = [], valores = {}, onChange, onLimpiar }) {
     const totalActivos = Object.values(valores).flat().length;
     return (
-        <div style={{ background: '#fff', border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, padding: '12px 16px', marginBottom: 16 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                 <span style={{ fontSize: 12, fontWeight: 600, color: C.text2, whiteSpace: 'nowrap' }}>🔍 Filtrar por:</span>
                 {filtros.map(f => (

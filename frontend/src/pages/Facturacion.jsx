@@ -350,7 +350,7 @@ function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado }) {
               const inc = marcados[p.servicio] !== false;
               return (
                 <div key={p.servicio} style={{ display:'grid',gridTemplateColumns:'40px 140px 80px 1fr',
-                  borderBottom:`1px solid ${C.border}`,background: inc?'#fff':C.surface2 }}>
+                  borderBottom:`1px solid ${C.border}`,background: inc?C.surface:C.surface2 }}>
                   <div style={{ padding:'8px 10px',display:'flex',alignItems:'center' }}>
                     <input type="checkbox" checked={inc}
                       onChange={() => {
@@ -547,7 +547,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       />
 
       <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%',borderCollapse:'collapse',background:'#fff' }}>
+        <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
               {['Código','Afiliado','Cliente','Período','Ingreso','Planilla','Utilidad','Banco','Estado','Novedades','Acciones'].map(h=>(
@@ -561,7 +561,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
             {rowsFiltradas.map(f => {
               const isHuerfana = f.afiliado_eliminado && f.estado==='pendiente';
               return (
-                <tr key={f.id} style={{ borderBottom:`1px solid ${C.border}`,background:isHuerfana?C.redBg:'#fff' }}>
+                <tr key={f.id} style={{ borderBottom:`1px solid ${C.border}`,background:isHuerfana?C.redBg:C.surface }}>
                   <td style={tdc}><span style={{ fontFamily:'monospace',fontSize:12 }}>{f.codigo}</span></td>
                   <td style={{ ...tdc,color:isHuerfana?C.red:C.text }}>
                     {f.nombre_afiliado}
@@ -633,7 +633,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   );
 }
 
-const tdc = { padding:'10px 12px',fontSize:13,color:'#1E293B',verticalAlign:'middle' };
-const sel = { padding:'8px 12px',border:'1px solid #E2E8F0',borderRadius:7,fontSize:13,outline:'none',background:'#fff',color:'#1E293B' };
-const lbl = { display:'block',fontSize:12,color:'#64748B',fontWeight:500,marginBottom:4 };
-const inp = { width:'100%',padding:'9px 12px',border:'1px solid #E2E8F0',borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box',color:'#1E293B' };
+const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };
+const sel = { padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',background:C.surface,color:C.text };
+const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
+const inp = { width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface };

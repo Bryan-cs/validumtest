@@ -5,7 +5,7 @@ import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 import { C, ConfirmModal } from '../components/UI';
 
-const inp = { width: '100%', padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, outline: 'none', boxSizing: 'border-box', color: '#1E293B' };
+const inp = { width: '100%', padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, outline: 'none', boxSizing: 'border-box', color: C.text, background: C.surface };
 const lbl = { display: 'block', fontSize: 12, color: C.text2, fontWeight: 500, marginBottom: 4 };
 
 function Btn({ children, onClick, variant = 'primary', size = 'md', disabled = false, style = {} }) {
@@ -71,7 +71,7 @@ function PasswordModal({ open, onClose, onConfirm, cantidad }) {
 
   return (
     <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div onClick={e => e.stopPropagation()} style={{ background: '#fff', borderRadius: 14, padding: 28, width: 380, boxShadow: '0 25px 80px rgba(0,0,0,.3)' }}>
+      <div onClick={e => e.stopPropagation()} style={{ background: C.surface, borderRadius: 14, padding: 28, width: 380, boxShadow: '0 25px 80px rgba(0,0,0,.3)' }}>
         <div style={{ textAlign: 'center', marginBottom: 18 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>🔐</div>
           <h3 style={{ margin: 0, color: C.primary, fontSize: 16, fontWeight: 700 }}>Confirmar acción</h3>
@@ -290,7 +290,7 @@ export default function Tareas() {
       </div>
 
       {/* Filtro fechas */}
-      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16, background: 'white', borderRadius: 10, padding: '12px 16px', border: `1px solid ${C.border}` }}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16, background: C.surface, borderRadius: 10, padding: '12px 16px', border: `1px solid ${C.border}` }}>
         <div>
           <label style={lbl}>Desde</label>
           <input type="date" style={{ ...inp, width: 150 }} value={fechaDesde} onChange={e => setFechaDesde(e.target.value)} />
@@ -335,7 +335,7 @@ export default function Tareas() {
       {isLoading ? (
         <p style={{ color: C.text2 }}>Cargando...</p>
       ) : filtradas.length === 0 ? (
-        <div style={{ background: 'white', borderRadius: 10, padding: 32, textAlign: 'center', border: `1px solid ${C.border}` }}>
+        <div style={{ background: C.surface, borderRadius: 10, padding: 32, textAlign: 'center', border: `1px solid ${C.border}` }}>
           <p style={{ color: C.text2, fontSize: 14, margin: 0 }}>
             No hay tareas {TABS.find(x => x.key === tab)?.label.toLowerCase()}
           </p>
@@ -348,7 +348,7 @@ export default function Tareas() {
             const marcada = seleccionadas.has(t.id);
             return (
               <div key={t.id} style={{
-                background: marcada ? '#EBF8FF' : 'white',
+                background: marcada ? C.blueBg : C.surface,
                 borderRadius: 10,
                 border: `1px solid ${marcada ? C.blue : vencida ? C.red : C.border}`,
                 overflow: 'hidden',
@@ -363,7 +363,7 @@ export default function Tareas() {
                   )}
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, fontSize: 14, color: '#1E293B' }}>{t.titulo}</span>
+                      <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>{t.titulo}</span>
                       <EstadoBadge estado={t.estado} />
                       {vencida && (
                         <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 10, padding: '2px 10px', background: C.redBg, color: C.red }}>¡Vencida!</span>
@@ -426,10 +426,10 @@ export default function Tareas() {
                       <div style={{ marginBottom: 12 }}>
                         <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 600, color: C.text2 }}>Comentarios:</p>
                         {t.comentarios.map(c => (
-                          <div key={c.id} style={{ background: 'white', borderRadius: 7, padding: '8px 12px', marginBottom: 6, border: `1px solid ${C.border}` }}>
+                          <div key={c.id} style={{ background: C.surface, borderRadius: 7, padding: '8px 12px', marginBottom: 6, border: `1px solid ${C.border}` }}>
                             <span style={{ fontWeight: 600, fontSize: 12, color: C.primary }}>{c.usuario}</span>
                             <span style={{ fontSize: 11, color: C.text2, marginLeft: 8 }}>{new Date(c.creado).toLocaleString('es-CO')}</span>
-                            <p style={{ margin: '4px 0 0', fontSize: 13, color: '#1E293B' }}>{c.texto}</p>
+                            <p style={{ margin: '4px 0 0', fontSize: 13, color: C.text }}>{c.texto}</p>
                           </div>
                         ))}
                       </div>
@@ -458,7 +458,7 @@ export default function Tareas() {
       {/* Modal nueva tarea */}
       {modalNueva && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ background: '#fff', borderRadius: 14, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.25)', maxHeight: '90vh', overflowY: 'auto' }}>
+          <div style={{ background: C.surface, borderRadius: 14, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.25)', maxHeight: '90vh', overflowY: 'auto' }}>
             <h3 style={{ margin: '0 0 18px', color: C.primary }}>Nueva tarea</h3>
             <div style={{ marginBottom: 12 }}>
               <label style={lbl}>Título *</label>

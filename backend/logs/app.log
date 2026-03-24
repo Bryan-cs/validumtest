@@ -14,3 +14,5 @@
 2026-03-23 19:31:38 WARNING [bbcfile] ⚠️  SEGURIDAD: El usuario 'admin' tiene la contraseña por defecto 'admin1234'. Cámbiela inmediatamente.
 2026-03-23 19:51:30 WARNING [bbcfile] ⚠️  SEGURIDAD: El usuario 'admin' tiene la contraseña por defecto 'admin1234'. Cámbiela inmediatamente.
 2026-03-23 19:51:30 WARNING [bbcfile] Contraseña incorrecta para usuario 'admin' desde IP testclient (intento 1)
+2026-03-23 20:33:30 WARNING [bbcfile] ⚠️  SEGURIDAD: El usuario 'admin' tiene la contraseña por defecto 'admin1234'. Cámbiela inmediatamente.
+2026-03-24 07:58:30 WARNING [bbcfile] ⚠️  SEGURIDAD: El usuario 'admin' tiene la contraseña por defecto 'admin1234'. Cámbiela inmediatamente.

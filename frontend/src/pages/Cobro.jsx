@@ -99,7 +99,7 @@ export default function Cobro() {
             onKeyDown={e => { if (e.key === 'Enter') { setDocFiltro(docBuscar.trim()); setPagina(1); } }}
             placeholder="🔍 Buscar por N° documento..."
             style={{ padding:'7px 12px', paddingRight:70, borderRadius:7, border:`1px solid ${C.border}`,
-              fontSize:13, color:C.text, background:'#fff', width:260 }}
+              fontSize:13, color:C.text, background:C.surface, width:260 }}
           />
           <button
             onClick={() => { setDocFiltro(docBuscar.trim()); setPagina(1); }}
@@ -122,12 +122,12 @@ export default function Cobro() {
 
         {/* Filtro mes / año */}
         <select value={mesFiltro} onChange={e=>{ setMesFiltro(e.target.value); setPagina(1); }}
-          style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, fontSize:13, color:C.text, background:'#fff' }}>
+          style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, fontSize:13, color:C.text, background:C.surface }}>
           <option value="">Todos los meses</option>
           {MESES.map(m=><option key={m} value={m}>{m}</option>)}
         </select>
         <select value={anioFiltro} onChange={e=>{ setAnioFiltro(e.target.value); setPagina(1); }}
-          style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, fontSize:13, color:C.text, background:'#fff' }}>
+          style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`, fontSize:13, color:C.text, background:C.surface }}>
           <option value="">Todos los años</option>
           {ANIOS.map(a=><option key={a} value={a}>{a}</option>)}
         </select>
@@ -152,7 +152,7 @@ export default function Cobro() {
       />
 
       <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
               {['','Nombre','Empresa','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades'].map(h=>(
@@ -171,7 +171,7 @@ export default function Cobro() {
               const isExp= expanded===r.id;
               return (
                 <React.Fragment key={r.id}>
-                  <tr style={{ borderBottom:`1px solid ${C.border}`, background:r.estado==='VENCIDO'?'#FFF5F5':'#fff' }}>
+                  <tr style={{ borderBottom:`1px solid ${C.border}`, background:r.estado==='VENCIDO'?C.redBg:C.surface }}>
                     <td style={{ padding:'8px 10px', width:32 }}>
                       <button onClick={()=>setExp(isExp?null:r.id)}
                         style={{ background:'none',border:'none',cursor:'pointer',fontSize:14,color:C.text2,padding:0 }}>
@@ -246,7 +246,7 @@ export default function Cobro() {
           style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000,
             display:'flex', alignItems:'center', justifyContent:'center' }}>
           <div onClick={e => e.stopPropagation()}
-            style={{ background:'#fff', borderRadius:12, padding:28, maxWidth:520, width:'90%',
+            style={{ background:C.surface, borderRadius:12, padding:28, maxWidth:520, width:'90%',
               boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14 }}>
               <span style={{ fontWeight:700, fontSize:14, color:C.primary }}>
@@ -255,7 +255,7 @@ export default function Cobro() {
               <button onClick={() => setNovedadModal(null)}
                 style={{ background:'none', border:'none', cursor:'pointer', fontSize:18, color:C.text2 }}>✕</button>
             </div>
-            <p style={{ margin:0, fontSize:14, color:'#1E293B', lineHeight:1.6, whiteSpace:'pre-wrap' }}>
+            <p style={{ margin:0, fontSize:14, color:C.text, lineHeight:1.6, whiteSpace:'pre-wrap' }}>
               {novedadModal.texto}
             </p>
           </div>
@@ -296,7 +296,7 @@ function PlanillaDetalle({ afiliado, cobroRow, config }) {
       </div>
       <div style={{ display:'flex',gap:6,flexWrap:'wrap',alignItems:'center' }}>
         {detalle.map(d=>(
-          <div key={d.servicio} style={{ background:'#fff',border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',minWidth:130 }}>
+          <div key={d.servicio} style={{ background:C.surface,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 14px',minWidth:130 }}>
             <div style={{ fontSize:11,fontWeight:700,color:C.primary,marginBottom:2 }}>{d.servicio}</div>
             <div style={{ fontSize:10,color:C.text2 }}>{(d.pct*100).toFixed(4).replace(/\.?0+$/,'')}%</div>
             <div style={{ fontSize:14,fontWeight:700,color:C.red,marginTop:2 }}>{fmt(d.val30)}</div>
@@ -345,5 +345,5 @@ function PlanillaDetalle({ afiliado, cobroRow, config }) {
   );
 }
 
-const tdc   = { padding:'10px 12px',fontSize:13,color:'#1E293B',verticalAlign:'middle' };
+const tdc   = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };
 const btnPag = { padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:'pointer', fontSize:13, color:C.text };

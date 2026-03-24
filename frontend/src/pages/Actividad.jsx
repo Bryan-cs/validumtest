@@ -173,7 +173,7 @@ export default function Actividad() {
                 paginadas.map((a, i) => (
                   <tr key={a.id ?? i} style={{
                     borderBottom: `1px solid ${C.border}`,
-                    background: i % 2 === 0 ? '#fff' : C.surface2,
+                    background: i % 2 === 0 ? C.surface : C.surface2,
                   }}>
                     <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: 15, width: 32 }}>
                       {accionIcon(a.accion)}

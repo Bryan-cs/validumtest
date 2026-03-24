@@ -22,7 +22,7 @@ export default function Dashboard() {
   });
 
   const sel = { padding:'7px 12px', border:`1px solid ${C.border}`, borderRadius:7,
-    fontSize:13, outline:'none', background:'#fff', color:C.text };
+    fontSize:13, outline:'none', background:C.surface, color:C.text };
 
   return (
     <div>

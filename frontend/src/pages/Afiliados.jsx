@@ -33,7 +33,7 @@ const InputUp = ({ label, value, onChange, placeholder, type='text', style, read
       style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
         fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,
         textTransform:(type==='text'||type==='tel')?'uppercase':'none',
-        background: readOnly ? C.surface2 : '#fff' }} />
+        background: readOnly ? C.surface2 : C.surface }} />
   </div>
 );
 
@@ -42,7 +42,7 @@ const Sel = ({ label, value, onChange, options=[], style }) => (
     {label && <label style={lbl}>{label}</label>}
     <select value={value} onChange={e=>onChange(e.target.value)}
       style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-        fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:'#fff' }}>
+        fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface }}>
       {options.map(o=>typeof o==='string'
         ?<option key={o} value={o}>{o||'—'}</option>
         :<option key={o.value} value={o.value}>{o.label}</option>)}
@@ -227,7 +227,7 @@ export default function Afiliados() {
             valores={filtros} onChange={setFiltro} onLimpiar={limpiar}
           />
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
                   {['Nombre','Empresa','Documento','Cliente','Subtipo','EPS','ARL','Servicios','Estado','Novedades','Acciones'].map(h=>(
@@ -301,7 +301,7 @@ export default function Afiliados() {
             ⚠️ Afiliados eliminados del sistema. Puedes restaurarlos como ACTIVOS con el botón ↩ Restaurar.
           </div>
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
                   {['Nombre','Empresa','Documento','Mes','Fecha eliminación','Eliminado por','Acciones'].map(h=>(
@@ -358,14 +358,14 @@ export default function Afiliados() {
                   fontSize:13,outline:'none',boxSizing:'border-box' }}
               />
               {sugerenciasPagos.length > 0 && !docSeleccionado && (
-                <div style={{ position:'absolute',top:'100%',left:0,right:0,background:'#fff',
+                <div style={{ position:'absolute',top:'100%',left:0,right:0,background:C.surface,
                   border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 12px rgba(0,0,0,.1)',
                   zIndex:100,maxHeight:200,overflowY:'auto' }}>
                   {sugerenciasPagos.map(a => (
                     <div key={a.id} onClick={() => { setDocSeleccionado(a.doc); setBusquedaPagos(a.nombre); }}
                       style={{ padding:'9px 14px',cursor:'pointer',fontSize:13,borderBottom:`1px solid ${C.border}` }}
                       onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                      onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
+                      onMouseLeave={e=>e.currentTarget.style.background=''}>
                       <strong>{a.nombre}</strong>
                       <span style={{ marginLeft:8,color:C.text2,fontSize:11 }}>{a.doc} · {a.empresa||''}</span>
                     </div>
@@ -375,7 +375,7 @@ export default function Afiliados() {
             </div>
             {docSeleccionado && aniosDisponibles.length > 0 && (
               <select value={anioFiltro} onChange={e => setAnioFiltro(e.target.value)}
-                style={{ padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,outline:'none',background:'#fff' }}>
+                style={{ padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:8,fontSize:13,outline:'none',background:C.surface }}>
                 <option value="Todos">Todos los años</option>
                 {aniosDisponibles.map(a => <option key={a} value={a}>{a}</option>)}
               </select>
@@ -419,7 +419,7 @@ export default function Afiliados() {
               </div>
 
               <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-                <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+                <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
                   <thead>
                     <tr style={{ background:C.surface2 }}>
                       {['Código','Mes','Año','Total ($)','Estado','Banco','Novedades'].map(h=>(
@@ -489,7 +489,7 @@ export default function Afiliados() {
             <div style={{ display:'flex', gap:6 }}>
               <select value={form.tipo_doc||'CC'} onChange={e=>sf('tipo_doc',e.target.value)}
                 style={{ padding:'9px 10px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,
-                  outline:'none',background:'#fff',color:C.text,flexShrink:0 }}>
+                  outline:'none',background:C.surface,color:C.text,flexShrink:0 }}>
                 <option value="CC">CC</option>
                 <option value="CE">CE</option>
                 <option value="PT">PT</option>
@@ -536,7 +536,7 @@ export default function Afiliados() {
               return (
                 <label key={s} onClick={()=>toggleSrv(s)} style={{
                   display:'flex',alignItems:'center',gap:6,cursor:'pointer',padding:'6px 12px',
-                  borderRadius:7,background:checked?C.blueBg:'#fff',
+                  borderRadius:7,background:checked?C.blueBg:C.surface,
                   border:`1px solid ${checked?C.blue:C.border}`,
                   color:checked?C.blue:C.text,fontWeight:checked?600:400,fontSize:13,
                 }}>
@@ -596,7 +596,7 @@ export default function Afiliados() {
             const p = start + i;
             if(p > totalPags) return null;
             return <button key={p} onClick={()=>setPagina(p)} style={{
-              ...btnPag, background:p===pagina?C.primary:'#fff',
+              ...btnPag, background:p===pagina?C.primary:C.surface,
               color:p===pagina?'#fff':C.text, fontWeight:p===pagina?700:400 }}>{p}</button>;
           })}
           <button onClick={()=>setPagina(p=>Math.min(totalPags,p+1))} disabled={pagina===totalPags} style={btnPag}>›</button>
@@ -619,15 +619,15 @@ function Seccion({ title }) {
   );
 }
 function Chip({ children }) {
-  return <span style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11 }}>{children}</span>;
+  return <span style={{ background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11 }}>{children}</span>;
 }
 function SrvChip({ children }) {
   return <span style={{ background:C.blueBg,color:C.blue,borderRadius:5,padding:'1px 7px',fontSize:10,fontWeight:600 }}>{children}</span>;
 }
 
-const tdc = { padding:'10px 12px',fontSize:13,color:'#1E293B',verticalAlign:'middle' };
-const lbl = { display:'block',fontSize:12,color:'#64748B',fontWeight:500,marginBottom:4 };
+const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };
+const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
 const btnPag = {
   padding:'6px 12px', border:`1px solid ${C.border}`, borderRadius:6,
-  background:'#fff', cursor:'pointer', fontSize:13, color:C.text,
+  background:C.surface, cursor:'pointer', fontSize:13, color:C.text,
 };

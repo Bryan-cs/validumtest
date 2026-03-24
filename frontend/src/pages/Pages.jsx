@@ -69,7 +69,7 @@ export function Cobro() {
         </select>
       </div>
       <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
               {['Nombre','Empresa','Doc.','Cliente','Día cobro','Servicios','Planilla ($)','Estado'].map(h=>(
@@ -183,7 +183,7 @@ export function Retiros() {
           </select>
         </div>
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead>
               <tr style={{ background:C.surface2 }}>
                 {['#','Nombre','Empresa','Documento','Fecha','Motivo','Registrado por','Acciones'].map(h=>(
@@ -215,7 +215,7 @@ export function Retiros() {
 
       {tab === 'historial' && (
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead>
               <tr style={{ background:C.surface2 }}>
                 {['Fecha','Usuario','Acción','Detalle'].map(h=>(
@@ -239,7 +239,7 @@ export function Retiros() {
       )}
       {modal && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <div style={{ background:'#fff',borderRadius:14,padding:28,width:420,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+          <div style={{ background:C.surface,borderRadius:14,padding:28,width:420,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
             <h3 style={{ margin:'0 0 18px',color:C.primary }}>Aplicar retiro</h3>
             <label style={lbl}>Cédula del afiliado *</label>
             <input style={inp} value={doc} onChange={e=>setDoc(e.target.value)} placeholder="Número de documento" />
@@ -320,7 +320,7 @@ export function Facturacion() {
         </select>
       </div>
       <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+        <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
               {['Código','Afiliado','Cliente','Mes/Año','Ingresos','Planilla','Utilidad','Banco','Estado','Acciones'].map(h=>(
@@ -426,7 +426,7 @@ export function Empleados() {
         <Btn variant="accent" onClick={()=>{setForm({activo:true,nomina:0});setModal('nuevo');}}>+ Nuevo empleado</Btn>
       </div>
       <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}`,marginBottom:24 }}>
-        <table style={{ width:'100%',borderCollapse:'collapse',background:'#fff' }}>
+        <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
           <thead><tr style={{ background:C.surface2 }}>
             {['Nombre','Documento','Cargo','Usuario','Nómina ($)','Estado','Acciones'].map(h=>(
               <th key={h} style={{ padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.text2,borderBottom:`1px solid ${C.border}` }}>{h}</th>
@@ -460,7 +460,7 @@ export function Empleados() {
         <Btn onClick={()=>addGasto.mutate()} disabled={!gnombre}>+ Agregar</Btn>
       </div>
       <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%',borderCollapse:'collapse',background:'#fff' }}>
+        <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
           <thead><tr style={{ background:C.surface2 }}>
             {['Concepto','Valor mensual','Estado','Acciones'].map(h=>(
               <th key={h} style={{ padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.text2,borderBottom:`1px solid ${C.border}` }}>{h}</th>
@@ -487,7 +487,7 @@ export function Empleados() {
 
       {modal&&(
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <div style={{ background:'#fff',borderRadius:14,padding:28,width:460,boxShadow:'0 20px 60px rgba(0,0,0,.25)',maxHeight:'90vh',overflow:'auto' }}>
+          <div style={{ background:C.surface,borderRadius:14,padding:28,width:460,boxShadow:'0 20px 60px rgba(0,0,0,.25)',maxHeight:'90vh',overflow:'auto' }}>
             <h3 style={{ margin:'0 0 18px',color:C.primary }}>{modal==='nuevo'?'Nuevo empleado':'Editar empleado'}</h3>
             {[['Nombre *','nombre','text',true],['Documento','doc','text',false],['Cargo','cargo','text',true],['Teléfono','tel','tel',true],['Email','email','email',false]].map(([l,k,t,ucase])=>(
               <div key={k} style={{ marginBottom:10 }}>
@@ -548,7 +548,7 @@ export function Usuarios() {
       <PageHeader title="⚙️ Usuarios del sistema"
         action={<Btn variant="accent" onClick={()=>{setForm({rol:'empleado'});setErr('');setModal(true);}}>+ Nuevo usuario</Btn>} />
       <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%',borderCollapse:'collapse',background:'#fff' }}>
+        <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
           <thead><tr style={{ background:C.surface2 }}>
             {['Nombre','Usuario','Rol','Cliente Ref','Estado','Acciones'].map(h=>(
               <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.text2,borderBottom:`1px solid ${C.border}` }}>{h}</th>
@@ -569,7 +569,7 @@ export function Usuarios() {
       </div>
       {modal&&(
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <div style={{ background:'#fff',borderRadius:14,padding:28,width:400,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+          <div style={{ background:C.surface,borderRadius:14,padding:28,width:400,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
             <h3 style={{ margin:'0 0 18px',color:C.primary }}>Nuevo usuario</h3>
             {[['Nombre completo *','nombre','text',true],['Usuario *','username','text',false],['Contraseña *','password','password',false],['Confirmar contraseña *','password2','password',false]].map(([l,k,t,ucase])=>(
               <div key={k} style={{ marginBottom:10 }}>
@@ -635,7 +635,7 @@ export function Listas() {
             fontWeight:sel===n?600:400,cursor:'pointer',fontSize:13 }}>{n}</button>
         ))}
       </div>
-      <div style={{ background:'#fff',borderRadius:10,border:`1px solid ${C.border}`,padding:20 }}>
+      <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:20 }}>
         <div style={{ display:'flex',gap:8,marginBottom:14 }}>
           <input style={{ ...sel_s,flex:1 }} placeholder={`Nueva opción para ${sel}...`}
             value={newItem} onChange={e=>setNewItem(e.target.value)}
@@ -645,7 +645,7 @@ export function Listas() {
         <div style={{ display:'flex',flexWrap:'wrap',gap:8 }}>
           {items.map(item=>(
             <div key={item} style={{ display:'flex',alignItems:'center',gap:6,background:C.surface2,
-              border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 12px',fontSize:13 }}>
+              border:`1px solid ${C.border}`,borderRadius:7,padding:'5px 12px',fontSize:13,color:C.text }}>
               <span>{item}</span>
               <button onClick={()=>removeItem(item)} style={{ border:'none',background:'none',
                 color:C.red,cursor:'pointer',fontSize:16,lineHeight:1 }}>×</button>
@@ -703,11 +703,11 @@ export function Calculadora() {
   return (
     <div>
       <PageHeader title="🧮 Calculadora de aportes" subtitle="Configura IBC global y porcentajes" />
-      <div style={{ background:'#fff',borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
+      <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
         <label style={{ ...lbl,fontSize:13 }}>IBC Global (Salario mínimo / base de cotización)</label>
         <input type="number" style={{ ...inp,width:240 }} value={ibc} onChange={e=>setIbc(e.target.value)} />
       </div>
-      <div style={{ background:'#fff',borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
+      <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
         <h3 style={{ margin:'0 0 16px',color:C.primary }}>Porcentajes de aporte</h3>
         <table style={{ width:'100%',borderCollapse:'collapse' }}>
           <thead><tr style={{ background:C.surface2 }}>
@@ -739,7 +739,7 @@ export function Calculadora() {
           </tbody>
         </table>
       </div>
-      <div style={{ background:'#fff',borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
+      <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
         <h3 style={{ margin:'0 0 8px',color:C.primary }}>Plantilla mensaje WhatsApp</h3>
         <p style={{ margin:'0 0 12px',fontSize:12,color:C.text2 }}>
           Variables disponibles: <code>{'{{saludo}}'}</code> <code>{'{{nombre}}'}</code> <code>{'{{mes}}'}</code> <code>{'{{anio}}'}</code> <code>{'{{fecha_emision}}'}</code> <code>{'{{vencimiento}}'}</code> <code>{'{{total}}'}</code> <code>{'{{servicios}}'}</code>
@@ -762,11 +762,11 @@ export function Calculadora() {
 }
 
 // ─── SHARED STYLES ────────────────────────────────────────────────────────────
-const tdc = { padding:'10px 12px', fontSize:13, color:'#1E293B', verticalAlign:'middle' };
-const sel = { padding:'8px 12px', border:'1px solid #E2E8F0', borderRadius:7, fontSize:13, outline:'none', background:'#fff', color:'#1E293B' };
-const sel_s = { padding:'8px 12px', border:'1px solid #E2E8F0', borderRadius:7, fontSize:13, outline:'none', background:'#fff', color:'#1E293B' };
-const lbl = { display:'block', fontSize:12, color:'#64748B', fontWeight:500, marginBottom:4 };
-const inp = { width:'100%', padding:'9px 12px', border:'1px solid #E2E8F0', borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box', color:'#1E293B' };
+const tdc = { padding:'10px 12px', fontSize:13, color:C.text, verticalAlign:'middle' };
+const sel = { padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', background:C.surface, color:C.text };
+const sel_s = { padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', background:C.surface, color:C.text };
+const lbl = { display:'block', fontSize:12, color:C.text2, fontWeight:500, marginBottom:4 };
+const inp = { width:'100%', padding:'9px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box', color:C.text, background:C.surface };
 
 // ─── NOVEDADES DE CLIENTES (solo admin) ───────────────────────────────────────
 export function NovedadesClientes() {
@@ -868,7 +868,7 @@ export function NovedadesClientes() {
       </div>
 
       {/* Filtros */}
-      <div style={{ background:'#fff', borderRadius:10, border:`1px solid ${C.border}`, padding:'12px 16px', marginBottom:16 }}>
+      <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:'12px 16px', marginBottom:16 }}>
         <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
           <div>
             <label style={lbl}>Cliente</label>
@@ -900,7 +900,7 @@ export function NovedadesClientes() {
         loadNov ? <p style={{ color:C.text2 }}>Cargando...</p> :
         novFiltradas.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades{(filtroCliente||filtroEstado||filtroFecha)?' con estos filtros':''}.</p> :
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead><tr style={{ background:C.surface2 }}>
               {['Cliente','Período','Afiliados','Observaciones','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
@@ -956,7 +956,7 @@ export function NovedadesClientes() {
         loadSol ? <p style={{ color:C.text2 }}>Cargando...</p> :
         solFiltradas.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin solicitudes{(filtroCliente||filtroEstado||filtroFecha)?' con estos filtros':''}.</p> :
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead><tr style={{ background:C.surface2 }}>
               {['Cliente','Afiliado','Documento','Motivo','Observaciones','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
@@ -995,7 +995,7 @@ export function NovedadesClientes() {
         novAfilFiltradas.length===0
           ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades{(filtroCliente||filtroEstado||filtroFecha)?' con estos filtros':''}.</p> :
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', background:'#fff' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead><tr style={{ background:C.surface2 }}>
               {['Cliente','Afiliado','Documento','Tipo','Descripción','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
@@ -1028,7 +1028,7 @@ export function NovedadesClientes() {
       {/* ── Modal respuesta al resolver ── */}
       {modalResp&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:'#fff',borderRadius:14,padding:28,width:440,maxWidth:'95vw',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
+          <div style={{background:C.surface,borderRadius:14,padding:28,width:440,maxWidth:'95vw',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
             <h3 style={{margin:'0 0 6px',fontSize:15,fontWeight:700}}>Resolver solicitud</h3>
             <p style={{margin:'0 0 16px',fontSize:13,color:C.text2}}>{modalResp.label}</p>
             <div style={{marginBottom:16}}>
