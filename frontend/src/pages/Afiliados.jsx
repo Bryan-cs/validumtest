@@ -564,14 +564,14 @@ export default function Afiliados() {
             <input type="number" value={form.ibc||''} onChange={e=>sf('ibc',e.target.value?+e.target.value:null)}
               placeholder={`IBC global: ${(1950905).toLocaleString('es-CO')}`}
               style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text }} />
+                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface }} />
           </div>
           <div style={{ marginBottom:12 }}>
             <label style={lbl}>Novedades</label>
             <textarea value={form.novedades||''} onChange={e=>sf('novedades',UP(e.target.value))}
               placeholder="NOVEDADES DEL AFILIADO..." rows={2}
               style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,
+                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
                 resize:'vertical',textTransform:'uppercase' }} />
           </div>
         </div>
