@@ -8,11 +8,31 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
+    :root {
+      --c-primary: #0D3B6E; --c-accent: #E89B2A;
+      --c-green: #15803D;   --c-green-bg: #DCFCE7;
+      --c-red: #B91C1C;     --c-red-bg: #FEE2E2;
+      --c-amber: #B45309;   --c-amber-bg: #FEF3C7;
+      --c-blue: #185FA5;    --c-blue-bg: #E6F1FB;
+      --c-text: #1E293B;    --c-text2: #64748B;
+      --c-border: #E2E8F0;
+      --c-surface: #FFFFFF; --c-surface2: #F8FAFC; --c-bg: #F0F4F8;
+    }
+    .dark {
+      --c-primary: #60A5FA; --c-accent: #F59E0B;
+      --c-green: #34D399;   --c-green-bg: #064E3B;
+      --c-red: #F87171;     --c-red-bg: #450A0A;
+      --c-amber: #FCD34D;   --c-amber-bg: #451A03;
+      --c-blue: #60A5FA;    --c-blue-bg: #1E3A5F;
+      --c-text: #F1F5F9;    --c-text2: #94A3B8;
+      --c-border: #334155;
+      --c-surface: #1E293B; --c-surface2: #0F172A; --c-bg: #0F172A;
+    }
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: 'Inter', system-ui, sans-serif; background: #F0F4F8; }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--c-bg); transition: background .2s, color .2s; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: #f1f5f9; }
-    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+    ::-webkit-scrollbar-track { background: var(--c-surface2); }
+    ::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 3px; }
   </style>
 </head>
 <body>

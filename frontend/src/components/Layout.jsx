@@ -33,7 +33,13 @@ export default function Layout() {
   const qc = useQueryClient();
   const [width, setWidth] = useState(SIDEBAR_DEFAULT);
   const [showNotifs, setShowNotifs] = useState(false);
+  const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
   const dragging = useRef(false);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('theme', dark ? 'dark' : 'light');
+  }, [dark]);
   const startX = useRef(0);
   const startW = useRef(0);
 
@@ -164,11 +170,11 @@ export default function Layout() {
           {showNotifs && (
             <div style={{
               position: 'absolute', bottom: 44, left: 8,
-              width: 300, background: 'white', borderRadius: 10,
+              width: 300, background: 'var(--c-surface)', borderRadius: 10,
               boxShadow: '0 8px 30px rgba(0,0,0,.25)', zIndex: 300,
               maxHeight: 360, overflowY: 'auto',
             }}>
-              <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid #eee', color: '#1E293B', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--c-border)', color: 'var(--c-text)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <span>Notificaciones</span>
                 <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                   {notifs.length > 0 && (
@@ -184,11 +190,11 @@ export default function Layout() {
                 </div>
               </div>
               {notifs.length === 0
-                ? <p style={{ padding: 14, color: '#888', fontSize: 13, margin: 0 }}>Sin notificaciones</p>
+                ? <p style={{ padding: 14, color: 'var(--c-text2)', fontSize: 13, margin: 0 }}>Sin notificaciones</p>
                 : notifs.map(n => (
-                  <div key={n.id} style={{ padding: '10px 14px', borderBottom: '1px solid #f0f0f0', fontSize: 12, background: n.leida ? 'white' : '#EBF8FF' }}>
-                    <div style={{ color: '#1E293B' }}>{n.mensaje}</div>
-                    <div style={{ color: '#888', fontSize: 11, marginTop: 2 }}>{new Date(n.creado).toLocaleString('es-CO')}</div>
+                  <div key={n.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12, background: n.leida ? 'var(--c-surface)' : 'var(--c-blue-bg)' }}>
+                    <div style={{ color: 'var(--c-text)' }}>{n.mensaje}</div>
+                    <div style={{ color: 'var(--c-text2)', fontSize: 11, marginTop: 2 }}>{new Date(n.creado).toLocaleString('es-CO')}</div>
                   </div>
                 ))
               }
@@ -206,6 +212,15 @@ export default function Layout() {
               </span>
             </div>
           )}
+          <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+            <button onClick={() => setDark(d => !d)} title={dark ? 'Modo claro' : 'Modo oscuro'} style={{
+              flex: 1, padding: '5px 8px', background: 'rgba(255,255,255,.1)',
+              border: '1px solid rgba(255,255,255,.2)', borderRadius: 6,
+              color: '#fff', fontSize: 14, cursor: 'pointer',
+            }}>
+              {dark ? '☀️' : '🌙'}{!collapsed && <span style={{ fontSize: 11, marginLeft: 4 }}>{dark ? 'Claro' : 'Oscuro'}</span>}
+            </button>
+          </div>
           <button onClick={handleLogout} title="Cerrar sesión" style={{
             width: '100%', padding: '7px 10px', background: 'rgba(255,255,255,.1)',
             border: '1px solid rgba(255,255,255,.2)', borderRadius: 6,
@@ -231,7 +246,7 @@ export default function Layout() {
       </aside>
 
       {/* Panel principal */}
-      <main style={{ flex: 1, overflowY: 'auto', background: '#F0F4F8', padding: 24, minWidth: 0 }}>
+      <main style={{ flex: 1, overflowY: 'auto', background: 'var(--c-bg)', padding: 24, minWidth: 0 }}>
         <Outlet />
       </main>
     </div>

@@ -2,22 +2,22 @@
 import { useEffect } from 'react';
 
 export const C = {
-  primary:  '#0D3B6E',
-  accent:   '#E89B2A',
-  green:    '#15803D',
-  greenBg:  '#DCFCE7',
-  red:      '#B91C1C',
-  redBg:    '#FEE2E2',
-  amber:    '#B45309',
-  amberBg:  '#FEF3C7',
-  blue:     '#185FA5',
-  blueBg:   '#E6F1FB',
-  text:     '#1E293B',
-  text2:    '#64748B',
-  border:   '#E2E8F0',
-  surface:  '#FFFFFF',
-  surface2: '#F8FAFC',
-  bg:       '#F0F4F8',
+  primary:  'var(--c-primary)',
+  accent:   'var(--c-accent)',
+  green:    'var(--c-green)',
+  greenBg:  'var(--c-green-bg)',
+  red:      'var(--c-red)',
+  redBg:    'var(--c-red-bg)',
+  amber:    'var(--c-amber)',
+  amberBg:  'var(--c-amber-bg)',
+  blue:     'var(--c-blue)',
+  blueBg:   'var(--c-blue-bg)',
+  text:     'var(--c-text)',
+  text2:    'var(--c-text2)',
+  border:   'var(--c-border)',
+  surface:  'var(--c-surface)',
+  surface2: 'var(--c-surface2)',
+  bg:       'var(--c-bg)',
 };
 
 export function Card({ children, style }) {
@@ -69,7 +69,7 @@ export function Input({ label, value, onChange, placeholder, type='text', style 
       {label && <label style={{ display:'block', fontSize:12, color:C.text2, fontWeight:500, marginBottom:4 }}>{label}</label>}
       <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
         style={{ width:'100%', padding:'9px 12px', border:`1px solid ${C.border}`,
-          borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box', color:C.text }} />
+          borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box', color:C.text, background:C.surface }} />
     </div>
   );
 }
@@ -81,7 +81,7 @@ export function Select({ label, value, onChange, options = [], style }) {
       <select value={value} onChange={e=>onChange(e.target.value)}
         style={{ width:'100%', padding:'9px 12px', border:`1px solid ${C.border}`,
           borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box',
-          color:C.text, background:'#fff' }}>
+          color:C.text, background:C.surface }}>
         {options.map(o => typeof o === 'string'
           ? <option key={o} value={o}>{o}</option>
           : <option key={o.value} value={o.value}>{o.label}</option>

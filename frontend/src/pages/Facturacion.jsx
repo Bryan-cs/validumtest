@@ -166,7 +166,8 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         <div>
           <label style={lbl}>Cédula del afiliado *</label>
           <div style={{ display:'flex', gap:6 }}>
-            <input style={{ ...inp, flex:1 }} value={cedula} onChange={e => setCedula(e.target.value.replace(/\D/g, ''))}
+            <input style={{ ...inp, flex:1 }} value={cedula}
+              onChange={e => setCedula(e.target.value.replace(/\D/g, ''))}
               onKeyDown={e => e.key==='Enter' && buscar()} placeholder="Número de documento..." />
             <Btn onClick={buscar} size="sm">🔍 Consultar</Btn>
           </div>
