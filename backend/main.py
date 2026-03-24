@@ -38,6 +38,21 @@ def _limpiar_notificaciones_diario():
         db.close()
 
 
+def _limpiar_actividad_antigua():
+    """Elimina registros de actividad con más de 90 días."""
+    from database import SessionLocal
+    from datetime import timedelta
+    db = SessionLocal()
+    try:
+        limite = datetime.utcnow() - timedelta(days=90)
+        db.query(models.Actividad).filter(models.Actividad.fecha < limite).delete()
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
@@ -60,6 +75,7 @@ async def lifespan(app: FastAPI):
         _scheduler = BackgroundScheduler()
         _scheduler.add_job(run_backup, "cron", hour=2, minute=0)
         _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
+        _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
         _scheduler.start()
     except Exception as e:
         from logger import logger as _log
