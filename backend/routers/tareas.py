@@ -2,7 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from database import get_db
-import schemas, crud
+import schemas, crud, models
 from .deps import verify_token, require_admin
 
 router = APIRouter(prefix="/tareas", tags=["tareas"])
