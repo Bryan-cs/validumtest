@@ -171,6 +171,7 @@ class ConfigUpdate(BaseModel):
     ibc_global: Optional[float] = None
     porcentajes: Optional[dict] = None
     plantilla_whatsapp: Optional[str] = None
+    cargo_adicional: Optional[float] = None
 
 class ListaUpdate(BaseModel):
     items: List[str]
