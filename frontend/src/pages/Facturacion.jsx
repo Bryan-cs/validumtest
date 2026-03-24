@@ -84,8 +84,9 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   const [afiliado, setAfiliado] = useState(null);
   const [errorBusq, setErrorBusq] = useState('');
   const [dias, setDias] = useState(30);
-  const [mes, setMes] = useState(MESES[new Date().getMonth()]);
-  const [anio, setAnio] = useState(String(new Date().getFullYear()));
+  const _nextMonth = () => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d; };
+  const [mes, setMes] = useState(() => MESES[_nextMonth().getMonth()]);
+  const [anio, setAnio] = useState(() => String(_nextMonth().getFullYear()));
   const [estado, setEstado] = useState('pendiente');
   const [banco, setBanco] = useState('');
   const [ingreso, setIngreso] = useState(0);
@@ -97,7 +98,8 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   useEffect(() => {
     if (!open) {
       setCedula(''); setAfiliado(null); setErrorBusq(''); setDias(30);
-      setMes(MESES[new Date().getMonth()]); setAnio(String(new Date().getFullYear())); setEstado('pendiente');
+      const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
+      setMes(MESES[nm.getMonth()]); setAnio(String(nm.getFullYear())); setEstado('pendiente');
       setBanco(''); setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
     }
   }, [open]);
@@ -164,7 +166,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         <div>
           <label style={lbl}>Cédula del afiliado *</label>
           <div style={{ display:'flex', gap:6 }}>
-            <input style={{ ...inp, flex:1 }} value={cedula} onChange={e => setCedula(e.target.value)}
+            <input style={{ ...inp, flex:1 }} value={cedula} onChange={e => setCedula(e.target.value.replace(/\D/g, ''))}
               onKeyDown={e => e.key==='Enter' && buscar()} placeholder="Número de documento..." />
             <Btn onClick={buscar} size="sm">🔍 Consultar</Btn>
           </div>
