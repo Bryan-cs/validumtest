@@ -20,7 +20,7 @@ import Actividad      from './pages/Actividad';
 import PortalCliente       from './pages/PortalCliente';
 import NovedadesClientes   from './pages/NovedadesClientes';
 
-const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 0, refetchInterval: 30_000 } } });
+const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 0, refetchInterval: 10_000 } } });
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { token, user } = useAuthStore();
