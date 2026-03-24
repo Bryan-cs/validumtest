@@ -1,3 +1,13 @@
+# Logs
+backend/logs/
+*.log
+
+# Env local frontend
+frontend/.env.local
+
+# Claude
+.claude/
+
 # Python
 __pycache__/
 *.py[cod]
