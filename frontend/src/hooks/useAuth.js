@@ -1,9 +1,36 @@
 import { create } from 'zustand';
 
+function _loadUser() {
+  try {
+    const raw = localStorage.getItem('user');
+    return raw ? JSON.parse(raw) : null;
+  } catch {
+    localStorage.removeItem('user');
+    return null;
+  }
+}
+
+function _tokenValido(token) {
+  if (!token) return false;
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]));
+    return payload.exp * 1000 > Date.now();
+  } catch {
+    return false;
+  }
+}
+
+const _tokenGuardado = localStorage.getItem('token');
+if (!_tokenValido(_tokenGuardado)) {
+  localStorage.removeItem('token');
+  localStorage.removeItem('refresh_token');
+  localStorage.removeItem('user');
+}
+
 const useAuthStore = create((set) => ({
-  token:         localStorage.getItem('token') || null,
+  token:         _tokenValido(localStorage.getItem('token')) ? localStorage.getItem('token') : null,
   refresh_token: localStorage.getItem('refresh_token') || null,
-  user:          JSON.parse(localStorage.getItem('user') || 'null'),
+  user:          _loadUser(),
 
   login: (token, user, refresh_token) => {
     localStorage.setItem('token', token);
