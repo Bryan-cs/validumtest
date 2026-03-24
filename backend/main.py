@@ -343,6 +343,19 @@ def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
                           mes=mes, anio=anio, doc=doc)
 
 
+# ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
+@app.get("/health")
+def health_check(db: Session = Depends(get_db)):
+    """Railway usa este endpoint para monitorear el estado del servicio."""
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        return {"status": "ok", "db": "ok"}
+    except Exception as e:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"status": "degraded", "db": str(e)})
+
+
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────
 @app.get("/actividad")
 def actividad(modulo: str = "", usuario: str = "",

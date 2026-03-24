@@ -913,7 +913,26 @@ export function NovedadesClientes() {
                   <td style={tdc}>{n.mes} {n.anio}</td>
                   <td style={tdc}>
                     <div style={{ fontSize:12 }}>{n.afiliados.length} persona(s)</div>
-                    <div style={{ fontSize:11, color:C.text2, maxWidth:220 }}>{n.afiliados.slice(0,3).join(', ')}{n.afiliados.length>3?` +${n.afiliados.length-3} más`:''}</div>
+                    <div style={{ fontSize:11, color:C.text2, maxWidth:220 }}>
+                      {n.afiliados.slice(0,2).join(', ')}{n.afiliados.length>2?` +${n.afiliados.length-2} más`:''}
+                    </div>
+                    {n.afiliados.length > 2 && (
+                      <button
+                        onClick={() => {
+                          api.get(`/portal/novedades-pago/${n.id}/exportar-excel`, { responseType:'blob' })
+                            .then(r => {
+                              const url = window.URL.createObjectURL(new Blob([r.data]));
+                              const a = document.createElement('a'); a.href = url;
+                              a.download = `novedad-pago-${n.mes}-${n.anio}-${n.id}.xlsx`; a.click();
+                              window.URL.revokeObjectURL(url);
+                            })
+                            .catch(() => toast.error('Error al exportar'));
+                        }}
+                        style={{ marginTop:4, fontSize:11, color:C.primary, background:'none', border:`1px solid ${C.border}`, borderRadius:5, padding:'2px 8px', cursor:'pointer', fontWeight:600 }}
+                      >
+                        Descargar lista
+                      </button>
+                    )}
                   </td>
                   <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{n.obs||'—'}</span></td>
                   <td style={tdc}>{badgeEstado(n.estado)}</td>

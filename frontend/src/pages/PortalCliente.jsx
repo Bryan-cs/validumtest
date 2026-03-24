@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
@@ -346,10 +346,12 @@ function ModalRetiro({ afiliado, onClose, onSuccess }) {
 
 // ─── HISTORIAL ─────────────────────────────────────────────────────────────────
 function TabHistorial() {
-  const hoy = new Date().toISOString().slice(0, 10);
-  const [fechaNov, setFechaNov] = useState(hoy);
-  const [fechaRet, setFechaRet] = useState(hoy);
-  const [fechaNovAfil, setFechaNovAfil] = useState(hoy);
+  const [fechaNov, setFechaNov] = useState('');
+  const [fechaRet, setFechaRet] = useState('');
+  const [fechaNovAfil, setFechaNovAfil] = useState('');
+  const [estadoNov, setEstadoNov] = useState('');
+  const [estadoRet, setEstadoRet] = useState('');
+  const [estadoNovAfil, setEstadoNovAfil] = useState('');
 
   const { data: novedades=[] } = useQuery({
     queryKey: ['portal-novedades'],
@@ -367,27 +369,35 @@ function TabHistorial() {
     refetchInterval: 60_000,
   });
 
-  const filtraPorDia = (lista, fecha) => {
-    if (!fecha) return lista;
-    return lista.filter(item => item.creado?.slice(0, 10) === fecha);
+  const filtrarHistorial = (lista, fecha, estado) => {
+    let result = lista;
+    if (fecha)  result = result.filter(item => item.creado?.slice(0, 10) === fecha);
+    if (estado) result = result.filter(item => item.estado === estado);
+    return result;
   };
 
-  const novFiltradas     = filtraPorDia(novedades, fechaNov);
-  const retFiltrados     = filtraPorDia(retiros, fechaRet);
-  const novAfilFiltradas = filtraPorDia(novedadesAfil, fechaNovAfil);
+  const novFiltradas     = filtrarHistorial(novedades,    fechaNov,     estadoNov);
+  const retFiltrados     = filtrarHistorial(retiros,      fechaRet,     estadoRet);
+  const novAfilFiltradas = filtrarHistorial(novedadesAfil, fechaNovAfil, estadoNovAfil);
 
   return (
     <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:20 }}>
       {/* Novedades de pago */}
       <div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-          <h4 style={{ color:C.primary, margin:0, fontSize:14 }}>Novedades de Pago</h4>
+        <h4 style={{ color:C.primary, margin:'0 0 8px', fontSize:14 }}>Novedades de Pago</h4>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
           <input type="date" value={fechaNov} onChange={e => setFechaNov(e.target.value)}
             style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }} />
-          {fechaNov !== hoy && (
-            <button onClick={() => setFechaNov(hoy)}
+          <select value={estadoNov} onChange={e => setEstadoNov(e.target.value)}
+            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }}>
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="procesado">Procesado</option>
+          </select>
+          {(fechaNov || estadoNov) && (
+            <button onClick={() => { setFechaNov(''); setEstadoNov(''); }}
               style={{ background:'none', border:'none', cursor:'pointer', color:C.text2, fontSize:11 }}>
-              Hoy
+              Limpiar
             </button>
           )}
         </div>
@@ -419,14 +429,21 @@ function TabHistorial() {
 
       {/* Solicitudes de retiro */}
       <div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-          <h4 style={{ color:C.primary, margin:0, fontSize:14 }}>Solicitudes de Retiro</h4>
+        <h4 style={{ color:C.primary, margin:'0 0 8px', fontSize:14 }}>Solicitudes de Retiro</h4>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
           <input type="date" value={fechaRet} onChange={e => setFechaRet(e.target.value)}
             style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }} />
-          {fechaRet !== hoy && (
-            <button onClick={() => setFechaRet(hoy)}
+          <select value={estadoRet} onChange={e => setEstadoRet(e.target.value)}
+            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }}>
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="ejecutado">Ejecutado</option>
+            <option value="rechazado">Rechazado</option>
+          </select>
+          {(fechaRet || estadoRet) && (
+            <button onClick={() => { setFechaRet(''); setEstadoRet(''); }}
               style={{ background:'none', border:'none', cursor:'pointer', color:C.text2, fontSize:11 }}>
-              Hoy
+              Limpiar
             </button>
           )}
         </div>
@@ -460,14 +477,20 @@ function TabHistorial() {
 
       {/* Novedades de afiliados */}
       <div>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:12 }}>
-          <h4 style={{ color:C.primary, margin:0, fontSize:14 }}>Novedades Afiliados</h4>
+        <h4 style={{ color:C.primary, margin:'0 0 8px', fontSize:14 }}>Novedades Afiliados</h4>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
           <input type="date" value={fechaNovAfil} onChange={e => setFechaNovAfil(e.target.value)}
             style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }} />
-          {fechaNovAfil !== hoy && (
-            <button onClick={() => setFechaNovAfil(hoy)}
+          <select value={estadoNovAfil} onChange={e => setEstadoNovAfil(e.target.value)}
+            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }}>
+            <option value="">Todos</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="atendido">Atendido</option>
+          </select>
+          {(fechaNovAfil || estadoNovAfil) && (
+            <button onClick={() => { setFechaNovAfil(''); setEstadoNovAfil(''); }}
               style={{ background:'none', border:'none', cursor:'pointer', color:C.text2, fontSize:11 }}>
-              Hoy
+              Limpiar
             </button>
           )}
         </div>
@@ -585,6 +608,8 @@ export default function PortalCliente() {
   const [novedadAfil, setNovedadAfil] = useState(null);
   const [showNovedadModal, setShowNovedadModal] = useState(false);
   const [expandedNov, setExpandedNov] = useState(null);
+  const [pagina, setPagina] = useState(1);
+  const POR_PAGINA = 50;
 
   const { data: afiliados = [], isLoading } = useQuery({
     queryKey: ['portal-afiliados'],
@@ -607,7 +632,27 @@ export default function PortalCliente() {
     });
   }, [afiliados, q, filtroEstado, filtroEmpresa]);
 
-  const limpiarFiltros = () => { setQ(''); setFiltroEstado(''); setFiltroEmpresa(''); };
+  const limpiarFiltros = () => { setQ(''); setFiltroEstado(''); setFiltroEmpresa(''); setPagina(1); };
+
+  useEffect(() => { setPagina(1); }, [q, filtroEstado, filtroEmpresa]);
+
+  const paginados = useMemo(() => {
+    const start = (pagina - 1) * POR_PAGINA;
+    return filtrados.slice(start, start + POR_PAGINA);
+  }, [filtrados, pagina, POR_PAGINA]);
+
+  const totalPaginas = Math.ceil(filtrados.length / POR_PAGINA);
+
+  const descargarExcel = useCallback(() => {
+    api.get('/portal/exportar-excel', { responseType: 'blob' })
+      .then(r => {
+        const url = window.URL.createObjectURL(new Blob([r.data]));
+        const a = document.createElement('a'); a.href = url;
+        a.download = 'mis-afiliados.xlsx'; a.click();
+        window.URL.revokeObjectURL(url);
+      })
+      .catch(() => toast.error('Error al exportar Excel'));
+  }, []);
 
   const toggleSel = (doc) => setSeleccionados(prev =>
     prev.includes(doc) ? prev.filter(d => d !== doc) : [...prev, doc]
@@ -695,6 +740,7 @@ export default function PortalCliente() {
                 <Btn variant="secondary" onClick={limpiarFiltros}>Limpiar filtros</Btn>
               )}
               <div style={{ flex:1 }} />
+              <Btn variant="secondary" onClick={descargarExcel}>Exportar Excel</Btn>
               {seleccionados.length > 0 && (
                 <div style={{ display:'flex', gap:8, alignItems:'center' }}>
                   <span style={{ fontSize:13, color:C.text2 }}>{seleccionados.length} seleccionado(s)</span>
@@ -727,7 +773,7 @@ export default function PortalCliente() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filtrados.map(a => {
+                  {paginados.map(a => {
                     const sel = seleccionados.includes(a.doc);
                     const ec = estadoColor(a.estado);
                     const novExpanded = expandedNov === a.doc;
@@ -772,6 +818,14 @@ export default function PortalCliente() {
                   })}
                 </tbody>
               </table>
+            </div>
+          )}
+
+          {totalPaginas > 1 && (
+            <div style={{ display:'flex', gap:8, justifyContent:'center', alignItems:'center', padding:'12px 0' }}>
+              <Btn variant="secondary" size="sm" onClick={() => setPagina(p => Math.max(1, p-1))} disabled={pagina===1}>← Anterior</Btn>
+              <span style={{ fontSize:13, color:C.text2 }}>Página {pagina} de {totalPaginas} ({filtrados.length} afiliados)</span>
+              <Btn variant="secondary" size="sm" onClick={() => setPagina(p => Math.min(totalPaginas, p+1))} disabled={pagina===totalPaginas}>Siguiente →</Btn>
             </div>
           )}
         </>

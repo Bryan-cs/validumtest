@@ -584,8 +584,13 @@ def _cache_get(key: str):
     return None
 
 def _cache_set(key: str, data):
-    """Guarda un valor en el caché con timestamp actual."""
+    """Guarda un valor en el caché con timestamp actual. Evicta expiradas si crece."""
     _cache[key] = {"data": data, "ts": _time.time()}
+    if len(_cache) > 500:
+        now = _time.time()
+        expired = [k for k, v in list(_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
+        for k in expired:
+            _cache.pop(k, None)
 
 def cache_invalidar(prefijo: str = ""):
     """Invalida entradas del caché que empiecen con el prefijo dado."""

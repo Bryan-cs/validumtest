@@ -1,6 +1,8 @@
 """Router del Portal de Cliente."""
+import io
 import json
 from fastapi import APIRouter, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas
@@ -163,6 +165,80 @@ def portal_list_novedades(db: Session = Depends(get_db), token=Depends(_require_
     } for r in rows]
 
 
+@router.get("/novedades-pago/{id}/exportar-excel")
+def exportar_novedad_pago_excel(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Admin descarga Excel con la info completa de los afiliados reportados en una novedad de pago."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    if token.get("rol") != "admin":
+        raise HTTPException(403, "Solo administradores pueden exportar")
+
+    nov = db.query(models.NovedadPago).filter_by(id=id).first()
+    if not nov:
+        raise HTTPException(404, "Novedad no encontrada")
+
+    docs = json.loads(nov.afiliados_docs or "[]")
+    afiliados = db.query(models.Afiliado).filter(models.Afiliado.doc.in_(docs)).all()
+    # Ordenar según el orden original reportado por el cliente
+    orden = {doc: i for i, doc in enumerate(docs)}
+    afiliados.sort(key=lambda a: orden.get(a.doc, 999))
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = f"Novedad {nov.mes} {nov.anio}"
+
+    header_fill = PatternFill("solid", fgColor="0D3B6E")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+
+    headers = ["Nombre", "Tipo Doc", "Documento", "Empresa", "Cargo",
+               "Estado", "EPS", "AFP", "CCF", "ARL",
+               "Teléfono", "Email", "IBC"]
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row, a in enumerate(afiliados, 2):
+        ws.cell(row=row, column=1,  value=a.nombre)
+        ws.cell(row=row, column=2,  value=a.tipo_doc)
+        ws.cell(row=row, column=3,  value=a.doc)
+        ws.cell(row=row, column=4,  value=a.empresa)
+        ws.cell(row=row, column=5,  value=a.cargo)
+        ws.cell(row=row, column=6,  value=a.estado)
+        ws.cell(row=row, column=7,  value=a.eps)
+        ws.cell(row=row, column=8,  value=a.afp)
+        ws.cell(row=row, column=9,  value=a.ccf)
+        ws.cell(row=row, column=10, value=a.arl)
+        ws.cell(row=row, column=11, value=a.tel)
+        ws.cell(row=row, column=12, value=a.email)
+        ws.cell(row=row, column=13, value=a.ibc)
+
+    # Fila de resumen al final
+    if afiliados:
+        ws.append([])
+        ws.append([f"Novedad de Pago — {nov.mes} {nov.anio}",
+                   f"Cliente: {nov.cliente_ref or nov.username_cliente}",
+                   f"Total afiliados: {len(afiliados)}",
+                   f"Obs: {nov.obs or '—'}"])
+
+    for col in ws.columns:
+        max_len = max((len(str(cell.value or "")) for cell in col), default=0)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    nombre_archivo = f"novedad-pago-{nov.mes}-{nov.anio}-{id}.xlsx"
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
+    )
+
+
 @router.patch("/novedades-pago/{id}/estado")
 def portal_update_novedad_estado(
     id: int, body: dict,
@@ -323,6 +399,78 @@ def portal_list_novedades_afil(db: Session = Depends(get_db), token=Depends(_req
         "estado": r.estado, "respuesta": r.respuesta or "",
         "creado": r.creado.isoformat() if r.creado else None,
     } for r in rows]
+
+
+# ─── EXPORTAR EXCEL ───────────────────────────────────────────────────────────
+
+@router.get("/exportar-excel")
+def portal_exportar_excel(db: Session = Depends(get_db), token=Depends(_require_portal)):
+    """Exporta los afiliados del cliente como archivo Excel."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment
+
+    rol = token.get("rol", "")
+    cliente_ref = (token.get("cliente_ref") or "").strip()
+
+    if rol != "admin" and not cliente_ref:
+        raise HTTPException(400, "Este usuario no tiene un cliente asociado.")
+
+    query = db.query(models.Afiliado).filter(models.Afiliado.activo == True)
+    if rol != "admin":
+        query = query.filter(
+            models.Afiliado.cliente_txt == cliente_ref,
+            models.Afiliado.cliente_txt != None,
+            models.Afiliado.cliente_txt != "",
+        )
+    afiliados = query.order_by(models.Afiliado.nombre).all()
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Mis Afiliados"
+
+    headers = ["Nombre", "Tipo Doc", "Documento", "Empresa", "Cargo",
+               "Estado", "Estado Servicio", "EPS", "AFP", "CCF", "ARL",
+               "Teléfono", "Email", "Fecha Ingreso", "Fecha Afiliación"]
+
+    header_fill = PatternFill("solid", fgColor="0D3B6E")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center")
+
+    for row, a in enumerate(afiliados, 2):
+        ws.cell(row=row, column=1,  value=a.nombre)
+        ws.cell(row=row, column=2,  value=a.tipo_doc)
+        ws.cell(row=row, column=3,  value=a.doc)
+        ws.cell(row=row, column=4,  value=a.empresa)
+        ws.cell(row=row, column=5,  value=a.cargo)
+        ws.cell(row=row, column=6,  value=a.estado)
+        ws.cell(row=row, column=7,  value=a.estado_srv)
+        ws.cell(row=row, column=8,  value=a.eps)
+        ws.cell(row=row, column=9,  value=a.afp)
+        ws.cell(row=row, column=10, value=a.ccf)
+        ws.cell(row=row, column=11, value=a.arl)
+        ws.cell(row=row, column=12, value=a.tel)
+        ws.cell(row=row, column=13, value=a.email)
+        ws.cell(row=row, column=14, value=a.fecha_ingreso)
+        ws.cell(row=row, column=15, value=a.fecha_afiliacion)
+
+    for col in ws.columns:
+        max_len = max((len(str(cell.value or "")) for cell in col), default=0)
+        ws.column_dimensions[col[0].column_letter].width = min(max_len + 4, 40)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="mis-afiliados.xlsx"'},
+    )
 
 
 @router.patch("/solicitudes-novedad/{id}/estado")
