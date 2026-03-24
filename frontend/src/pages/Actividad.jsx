@@ -41,8 +41,10 @@ function accionIcon(accion = '') {
   return '•';
 }
 
+const PER_PAGE = 50;
+
 const sel = { padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 7,
-  fontSize: 13, outline: 'none', background: '#fff', color: C.text };
+  fontSize: 13, outline: 'none', background: C.surface, color: C.text };
 
 const MODULOS = ['', 'Afiliados', 'Facturación', 'Retiros', 'Empleados',
                  'Usuarios', 'Listas', 'Config', 'Sistema', 'Tareas'];
@@ -59,6 +61,7 @@ export default function Actividad() {
   const [usuario, setUsuario] = useState('');
   const [buscar,  setBuscar]  = useState('');
   const [confirm, setConfirm] = useState(false);
+  const [page, setPage] = useState(1);
 
   const { data: act = [], isLoading } = useQuery({
     queryKey: ['actividad', desde, hasta, modulo, usuario],
@@ -73,6 +76,10 @@ export default function Actividad() {
           .join(' ').toLowerCase().includes(buscar.toLowerCase())
       )
     : act;
+
+  const totalPages = Math.max(1, Math.ceil(filtradas.length / PER_PAGE));
+  const pagActual = Math.min(page, totalPages);
+  const paginadas = filtradas.slice((pagActual - 1) * PER_PAGE, pagActual * PER_PAGE);
 
   // Usuarios únicos para el selector
   const usuariosUnicos = [...new Set(act.map(a => a.usuario).filter(Boolean))].sort();
@@ -89,6 +96,7 @@ export default function Actividad() {
   const limpiarFiltros = () => {
     setDesde(haceUnMes); setHasta(hoy);
     setModulo(''); setUsuario(''); setBuscar('');
+    setPage(1);
   };
 
   return (
@@ -135,7 +143,8 @@ export default function Actividad() {
         <div style={{ marginTop: 10, fontSize: 12, color: C.text2 }}>
           {isLoading ? 'Cargando...' : (
             <><strong style={{ color: C.primary }}>{filtradas.length}</strong> registro{filtradas.length !== 1 ? 's' : ''}
-            {buscar && ` de ${act.length} totales`}</>
+            {buscar && ` de ${act.length} totales`}
+            {filtradas.length > PER_PAGE && <span style={{ marginLeft: 8 }}>— página <strong style={{ color: C.primary }}>{pagActual}</strong> de {totalPages}</span>}</>
           )}
         </div>
       </Card>
@@ -161,7 +170,7 @@ export default function Actividad() {
               ) : filtradas.length === 0 ? (
                 <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: C.text2 }}>Sin registros para los filtros seleccionados</td></tr>
               ) : (
-                filtradas.map((a, i) => (
+                paginadas.map((a, i) => (
                   <tr key={a.id ?? i} style={{
                     borderBottom: `1px solid ${C.border}`,
                     background: i % 2 === 0 ? '#fff' : C.surface2,
@@ -192,6 +201,14 @@ export default function Actividad() {
           </table>
         </div>
       </Card>
+
+      {totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 }}>
+          <Btn variant="secondary" size="sm" disabled={pagActual <= 1} onClick={() => setPage(p => p - 1)}>← Anterior</Btn>
+          <span style={{ fontSize: 13, color: C.text2 }}>Página {pagActual} de {totalPages}</span>
+          <Btn variant="secondary" size="sm" disabled={pagActual >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</Btn>
+        </div>
+      )}
 
       <ConfirmModal
         open={confirm}
