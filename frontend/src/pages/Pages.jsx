@@ -685,17 +685,15 @@ export function Calculadora() {
   const [ibc, setIbc] = useState('');
   const [pcts, setPcts] = useState({});
   const [plantilla, setPlantilla] = useState('');
-  const [cargoAdicional, setCargoAdicional] = useState('2200');
 
   React.useEffect(()=>{
     if(cfg.ibc_global) setIbc(cfg.ibc_global);
     if(cfg.porcentajes) setPcts({...cfg.porcentajes});
     if(cfg.plantilla_whatsapp !== undefined) setPlantilla(cfg.plantilla_whatsapp || PLANTILLA_DEFAULT);
-    if(cfg.cargo_adicional !== undefined) setCargoAdicional(String(cfg.cargo_adicional ?? 2200));
   },[cfg]);
 
   const guardar = useMutation({
-    mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts, plantilla_whatsapp:plantilla, cargo_adicional:+cargoAdicional }),
+    mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts, plantilla_whatsapp:plantilla }),
     onSuccess:()=>{ toast.success('Configuración actualizada'); qc.invalidateQueries({queryKey:['config']}); },
   });
 
@@ -708,11 +706,6 @@ export function Calculadora() {
       <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
         <label style={{ ...lbl,fontSize:13 }}>IBC Global (Salario mínimo / base de cotización)</label>
         <input type="number" style={{ ...inp,width:240 }} value={ibc} onChange={e=>setIbc(e.target.value)} />
-      </div>
-      <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
-        <label style={{ ...lbl,fontSize:13 }}>Cargo adicional por impuestos (4xmil, IVA, etc.) — se muestra como línea separada en la planilla</label>
-        <input type="number" style={{ ...inp,width:240 }} value={cargoAdicional} onChange={e=>setCargoAdicional(e.target.value)} />
-        <p style={{ margin:'6px 0 0',fontSize:12,color:C.text2 }}>Este valor se suma al costo total de la planilla como "Impuestos". Ponlo en 0 para desactivarlo.</p>
       </div>
       <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
         <h3 style={{ margin:'0 0 16px',color:C.primary }}>Porcentajes de aporte</h3>
