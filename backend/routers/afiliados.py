@@ -47,7 +47,7 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
     if not a:
         raise HTTPException(404, "Afiliado no encontrado")
 
-    plantilla_path = os.path.join(os.path.dirname(__file__), '..', '..', 'plantilla.pdf')
+    plantilla_path = os.path.join(os.path.dirname(__file__), '..', 'plantilla.pdf')
     if not os.path.exists(plantilla_path):
         raise HTTPException(500, "Plantilla no encontrada")
 
@@ -189,7 +189,7 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     if not a:
         raise HTTPException(404, "Afiliado no encontrado")
 
-    plantilla_path = os.path.join(os.path.dirname(__file__), '..', '..', 'plantilla.pdf')
+    plantilla_path = os.path.join(os.path.dirname(__file__), '..', 'plantilla.pdf')
     if not os.path.exists(plantilla_path):
         raise HTTPException(500, "Plantilla no encontrada")
 
