@@ -65,15 +65,14 @@ function calcPlanilla(afiliado, config, dias) {
       result.push({ servicio: key, pct, val30, valor, ibc });
     }
   }
-  // ARL del campo directo
-  if (afiliado.arl && afiliado.arl !== 'N/A' && afiliado.arl !== '') {
+  // ARL del campo directo (solo si ninguna ARL fue ya agregada desde servicios)
+  const yaHayArl = [...seen].some(k => k.startsWith('ARL'));
+  if (!yaHayArl && afiliado.arl && afiliado.arl !== 'N/A' && afiliado.arl !== '') {
     const arlKey = `ARL ${afiliado.arl}`;
-    if (!seen.has(arlKey)) {
-      const pct = pcts[arlKey] || 0;
-      const val30 = ceil100(ibc * pct);
-      const valor = dias > 0 ? ceil100(val30 * dias / 30) : 0;
-      result.push({ servicio: arlKey, pct, val30, valor, ibc });
-    }
+    const pct = pcts[arlKey] || 0;
+    const val30 = ceil100(ibc * pct);
+    const valor = dias > 0 ? ceil100(val30 * dias / 30) : 0;
+    result.push({ servicio: arlKey, pct, val30, valor, ibc });
   }
   return result;
 }
@@ -200,14 +199,10 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         </div>
       )}
 
-      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10 }}>
-        <div style={{ gridColumn:'1/-1' }}><label style={lbl}>📝 Novedades / observaciones</label>
-          <input style={{ ...inp, textTransform:'uppercase' }} value={novedades}
-            onChange={e => setNovedades(UP(e.target.value))} placeholder="OBSERVACIONES DE ESTA FACTURA..." /></div>
-        <div><label style={lbl}>Banco / Forma de pago</label>
-          <select style={inp} value={banco} onChange={e => setBanco(e.target.value)}>
-            <option value="">Seleccionar...</option>
-            {(listas?.bancos||[]).map(b => <option key={b}>{b}</option>)}</select></div>
+      <div style={{ marginBottom:10 }}>
+        <label style={lbl}>📝 Novedades / observaciones</label>
+        <input style={{ ...inp, textTransform:'uppercase' }} value={novedades}
+          onChange={e => setNovedades(UP(e.target.value))} placeholder="OBSERVACIONES DE ESTA FACTURA..." />
       </div>
 
       <SrvTable planilla={planilla} marcados={marcados} setMarcados={setMarcados} dias={dias}
