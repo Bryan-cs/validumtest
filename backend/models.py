@@ -125,6 +125,7 @@ class Config(Base):
     ibc_global         = Column(Float, default=1_950_905)
     porcentajes        = Column(Text)    # JSON dict
     plantilla_whatsapp = Column(Text)    # Plantilla del mensaje de WhatsApp
+    cargo_adicional    = Column(Float, default=2200)
 
 class Lista(Base):
     __tablename__ = "listas"

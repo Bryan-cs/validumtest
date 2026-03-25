@@ -93,6 +93,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   const [novedades, setNovedades] = useState('');
   const [marcados, setMarcados] = useState({});
   const [conceptos, setConceptos] = useState([]);
+  const [cargoAdicional, setCargoAdicional] = useState(config?.cargo_adicional ?? 2200);
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -101,6 +102,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
       setMes(MESES[nm.getMonth()]); setAnio(String(nm.getFullYear())); setEstado('pendiente');
       setBanco(''); setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
+      setCargoAdicional(config?.cargo_adicional ?? 2200);
     }
   }, [open]);
 
@@ -135,7 +137,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
     } catch { setErrorBusq('Error buscando afiliado'); }
   };
 
-  const costoPlanilla = planilla.reduce((s, p) => s + (marcados[p.servicio] ? p.valor : 0), 0);
+  const costoPlanilla = planilla.reduce((s, p) => s + (marcados[p.servicio] ? p.valor : 0), 0) + (+cargoAdicional || 0);
   const extra = conceptos.reduce((s, c) => {
     const val = parseFloat(c.valor) || 0;
     return s + (c.tipo === 'Deduccion' ? -val : val);
@@ -209,7 +211,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       </div>
 
       <SrvTable planilla={planilla} marcados={marcados} setMarcados={setMarcados} dias={dias}
-        sinAfiliado={!afiliado} />
+        sinAfiliado={!afiliado} cargoAdicional={cargoAdicional} setCargoAdicional={setCargoAdicional} />
 
       <div style={{ marginBottom:10 }}>
         <label style={lbl}>Ingreso cobrado al cliente ($)</label>
@@ -244,6 +246,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
   const [marcados, setMarcados] = useState({});
   const [conceptos, setConceptos] = useState([]);
   const [afiliado, setAfiliado] = useState(null);
+  const [cargoAdicional, setCargoAdicional] = useState(config?.cargo_adicional ?? 2200);
   const qc = useQueryClient();
 
   useEffect(() => {
@@ -255,6 +258,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       setIngreso(factura.ingresos || 0);
       setNovedades(factura.novedades || '');
       setConceptos(factura.conceptos_detalle || []);
+      setCargoAdicional(config?.cargo_adicional ?? 2200);
       const m = {};
       (factura.servicios_detalle || []).forEach(s => { m[s.servicio] = s.incluido !== false; });
       setMarcados(m);
@@ -271,7 +275,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
     servicio: s.servicio, pct: s.pct || 0, valor: s.valor || 0, val30: s.val30 || 0,
   }));
 
-  const costoPlanilla = planillaFinal.reduce((s, p) => s + (marcados[p.servicio] !== false ? p.valor : 0), 0);
+  const costoPlanilla = planillaFinal.reduce((s, p) => s + (marcados[p.servicio] !== false ? p.valor : 0), 0) + (+cargoAdicional || 0);
   const extra = conceptos.reduce((s, c) => {
     const val = parseFloat(c.valor) || 0;
     return s + (c.tipo === 'Deduccion' ? -val : val);
@@ -313,7 +317,8 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       </div>
       <div style={{ marginBottom:10 }}><label style={lbl}>Novedades</label>
         <input style={inp} value={novedades} onChange={e => setNovedades(e.target.value.toUpperCase())} /></div>
-      <SrvTable planilla={planillaFinal} marcados={marcados} setMarcados={setMarcados} dias={dias} />
+      <SrvTable planilla={planillaFinal} marcados={marcados} setMarcados={setMarcados} dias={dias}
+        cargoAdicional={cargoAdicional} setCargoAdicional={setCargoAdicional} />
       <div style={{ marginBottom:10 }}><label style={lbl}>Ingreso cobrado al cliente ($)</label>
         <input type="number" style={{ ...inp,width:220 }} value={ingreso}
           onChange={e => setIngreso(parseFloat(e.target.value)||0)} /></div>
@@ -330,7 +335,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
 }
 
 // ─── COMPONENTES COMPARTIDOS ─────────────────────────────────────────────────
-function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado }) {
+function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado, cargoAdicional, setCargoAdicional }) {
   return (
     <div style={{ marginBottom:10 }}>
       <div style={{ fontSize:13,fontWeight:700,color:C.primary,borderBottom:`2px solid ${C.primary}`,paddingBottom:4,marginBottom:6 }}>
@@ -380,6 +385,16 @@ function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado }) {
           </div>
         )
       }
+      {setCargoAdicional && (
+        <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6,
+          background:C.amberBg, border:`1px solid ${C.amber}`, borderRadius:7, padding:'6px 12px' }}>
+          <span style={{ fontSize:12, color:C.amber, fontWeight:600 }}>⚙️ Impuestos / cargo adicional:</span>
+          <input type="number" value={cargoAdicional} onChange={e => setCargoAdicional(e.target.value)}
+            style={{ width:110, padding:'4px 8px', border:`1px solid ${C.amber}`, borderRadius:6,
+              fontSize:13, fontWeight:700, color:C.amber, background:C.surface, outline:'none' }} />
+          <span style={{ fontSize:11, color:C.text2 }}>Se suma al costo total de la planilla</span>
+        </div>
+      )}
     </div>
   );
 }
