@@ -96,9 +96,9 @@ def _seed(db):
         "motivos_retiro": ["Renuncia","Despido","Pension","Otro"],
         "clientes": [],
     }
-    if db.query(models.Lista).count() == 0:
-        import json
-        for nombre, items in default_listas.items():
+    import json
+    for nombre, items in default_listas.items():
+        if not db.query(models.Lista).filter_by(nombre=nombre).first():
             db.add(models.Lista(nombre=nombre, items=json.dumps(items)))
 
     db.commit()

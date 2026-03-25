@@ -271,16 +271,6 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
             c.drawString(350, y, f"⚠ {dias_mora} día{'s' if dias_mora != 1 else ''} de mora")
             c.setFillColor(colors.black)
 
-    # Novedades
-    if fact.get('novedades'):
-        y -= 16
-        c.setFillColor(colors.HexColor("#FFFBEB"))
-        c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
-        c.setFillColor(colors.HexColor("#92400E"))
-        c.setFont("Helvetica-Bold", 9)
-        c.drawString(55, y, f"Novedades: {fact.get('novedades','')}")
-        c.setFillColor(colors.black)
-
     # ── Formas de pago (2 columnas para ahorrar espacio) ─────────────────────
     bancos_lista = []
     try:
