@@ -45,7 +45,7 @@ def init_db():
             try:
                 conn.execute(_sql(stmt)); conn.commit()
             except Exception:
-                pass  # Columna ya existe
+                conn.rollback()  # Resetear transacción abortada en PostgreSQL
     # Seed data inicial si la DB está vacía
     from sqlalchemy.orm import Session
     db = SessionLocal()
