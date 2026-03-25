@@ -508,9 +508,12 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     return true;
   });
 
+  const [modalPagar, setModalPagar] = useState(null); // { id, codigo, nombre }
+  const [bancoPago, setBancoPago] = useState('');
+
   const pagar = useMutation({
-    mutationFn: id => api.patch(`/facturas/${id}/pagar`),
-    onSuccess: () => { toast.success('Factura marcada como pagada'); qc.invalidateQueries({queryKey:['facturas']}); },
+    mutationFn: ({ id, banco }) => api.patch(`/facturas/${id}/pagar`, null, { params: { banco } }),
+    onSuccess: () => { toast.success('Factura marcada como pagada'); qc.invalidateQueries({queryKey:['facturas']}); setModalPagar(null); setBancoPago(''); },
   });
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/facturas/${id}`),
@@ -601,7 +604,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   <td style={tdc}>
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
                       <Btn size="sm" variant="secondary" onClick={()=>setModalEditar(f)}>✏️ Editar</Btn>
-                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={()=>pagar.mutate(f.id)}>✓ Pagada</Btn>}
+                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={()=>{ setBancoPago(''); setModalPagar(f); }}>✓ Pagada</Btn>}
                       <Btn size="sm" variant="secondary" onClick={()=>{
                         const tel = (f.tel||'').replace(/\D/g,'');
                         if (!tel) { alert('El afiliado no tiene teléfono registrado'); return; }
@@ -644,6 +647,29 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         config={config} listas={listas} prefill={prefill} />
       <EditarFacturaModal open={!!modalEditar} onClose={()=>setModalEditar(null)}
         factura={modalEditar} config={config} listas={listas} />
+
+      {/* Mini modal: seleccionar banco al marcar pagada */}
+      <Modal open={!!modalPagar} onClose={()=>setModalPagar(null)} width={400} title="✓ Marcar como pagada">
+        {modalPagar && (
+          <div>
+            <p style={{ margin:'0 0 14px', fontSize:13, color:C.text2 }}>
+              <strong style={{ color:C.text }}>{modalPagar.nombre_afiliado}</strong> — {modalPagar.codigo}
+            </p>
+            <label style={lbl}>Banco / Forma de pago</label>
+            <select style={{ ...inp, marginBottom:20 }} value={bancoPago} onChange={e=>setBancoPago(e.target.value)}>
+              <option value="">Seleccionar banco...</option>
+              {(listas?.bancos||[]).map(b=><option key={b}>{b}</option>)}
+            </select>
+            <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
+              <Btn variant="secondary" onClick={()=>setModalPagar(null)}>Cancelar</Btn>
+              <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago })}
+                disabled={pagar.isPending}>
+                {pagar.isPending ? 'Guardando...' : '✓ Confirmar pago'}
+              </Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

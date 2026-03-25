@@ -319,13 +319,15 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
     _log(db, editor, "editó una factura", "Facturación", f.codigo)
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
-def pagar_factura(db, id, user=""):
+def pagar_factura(db, id, banco="", user=""):
     cache_invalidar("cobro:")  # invalidar caché al pagar
     f = db.query(models.Factura).filter_by(id=id).first()
     if f.estado == "pagado":
         return _factura_to_dict(f)  # idempotente: ya está pagado
     f.estado = "pagado"
     f.pagado_en = datetime.utcnow()
+    if banco:
+        f.banco = banco
     _log(db, user, "marcó factura como pagada", "Facturación", f.codigo)
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 

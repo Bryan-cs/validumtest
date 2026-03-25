@@ -47,11 +47,11 @@ def update_factura(id: int, data: schemas.FacturaUpdate,
 
 
 @router.patch("/{id}/pagar")
-def pagar_factura(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def pagar_factura(id: int, banco: str = "", db: Session = Depends(get_db), token=Depends(verify_token)):
     f = crud.get_factura(db, id)
     if not f:
         raise HTTPException(404, "Factura no encontrada")
-    return crud.pagar_factura(db, id, user=token.get("sub", "sistema"))
+    return crud.pagar_factura(db, id, banco=banco, user=token.get("sub", "sistema"))
 
 
 @router.delete("/{id}")
