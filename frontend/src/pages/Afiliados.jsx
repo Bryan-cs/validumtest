@@ -230,16 +230,16 @@ export default function Afiliados() {
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
-                  {['Nombre','Empresa','Documento','Cliente','Subtipo','EPS','ARL','Servicios','Estado','Novedades','Acciones'].map(h=>(
+                  {['Nombre','Empresa','Documento','Cliente','Subtipo','EPS','ARL','Servicios','Estado','Novedades','Detalle','Acciones'].map(h=>(
                     <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                       color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {isLoading && <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+                {isLoading && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
                 {!isLoading && dataFiltrada.length===0 && (
-                  <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros</td></tr>
+                  <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros</td></tr>
                 )}
                 {dataFiltrada.map(a=>(
                   <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}` }}>
@@ -267,6 +267,12 @@ export default function Afiliados() {
                       <span style={{ fontSize:11,color:C.text2,display:'-webkit-box',
                         WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
                         {a.novedades||'—'}
+                      </span>
+                    </td>
+                    <td style={{ ...tdc,maxWidth:180 }}>
+                      <span style={{ fontSize:11,color:C.blue,display:'-webkit-box',
+                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+                        {a.detalle||'—'}
                       </span>
                     </td>
                     <td style={tdc}>
@@ -408,6 +414,12 @@ export default function Afiliados() {
                 <div style={{ color:C.text2 }}>Doc: <strong>{afilSelObj.doc}</strong></div>
                 <div style={{ color:C.text2 }}>Empresa: <strong>{afilSelObj.empresa||'—'}</strong></div>
                 <div style={{ color:C.text2 }}>Cliente: <strong>{afilSelObj.cliente_txt||'—'}</strong></div>
+                {afilSelObj.novedades && (
+                  <div style={{ color:C.text2 }}>Novedades: <strong style={{ color:C.amber }}>{afilSelObj.novedades}</strong></div>
+                )}
+                {afilSelObj.detalle && (
+                  <div style={{ color:C.text2 }}>Detalle: <strong style={{ color:C.blue }}>{afilSelObj.detalle}</strong></div>
+                )}
                 <div style={{ marginLeft:'auto',display:'flex',gap:16 }}>
                   <span style={{ color:C.green,fontWeight:600 }}>
                     ✅ Pagado: ${totalPagado.toLocaleString('es-CO')}
@@ -557,7 +569,7 @@ export default function Afiliados() {
           <InputUp label="Fecha afiliación" type="date" value={form.fecha_afiliacion||''} onChange={v=>sf('fecha_afiliacion',v)} />
         </div>
 
-        <Seccion title="IBC y novedades" />
+        <Seccion title="IBC, novedades y detalle" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
           <div style={{ marginBottom:12 }}>
             <label style={lbl}>IBC individual ($) — vacío = usa global</label>
@@ -574,6 +586,15 @@ export default function Afiliados() {
                 fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
                 resize:'vertical',textTransform:'uppercase' }} />
           </div>
+        </div>
+        <div style={{ marginBottom:12 }}>
+          <label style={lbl}>Detalle</label>
+          <textarea value={form.detalle||''} onChange={e=>sf('detalle',e.target.value)}
+            placeholder="Información adicional visible en el portal del cliente y dashboard..."
+            rows={3}
+            style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
+              fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
+              resize:'vertical' }} />
         </div>
 
         <div style={{ display:'flex',justifyContent:'flex-end',gap:10,marginTop:8,

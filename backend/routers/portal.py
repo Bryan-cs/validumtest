@@ -57,6 +57,7 @@ def portal_afiliados(q: str = "", db: Session = Depends(get_db), token=Depends(_
             "servicios": srvs, "tel": a.tel, "email": a.email,
             "fecha_ingreso": a.fecha_ingreso, "fecha_afiliacion": a.fecha_afiliacion,
             "novedades": a.novedades or "",
+            "detalle": a.detalle or "",
         })
     return result
 

@@ -40,6 +40,7 @@ def init_db():
             "ALTER TABLE novedades_pago ADD COLUMN respuesta TEXT",
             "ALTER TABLE solicitudes_retiro ADD COLUMN respuesta TEXT",
             "ALTER TABLE solicitudes_novedad ADD COLUMN respuesta TEXT",
+            "ALTER TABLE afiliados ADD COLUMN detalle TEXT",
         ]:
             try:
                 conn.execute(_sql(stmt)); conn.commit()

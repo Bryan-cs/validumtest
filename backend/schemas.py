@@ -26,13 +26,14 @@ class AfiliadoCreate(BaseModel):
     dir: str = ""
     obs: str = ""
     novedades: str = ""
+    detalle: str = ""
     ibc: Optional[float] = None
     fecha_ingreso: str = ""
     fecha_afiliacion: str = ""
     registrado_por: str = ""
 
     @field_validator('empresa', 'cargo', 'cliente_txt', 'eps', 'arl', 'ccf', 'afp',
-                     'subtipo', 'tel', 'email', 'dir', 'obs', 'novedades',
+                     'subtipo', 'tel', 'email', 'dir', 'obs', 'novedades', 'detalle',
                      'fecha_ingreso', 'fecha_afiliacion', 'registrado_por', mode='before')
     @classmethod
     def none_to_str(cls, v):

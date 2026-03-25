@@ -10,18 +10,21 @@ const anioActual = new Date().getFullYear();
 const ANIOS = [anioActual-1, anioActual, anioActual+1].map(String);
 
 const C = {
-  primary: '#0D3B6E', accent: '#E89B2A',
-  green: '#16A34A', greenBg: '#DCFCE7',
-  red: '#DC2626', redBg: '#FEE2E2',
-  blue: '#1D4ED8', blueBg: '#DBEAFE',
-  yellow: '#92400E', yellowBg: '#FEF3C7',
-  border: '#E2E8F0', surface: '#F8FAFC', surface2: '#F1F5F9',
-  text: '#1E293B', text2: '#64748B',
+  primary:  'var(--c-primary)',  accent:   'var(--c-accent)',
+  green:    'var(--c-green)',    greenBg:  'var(--c-green-bg)',
+  red:      'var(--c-red)',      redBg:    'var(--c-red-bg)',
+  amber:    'var(--c-amber)',    amberBg:  'var(--c-amber-bg)',
+  blue:     'var(--c-blue)',     blueBg:   'var(--c-blue-bg)',
+  yellow:   'var(--c-amber)',    yellowBg: 'var(--c-amber-bg)',
+  border:   'var(--c-border)',
+  surface:  'var(--c-surface)',  surface2: 'var(--c-surface2)',
+  bg:       'var(--c-bg)',
+  text:     'var(--c-text)',     text2:    'var(--c-text2)',
 };
 
 const money = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v || 0);
 
-const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, boxSizing:'border-box', outline:'none' };
+const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, boxSizing:'border-box', outline:'none', color:C.text, background:C.surface };
 const lbl = { fontSize:12, fontWeight:600, color:C.text2, display:'block', marginBottom:4 };
 const tdc = { padding:'10px 12px', fontSize:13, color:C.text, verticalAlign:'middle' };
 
@@ -100,6 +103,7 @@ function ModalResumen({ doc, onClose }) {
                   ['Email', data.afiliado.email],
                   ['Fecha ingreso', data.afiliado.fecha_ingreso],
                   ['Fecha afiliación', data.afiliado.fecha_afiliacion],
+                  ['Detalle', data.afiliado.detalle],
                 ].map(([k, v]) => v ? (
                   <div key={k}>
                     <span style={{ fontSize:11,color:C.text2,fontWeight:600 }}>{k}</span>
@@ -346,179 +350,120 @@ function ModalRetiro({ afiliado, onClose, onSuccess }) {
 
 // ─── HISTORIAL ─────────────────────────────────────────────────────────────────
 function TabHistorial() {
-  const [fechaNov, setFechaNov] = useState('');
-  const [fechaRet, setFechaRet] = useState('');
-  const [fechaNovAfil, setFechaNovAfil] = useState('');
-  const [estadoNov, setEstadoNov] = useState('');
-  const [estadoRet, setEstadoRet] = useState('');
-  const [estadoNovAfil, setEstadoNovAfil] = useState('');
+  const [subtab, setSubtab] = useState('novedades');
+  const [fecha, setFecha] = useState('');
+  const [estado, setEstado] = useState('');
 
-  const { data: novedades=[] } = useQuery({
-    queryKey: ['portal-novedades'],
-    queryFn: () => api.get('/portal/novedades-pago').then(r => r.data),
-    refetchInterval: 60_000,
-  });
-  const { data: retiros=[] } = useQuery({
-    queryKey: ['portal-retiros'],
-    queryFn: () => api.get('/portal/solicitudes-retiro').then(r => r.data),
-    refetchInterval: 60_000,
-  });
-  const { data: novedadesAfil=[] } = useQuery({
-    queryKey: ['portal-novedades-afil'],
-    queryFn: () => api.get('/portal/solicitudes-novedad').then(r => r.data),
-    refetchInterval: 60_000,
-  });
+  const { data: novedades=[] } = useQuery({ queryKey:['portal-novedades'], queryFn:()=>api.get('/portal/novedades-pago').then(r=>r.data), refetchInterval:60_000 });
+  const { data: retiros=[] }   = useQuery({ queryKey:['portal-retiros'],   queryFn:()=>api.get('/portal/solicitudes-retiro').then(r=>r.data), refetchInterval:60_000 });
+  const { data: novAfil=[] }   = useQuery({ queryKey:['portal-novedades-afil'], queryFn:()=>api.get('/portal/solicitudes-novedad').then(r=>r.data), refetchInterval:60_000 });
 
-  const filtrarHistorial = (lista, fecha, estado) => {
-    let result = lista;
-    if (fecha)  result = result.filter(item => item.creado?.slice(0, 10) === fecha);
-    if (estado) result = result.filter(item => item.estado === estado);
-    return result;
+  const TABS = [
+    { id:'novedades', label:`💳 Novedades de Pago (${novedades.length})` },
+    { id:'retiros',   label:`🚪 Retiros (${retiros.length})` },
+    { id:'afiliados', label:`📝 Novedades Afiliados (${novAfil.length})` },
+  ];
+
+  const listas = { novedades, retiros, afiliados: novAfil };
+  const listaActual = listas[subtab] || [];
+
+  const estadoOpts = {
+    novedades: ['pendiente','procesado'],
+    retiros:   ['pendiente','ejecutado','rechazado'],
+    afiliados: ['pendiente','atendido'],
   };
 
-  const novFiltradas     = filtrarHistorial(novedades,    fechaNov,     estadoNov);
-  const retFiltrados     = filtrarHistorial(retiros,      fechaRet,     estadoRet);
-  const novAfilFiltradas = filtrarHistorial(novedadesAfil, fechaNovAfil, estadoNovAfil);
+  const filtrada = listaActual.filter(item => {
+    if (fecha  && item.creado?.slice(0,10) !== fecha) return false;
+    if (estado && item.estado !== estado) return false;
+    return true;
+  });
+
+  const colorEstado = (e) => {
+    if (e === 'procesado' || e === 'ejecutado' || e === 'atendido') return [C.green, C.greenBg];
+    if (e === 'rechazado') return [C.red, C.redBg];
+    return [C.amber, C.amberBg];
+  };
+
+  const filtStyle = { padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none', color:C.text, background:C.surface };
 
   return (
-    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:20 }}>
-      {/* Novedades de pago */}
-      <div>
-        <h4 style={{ color:C.primary, margin:'0 0 8px', fontSize:14 }}>Novedades de Pago</h4>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
-          <input type="date" value={fechaNov} onChange={e => setFechaNov(e.target.value)}
-            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }} />
-          <select value={estadoNov} onChange={e => setEstadoNov(e.target.value)}
-            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }}>
-            <option value="">Todos</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="procesado">Procesado</option>
-          </select>
-          {(fechaNov || estadoNov) && (
-            <button onClick={() => { setFechaNov(''); setEstadoNov(''); }}
-              style={{ background:'none', border:'none', cursor:'pointer', color:C.text2, fontSize:11 }}>
-              Limpiar
-            </button>
-          )}
-        </div>
-        {novFiltradas.length === 0 ? (
-          <p style={{ color:C.text2, fontSize:13 }}>Sin novedades para esta fecha.</p>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {novFiltradas.map(n => (
-              <div key={n.id} style={{ background:C.surface, borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-                  <span style={{ fontWeight:600, fontSize:13, color:C.text }}>{n.mes} {n.anio}</span>
-                  <Badge color={n.estado==='procesado'?C.green:C.yellow} bg={n.estado==='procesado'?C.greenBg:C.yellowBg}>
-                    {n.estado}
-                  </Badge>
-                </div>
-                <div style={{ fontSize:12, color:C.text2 }}>{n.afiliados.length} afiliado(s): {n.afiliados.slice(0,3).join(', ')}{n.afiliados.length>3?` y ${n.afiliados.length-3} más`:''}</div>
-                {n.obs && <div style={{ fontSize:11, color:C.text2, marginTop:2 }}>Obs: {n.obs}</div>}
-                {n.respuesta && (
-                  <div style={{ fontSize:12, color:C.blue, background:C.blueBg, borderRadius:6, padding:'4px 8px', marginTop:6 }}>
-                    <strong>Respuesta admin:</strong> {n.respuesta}
-                  </div>
-                )}
-                <div style={{ fontSize:11, color:C.text2, marginTop:4 }}>{new Date(n.creado).toLocaleString('es-CO')}</div>
-              </div>
-            ))}
-          </div>
-        )}
+    <div>
+      {/* Sub-tabs */}
+      <div style={{ display:'flex', gap:4, marginBottom:16, flexWrap:'wrap' }}>
+        {TABS.map(t => (
+          <button key={t.id} onClick={() => { setSubtab(t.id); setFecha(''); setEstado(''); }} style={{
+            padding:'7px 16px', borderRadius:8, border:`1px solid ${subtab===t.id ? C.primary : C.border}`,
+            fontSize:12, fontWeight:600, cursor:'pointer',
+            background: subtab===t.id ? C.primary : C.surface,
+            color: subtab===t.id ? '#fff' : C.text2,
+          }}>{t.label}</button>
+        ))}
       </div>
 
-      {/* Solicitudes de retiro */}
-      <div>
-        <h4 style={{ color:C.primary, margin:'0 0 8px', fontSize:14 }}>Solicitudes de Retiro</h4>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
-          <input type="date" value={fechaRet} onChange={e => setFechaRet(e.target.value)}
-            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }} />
-          <select value={estadoRet} onChange={e => setEstadoRet(e.target.value)}
-            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }}>
-            <option value="">Todos</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="ejecutado">Ejecutado</option>
-            <option value="rechazado">Rechazado</option>
-          </select>
-          {(fechaRet || estadoRet) && (
-            <button onClick={() => { setFechaRet(''); setEstadoRet(''); }}
-              style={{ background:'none', border:'none', cursor:'pointer', color:C.text2, fontSize:11 }}>
-              Limpiar
-            </button>
-          )}
-        </div>
-        {retFiltrados.length === 0 ? (
-          <p style={{ color:C.text2, fontSize:13 }}>Sin solicitudes para esta fecha.</p>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {retFiltrados.map(r => (
-              <div key={r.id} style={{ background:C.surface, borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-                  <span style={{ fontWeight:600, fontSize:13, color:C.text }}>{r.afiliado_nombre}</span>
-                  <Badge color={r.estado==='ejecutado'?C.green:r.estado==='rechazado'?C.red:C.yellow}
-                         bg={r.estado==='ejecutado'?C.greenBg:r.estado==='rechazado'?C.redBg:C.yellowBg}>
-                    {r.estado}
-                  </Badge>
-                </div>
-                <div style={{ fontSize:12, color:C.text2 }}>Doc: {r.afiliado_doc}</div>
-                <div style={{ fontSize:12, color:C.text2 }}>Motivo: {r.motivo}</div>
-                {r.obs && <div style={{ fontSize:11, color:C.text2, marginTop:2 }}>Obs: {r.obs}</div>}
-                {r.respuesta && (
-                  <div style={{ fontSize:12, color:C.blue, background:C.blueBg, borderRadius:6, padding:'4px 8px', marginTop:6 }}>
-                    <strong>Respuesta admin:</strong> {r.respuesta}
-                  </div>
-                )}
-                <div style={{ fontSize:11, color:C.text2, marginTop:4 }}>{new Date(r.creado).toLocaleString('es-CO')}</div>
-              </div>
-            ))}
-          </div>
+      {/* Filtros */}
+      <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+        <input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={filtStyle} />
+        <select value={estado} onChange={e => setEstado(e.target.value)} style={filtStyle}>
+          <option value="">Todos los estados</option>
+          {(estadoOpts[subtab]||[]).map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {(fecha || estado) && (
+          <button onClick={() => { setFecha(''); setEstado(''); }}
+            style={{ background:'none', border:'none', cursor:'pointer', color:C.text2, fontSize:12 }}>
+            ✕ Limpiar
+          </button>
         )}
+        <span style={{ fontSize:12, color:C.text2, marginLeft:'auto' }}>{filtrada.length} resultado(s)</span>
       </div>
 
-      {/* Novedades de afiliados */}
-      <div>
-        <h4 style={{ color:C.primary, margin:'0 0 8px', fontSize:14 }}>Novedades Afiliados</h4>
-        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:12 }}>
-          <input type="date" value={fechaNovAfil} onChange={e => setFechaNovAfil(e.target.value)}
-            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }} />
-          <select value={estadoNovAfil} onChange={e => setEstadoNovAfil(e.target.value)}
-            style={{ padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none' }}>
-            <option value="">Todos</option>
-            <option value="pendiente">Pendiente</option>
-            <option value="atendido">Atendido</option>
-          </select>
-          {(fechaNovAfil || estadoNovAfil) && (
-            <button onClick={() => { setFechaNovAfil(''); setEstadoNovAfil(''); }}
-              style={{ background:'none', border:'none', cursor:'pointer', color:C.text2, fontSize:11 }}>
-              Limpiar
-            </button>
-          )}
+      {/* Lista */}
+      {filtrada.length === 0 ? (
+        <div style={{ textAlign:'center', padding:40, color:C.text2 }}>
+          <div style={{ fontSize:32, marginBottom:8 }}>📭</div>
+          Sin registros
         </div>
-        {novAfilFiltradas.length === 0 ? (
-          <p style={{ color:C.text2, fontSize:13 }}>Sin novedades para esta fecha.</p>
-        ) : (
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {novAfilFiltradas.map(n => (
-              <div key={n.id} style={{ background:C.surface, borderRadius:8, border:`1px solid ${C.border}`, padding:12 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
-                  <span style={{ fontWeight:600, fontSize:13, color:C.text }}>{n.afiliado_nombre}</span>
-                  <Badge color={n.estado==='atendido'?C.green:C.yellow} bg={n.estado==='atendido'?C.greenBg:C.yellowBg}>
-                    {n.estado}
-                  </Badge>
+      ) : (
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(300px, 1fr))', gap:12 }}>
+          {filtrada.map(item => {
+            const [color, bg] = colorEstado(item.estado);
+            return (
+              <div key={item.id} style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:14 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8 }}>
+                  <div style={{ fontWeight:600, fontSize:13, color:C.text }}>
+                    {subtab === 'novedades' ? `${item.mes} ${item.anio}` : item.afiliado_nombre}
+                  </div>
+                  <Badge color={color} bg={bg}>{item.estado}</Badge>
                 </div>
-                <div style={{ fontSize:12, color:C.blue, fontWeight:600 }}>{n.tipo}</div>
-                <div style={{ fontSize:12, color:C.text2, marginTop:2 }}>{n.descripcion}</div>
-                {n.respuesta && (
-                  <div style={{ fontSize:12, color:C.blue, background:C.blueBg, borderRadius:6, padding:'4px 8px', marginTop:6 }}>
-                    <strong>Respuesta admin:</strong> {n.respuesta}
+                {subtab === 'novedades' && (
+                  <div style={{ fontSize:12, color:C.text2 }}>
+                    {item.afiliados?.length} afiliado(s): {item.afiliados?.slice(0,3).join(', ')}{item.afiliados?.length>3?` +${item.afiliados.length-3}`:''}
                   </div>
                 )}
-                <div style={{ fontSize:11, color:C.text2, marginTop:4 }}>{new Date(n.creado).toLocaleString('es-CO')}</div>
+                {subtab === 'retiros' && (
+                  <>
+                    <div style={{ fontSize:12, color:C.text2 }}>Doc: {item.afiliado_doc}</div>
+                    <div style={{ fontSize:12, color:C.text2 }}>Motivo: {item.motivo}</div>
+                  </>
+                )}
+                {subtab === 'afiliados' && (
+                  <>
+                    <div style={{ fontSize:12, color:C.blue, fontWeight:600 }}>{item.tipo}</div>
+                    <div style={{ fontSize:12, color:C.text2, marginTop:2 }}>{item.descripcion}</div>
+                  </>
+                )}
+                {item.obs && <div style={{ fontSize:11, color:C.text2, marginTop:4 }}>Obs: {item.obs}</div>}
+                {item.respuesta && (
+                  <div style={{ fontSize:12, color:C.blue, background:C.blueBg, borderRadius:6, padding:'6px 10px', marginTop:8 }}>
+                    <strong>✅ Respuesta:</strong> {item.respuesta}
+                  </div>
+                )}
+                <div style={{ fontSize:11, color:C.text2, marginTop:6 }}>{new Date(item.creado).toLocaleString('es-CO')}</div>
               </div>
-            ))}
-          </div>
-        )}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -607,7 +552,6 @@ export default function PortalCliente() {
   const [retiroAfil, setRetiroAfil] = useState(null);
   const [novedadAfil, setNovedadAfil] = useState(null);
   const [showNovedadModal, setShowNovedadModal] = useState(false);
-  const [expandedNov, setExpandedNov] = useState(null);
   const [pagina, setPagina] = useState(1);
   const POR_PAGINA = 50;
 
@@ -667,45 +611,57 @@ export default function PortalCliente() {
     color: est === 'ACTIVO' ? C.green : C.red,
   });
 
+  const activos    = afiliados.filter(a => a.estado === 'ACTIVO').length;
+  const retirados  = afiliados.filter(a => a.estado === 'RETIRADO').length;
+  const suspendidos= afiliados.filter(a => a.estado === 'SUSPENDIDO').length;
+
   return (
-    <div style={{ minHeight:'100vh', background:'#F0F4F8', fontFamily:'Inter, system-ui, sans-serif' }}>
-      {/* Top nav */}
-      <div style={{ background:C.primary, padding:'12px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
-        <span style={{ color:'#fff', fontSize:18, fontWeight:700 }}>
-          BBC <span style={{ color:C.accent }}>File</span>
-          <span style={{ color:'rgba(255,255,255,.6)', fontSize:13, fontWeight:400, marginLeft:12 }}>Portal del Cliente</span>
-        </span>
-        <div style={{ display:'flex', alignItems:'center', gap:16 }}>
-          <span style={{ color:'rgba(255,255,255,.8)', fontSize:13 }}>{user?.nombre}</span>
-          <CampanaNotif />
-          <button onClick={handleLogout} style={{ padding:'6px 14px', background:'rgba(255,255,255,.15)', border:'1px solid rgba(255,255,255,.3)', borderRadius:6, color:'#fff', fontSize:12, cursor:'pointer' }}>
-            Cerrar sesión
-          </button>
+    <div style={{ minHeight:'100vh', background:'var(--c-bg)', fontFamily:'Inter, system-ui, sans-serif' }}>
+      {/* Header único */}
+      <div style={{ background:C.primary, padding:'0 24px' }}>
+        <div style={{ maxWidth:1100, margin:'0 auto' }}>
+          {/* Barra top */}
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 0 10px' }}>
+            <span style={{ color:'#fff', fontSize:18, fontWeight:700 }}>
+              BBC <span style={{ color:C.accent }}>File</span>
+              <span style={{ color:'rgba(255,255,255,.5)', fontSize:12, fontWeight:400, marginLeft:10 }}>Portal del Cliente</span>
+            </span>
+            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+              <span style={{ color:'rgba(255,255,255,.75)', fontSize:13 }}>👤 {user?.nombre}</span>
+              <CampanaNotif />
+              <button onClick={handleLogout} style={{ padding:'5px 12px', background:'rgba(255,255,255,.15)', border:'1px solid rgba(255,255,255,.25)', borderRadius:6, color:'#fff', fontSize:12, cursor:'pointer' }}>
+                Salir
+              </button>
+            </div>
+          </div>
+          {/* Stats en header */}
+          <div style={{ display:'flex', gap:24, padding:'10px 0 16px', borderTop:'1px solid rgba(255,255,255,.15)' }}>
+            {[
+              ['Total', afiliados.length, C.accent],
+              ['Activos', activos, '#4ade80'],
+              ['Retirados', retirados, '#f87171'],
+              ['Suspendidos', suspendidos, '#fcd34d'],
+            ].map(([lbl, val, color]) => (
+              <div key={lbl}>
+                <div style={{ fontSize:11, color:'rgba(255,255,255,.55)', fontWeight:600, textTransform:'uppercase', letterSpacing:'0.05em' }}>{lbl}</div>
+                <div style={{ fontSize:22, fontWeight:700, color }}>{val}</div>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
     <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
-      {/* Header */}
-      <div style={{ background:C.primary, borderRadius:12, padding:'18px 24px', marginBottom:20, display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-        <div>
-          <h2 style={{ color:'#fff', margin:0, fontSize:18 }}>Mis Afiliados</h2>
-          <div style={{ color:'rgba(255,255,255,.7)', fontSize:13, marginTop:2 }}>
-            Bienvenido, <strong style={{ color:'#fff' }}>{user?.nombre}</strong>
-          </div>
-        </div>
-        <div style={{ textAlign:'right' }}>
-          <div style={{ color:'rgba(255,255,255,.6)', fontSize:11 }}>Total afiliados</div>
-          <div style={{ color:C.accent, fontSize:24, fontWeight:700 }}>{afiliados.length}</div>
-        </div>
-      </div>
-
       {/* Tabs */}
-      <div style={{ display:'flex', gap:4, marginBottom:20 }}>
+      <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
         {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
-            padding:'8px 18px', borderRadius:8, border:'none', fontSize:13, fontWeight:600,
-            cursor:'pointer', background:tab===id?C.primary:'#fff',
-            color:tab===id?'#fff':C.text2, boxShadow:tab===id?'none':'0 1px 3px rgba(0,0,0,.1)',
+            padding:'9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
+            borderBottom: tab===id?`2px solid ${C.primary}`:'none',
+            fontSize:13, fontWeight:600, cursor:'pointer',
+            background: tab===id ? C.surface : 'transparent',
+            color: tab===id ? C.primary : C.text2,
+            marginBottom: tab===id ? -2 : 0,
           }}>
             {label}
           </button>
@@ -751,23 +707,23 @@ export default function PortalCliente() {
             </div>
           </div>
 
-          {/* Tabla */}
+          {/* Cards de afiliados */}
           {isLoading ? (
             <p style={{ textAlign:'center', color:C.text2, padding:40 }}>Cargando afiliados...</p>
           ) : filtrados.length === 0 ? (
-            <p style={{ textAlign:'center', color:C.text2, padding:40 }}>
+            <div style={{ textAlign:'center', padding:40, color:C.text2 }}>
+              <div style={{ fontSize:40, marginBottom:8 }}>🔍</div>
               {q ? `Sin resultados para "${q}"` : 'No hay afiliados registrados.'}
-            </p>
+            </div>
           ) : (
             <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}`, background:C.surface }}>
               <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
                 <thead>
                   <tr style={{ background:C.surface2 }}>
                     <th style={{ padding:'10px 12px', borderBottom:`1px solid ${C.border}` }}>
-                      <input type="checkbox" checked={seleccionados.length===filtrados.length&&filtrados.length>0}
-                        onChange={toggleTodos} />
+                      <input type="checkbox" checked={seleccionados.length===filtrados.length&&filtrados.length>0} onChange={toggleTodos} />
                     </th>
-                    {['Nombre','Documento','Empresa','EPS','AFP','Estado','Novedades','Acciones'].map(h => (
+                    {['Nombre','Documento','Empresa','EPS','AFP','Estado','Detalle','Novedades','Acciones'].map(h => (
                       <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
                     ))}
                   </tr>
@@ -776,44 +732,33 @@ export default function PortalCliente() {
                   {paginados.map(a => {
                     const sel = seleccionados.includes(a.doc);
                     const ec = estadoColor(a.estado);
-                    const novExpanded = expandedNov === a.doc;
                     return (
-                      <React.Fragment key={a.id}>
-                        <tr style={{ borderBottom: novExpanded ? 'none' : `1px solid ${C.border}`, background:sel?'#EFF6FF':'transparent' }}>
-                          <td style={tdc}>
-                            <input type="checkbox" checked={sel} onChange={() => toggleSel(a.doc)} />
-                          </td>
-                          <td style={tdc}><span style={{ fontWeight:600 }}>{a.nombre}</span></td>
-                          <td style={tdc}><span style={{ color:C.text2 }}>{a.tipo_doc} {a.doc}</span></td>
-                          <td style={tdc}>{a.empresa}</td>
-                          <td style={tdc}>{a.eps||'—'}</td>
-                          <td style={tdc}>{a.afp||'—'}</td>
-                          <td style={tdc}><Badge color={ec.color} bg={ec.bg}>{a.estado}</Badge></td>
-                          <td style={tdc}>
-                            {a.novedades ? (
-                              <button onClick={() => setExpandedNov(novExpanded ? null : a.doc)}
-                                style={{ background:'none', border:'none', cursor:'pointer', color:C.accent, fontSize:12, fontWeight:600, padding:0 }}>
-                                {novExpanded ? '▲ Ocultar' : '▼ Ver novedad'}
-                              </button>
-                            ) : <span style={{ color:C.text2, fontSize:12 }}>—</span>}
-                          </td>
-                          <td style={tdc}>
-                            <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                              <Btn size="sm" onClick={() => setResumenDoc(a.doc)}>Ver</Btn>
-                              <Btn size="sm" variant="accent" onClick={() => setNovedadAfil(a)}>Novedad</Btn>
-                              <Btn size="sm" variant="danger" onClick={() => setRetiroAfil(a)}>Retiro</Btn>
-                            </div>
-                          </td>
-                        </tr>
-                        {novExpanded && (
-                          <tr style={{ borderBottom:`1px solid ${C.border}` }}>
-                            <td colSpan={9} style={{ padding:'8px 16px 12px 36px', background:'#FFFBEB' }}>
-                              <span style={{ fontSize:11, fontWeight:600, color:C.yellow }}>NOVEDAD: </span>
-                              <span style={{ fontSize:12, color:C.text }}>{a.novedades}</span>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
+                      <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}`, background:sel?C.blueBg:'transparent' }}>
+                        <td style={tdc}><input type="checkbox" checked={sel} onChange={() => toggleSel(a.doc)} /></td>
+                        <td style={tdc}><span style={{ fontWeight:600 }}>{a.nombre}</span></td>
+                        <td style={tdc}><span style={{ color:C.text2 }}>{a.tipo_doc} {a.doc}</span></td>
+                        <td style={tdc}>{a.empresa}</td>
+                        <td style={tdc}>{a.eps||'—'}</td>
+                        <td style={tdc}>{a.afp||'—'}</td>
+                        <td style={tdc}><Badge color={ec.color} bg={ec.bg}>{a.estado}</Badge></td>
+                        <td style={{ ...tdc, maxWidth:200 }}>
+                          {a.detalle
+                            ? <span style={{ color:C.blue, fontSize:12 }}>{a.detalle}</span>
+                            : <span style={{ color:C.text2, fontSize:12 }}>—</span>}
+                        </td>
+                        <td style={tdc}>
+                          {a.novedades
+                            ? <span style={{ color:C.amber, fontSize:12, fontWeight:600 }}>{a.novedades}</span>
+                            : <span style={{ color:C.text2, fontSize:12 }}>—</span>}
+                        </td>
+                        <td style={tdc}>
+                          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                            <Btn size="sm" onClick={() => setResumenDoc(a.doc)}>Ver</Btn>
+                            <Btn size="sm" variant="accent" onClick={() => setNovedadAfil(a)}>Novedad</Btn>
+                            <Btn size="sm" variant="danger" onClick={() => setRetiroAfil(a)}>Retiro</Btn>
+                          </div>
+                        </td>
+                      </tr>
                     );
                   })}
                 </tbody>

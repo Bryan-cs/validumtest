@@ -86,7 +86,7 @@ def _afiliado_to_dict(a: models.Afiliado) -> dict:
         "ccf": a.ccf, "afp": a.afp, "subtipo": a.subtipo,
         "estado": a.estado, "estado_srv": a.estado_srv,
         "servicios": json.loads(a.servicios or "[]"),
-        "tel": a.tel, "email": a.email, "dir": a.dir, "obs": a.obs, "novedades": a.novedades,
+        "tel": a.tel, "email": a.email, "dir": a.dir, "obs": a.obs, "novedades": a.novedades, "detalle": a.detalle or "",
         "ibc": a.ibc, "fecha_ingreso": a.fecha_ingreso,
         "fecha_afiliacion": a.fecha_afiliacion,
         "registrado_por": a.registrado_por, "activo": a.activo,
@@ -170,7 +170,7 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
         "eps":data.eps,"arl":data.arl,"ccf":data.ccf,"afp":data.afp,
         "subtipo":data.subtipo,"estado":data.estado,"estado_srv":data.estado_srv,
         "servicios":json.dumps(data.servicios),"tel":data.tel,
-        "email":data.email,"dir":data.dir,"obs":data.obs,"novedades":data.novedades,
+        "email":data.email,"dir":data.dir,"obs":data.obs,"novedades":data.novedades,"detalle":data.detalle,
         "ibc":data.ibc,"fecha_ingreso":data.fecha_ingreso,
         "fecha_afiliacion":data.fecha_afiliacion,"registrado_por":data.registrado_por,
     })
@@ -193,7 +193,7 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         ("eps",data.eps),("arl",data.arl),("ccf",data.ccf),("afp",data.afp),
         ("subtipo",data.subtipo),("estado",data.estado),("estado_srv",data.estado_srv),
         ("servicios",json.dumps(data.servicios)),("tel",data.tel),
-        ("email",data.email),("dir",data.dir),("obs",data.obs),("novedades",data.novedades),
+        ("email",data.email),("dir",data.dir),("obs",data.obs),("novedades",data.novedades),("detalle",data.detalle),
         ("ibc",data.ibc),("fecha_ingreso",data.fecha_ingreso),
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:

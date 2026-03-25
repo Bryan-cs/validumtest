@@ -36,6 +36,7 @@ class Afiliado(Base):
     dir             = Column(String(200))
     obs             = Column(Text)
     novedades       = Column(Text)
+    detalle         = Column(Text)
     ibc             = Column(Float, nullable=True)   # IBC individual (None = usar global)
     fecha_ingreso   = Column(String(10))
     fecha_afiliacion= Column(String(10))
