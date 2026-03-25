@@ -35,7 +35,6 @@ def init_db():
     with engine.connect() as conn:
         for stmt in [
             "ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT",
-            "ALTER TABLE config ADD COLUMN cargo_adicional REAL DEFAULT 2200",
             "ALTER TABLE usuarios ADD COLUMN cliente_ref VARCHAR(120)",
             "ALTER TABLE novedades_pago ADD COLUMN respuesta TEXT",
             "ALTER TABLE solicitudes_retiro ADD COLUMN respuesta TEXT",

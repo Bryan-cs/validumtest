@@ -446,12 +446,11 @@ def delete_gasto(db, id, user=""):
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 def get_config(db):
     c = db.query(models.Config).first()
-    if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200}
+    if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":""}
     return {
         "ibc_global": c.ibc_global,
         "porcentajes": json.loads(c.porcentajes or "{}"),
-        "plantilla_whatsapp": c.plantilla_whatsapp or "",
-        "cargo_adicional": c.cargo_adicional if c.cargo_adicional is not None else 2200,
+        "plantilla_whatsapp": c.plantilla_whatsapp or ""
     }
 
 def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
@@ -462,7 +461,6 @@ def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
     if data.ibc_global is not None: c.ibc_global = data.ibc_global
     if data.porcentajes is not None: c.porcentajes = json.dumps(data.porcentajes)
     if data.plantilla_whatsapp is not None: c.plantilla_whatsapp = data.plantilla_whatsapp
-    if data.cargo_adicional is not None: c.cargo_adicional = data.cargo_adicional
     _log(db, user, "actualizó configuración global", "Config", "")
     db.commit(); return get_config(db)
 
