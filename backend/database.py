@@ -32,27 +32,18 @@ def get_db():
 
 def init_db():
     import models
+    # Crear tablas que no existan (primera ejecución)
     Base.metadata.create_all(bind=engine)
-    # Migración: agregar columnas nuevas a tablas existentes
-    _sql = __import__('sqlalchemy').text
-    with engine.connect() as conn:
-        for stmt in [
-            "ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT",
-            "ALTER TABLE usuarios ADD COLUMN cliente_ref VARCHAR(120)",
-            "ALTER TABLE novedades_pago ADD COLUMN respuesta TEXT",
-            "ALTER TABLE solicitudes_retiro ADD COLUMN respuesta TEXT",
-            "ALTER TABLE solicitudes_novedad ADD COLUMN respuesta TEXT",
-            "ALTER TABLE afiliados ADD COLUMN detalle TEXT",
-            "ALTER TABLE config ADD COLUMN cargo_adicional REAL DEFAULT 2200",
-            "ALTER TABLE retiros ADD CONSTRAINT uq_retiro_doc UNIQUE (doc)",
-            "ALTER TABLE facturas ADD CONSTRAINT uq_factura_doc_mes_anio UNIQUE (doc, mes, anio)",
-        ]:
-            try:
-                conn.execute(_sql(stmt)); conn.commit()
-            except Exception:
-                conn.rollback()  # Resetear transacción abortada en PostgreSQL
+    # Ejecutar migraciones Alembic pendientes
+    try:
+        from alembic.config import Config as AlembicConfig
+        from alembic import command
+        alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+        alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+        command.upgrade(alembic_cfg, "head")
+    except Exception:
+        pass  # Si Alembic falla, las tablas ya están creadas por create_all
     # Seed data inicial si la DB está vacía
-    from sqlalchemy.orm import Session
     db = SessionLocal()
     try:
         _seed(db)

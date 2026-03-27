@@ -21,14 +21,20 @@ function _tokenValido(token) {
 }
 
 const _tokenGuardado = localStorage.getItem('token');
-if (!_tokenValido(_tokenGuardado)) {
+const _refreshGuardado = localStorage.getItem('refresh_token');
+if (!_tokenValido(_tokenGuardado) && !_tokenValido(_refreshGuardado)) {
+  // Solo limpiar todo si AMBOS tokens expiraron
   localStorage.removeItem('token');
   localStorage.removeItem('refresh_token');
   localStorage.removeItem('user');
+} else if (!_tokenValido(_tokenGuardado)) {
+  // Access token expirado pero refresh válido — limpiar solo el access token
+  // El interceptor de api.js se encargará de renovarlo
+  localStorage.removeItem('token');
 }
 
 const useAuthStore = create((set) => ({
-  token:         _tokenValido(localStorage.getItem('token')) ? localStorage.getItem('token') : null,
+  token:         localStorage.getItem('token') || null,
   refresh_token: localStorage.getItem('refresh_token') || null,
   user:          _loadUser(),
 

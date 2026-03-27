@@ -506,7 +506,8 @@ def update_lista(db, nombre, items, user="sistema"):
     return {"nombre":nombre,"items":items}
 
 # ─── ACTIVIDAD ────────────────────────────────────────────────────────────────
-def get_actividad(db, modulo="", usuario="", desde="", hasta=""):
+def get_actividad(db, modulo="", usuario="", desde="", hasta="",
+                  skip: int = 0, limit: int = 200):
     from datetime import datetime as _dt
     q = db.query(models.Actividad)
     if modulo:  q = q.filter_by(modulo=modulo)
@@ -518,15 +519,20 @@ def get_actividad(db, modulo="", usuario="", desde="", hasta=""):
             pass
     if hasta:
         try:
-            # incluir todo el día "hasta"
             hasta_fin = _dt.fromisoformat(hasta).replace(hour=23, minute=59, second=59)
             q = q.filter(models.Actividad.fecha <= hasta_fin)
         except ValueError:
             pass
-    rows = q.order_by(models.Actividad.id.desc()).limit(1000).all()
-    return [{"id":r.id,"usuario":r.usuario,"accion":r.accion,"modulo":r.modulo,
-             "detalle":r.detalle,"fecha":r.fecha.strftime("%d/%m/%Y %H:%M:%S") if r.fecha else ""}
-            for r in rows]
+    total = q.count()
+    q = q.order_by(models.Actividad.id.desc())
+    if limit > 0:
+        q = q.offset(skip).limit(limit)
+    rows = q.all()
+    return {"total": total, "items": [
+        {"id":r.id,"usuario":r.usuario,"accion":r.accion,"modulo":r.modulo,
+         "detalle":r.detalle,"fecha":r.fecha.strftime("%d/%m/%Y %H:%M:%S") if r.fecha else ""}
+        for r in rows
+    ]}
 
 def clear_actividad(db, user=""):
     db.query(models.Actividad).delete()

@@ -4,10 +4,14 @@ from alembic import context
 import os, sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-from database import Base
-import models  # ensure all models are imported and registered
+from database import Base, DATABASE_URL
+import models  # registrar todos los modelos en Base.metadata
 
 config = context.config
+
+# Usar DATABASE_URL del entorno (mismo que database.py)
+config.set_main_option("sqlalchemy.url", DATABASE_URL)
+
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 

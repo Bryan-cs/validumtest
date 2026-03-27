@@ -43,9 +43,10 @@ def client():
         yield c
 
     Base.metadata.drop_all(bind=engine_test)
+    engine_test.dispose()
     try:
         os.remove("./test_bbcfile.db")
-    except FileNotFoundError:
+    except (FileNotFoundError, PermissionError):
         pass
 
 

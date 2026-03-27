@@ -392,8 +392,10 @@ def health_check(db: Session = Depends(get_db)):
 @app.get("/actividad")
 def actividad(modulo: str = "", usuario: str = "",
               desde: str = "", hasta: str = "",
+              skip: int = 0, limit: int = 200,
               db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_actividad(db, modulo=modulo, usuario=usuario, desde=desde, hasta=hasta)
+    return crud.get_actividad(db, modulo=modulo, usuario=usuario, desde=desde, hasta=hasta,
+                              skip=skip, limit=limit)
 
 
 @app.delete("/actividad")

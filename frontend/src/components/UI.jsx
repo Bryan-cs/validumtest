@@ -1,5 +1,5 @@
 // Shared UI Components for BBC File
-import { useEffect } from 'react';
+import React, { useEffect, useState, Component } from 'react';
 
 export const C = {
   primary:  'var(--c-primary)',
@@ -191,6 +191,84 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Eliminar', 
           <Btn variant={variant} onClick={onConfirm}>{confirmLabel}</Btn>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── ERROR BOUNDARY ──────────────────────────────────────────────────────────
+export class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+  render() {
+    if (!this.state.hasError) return this.props.children;
+    return (
+      <div style={{ padding: 40, textAlign: 'center' }}>
+        <div style={{ fontSize: 48, marginBottom: 16 }}>⚠</div>
+        <h2 style={{ color: C.text, fontSize: 18, fontWeight: 700, margin: '0 0 8px' }}>
+          Algo salió mal
+        </h2>
+        <p style={{ color: C.text2, fontSize: 14, margin: '0 0 20px' }}>
+          Ocurrió un error inesperado en esta sección.
+        </p>
+        <Btn onClick={() => this.setState({ hasError: false, error: null })}>
+          Reintentar
+        </Btn>
+      </div>
+    );
+  }
+}
+
+// ─── BANNER OFFLINE ──────────────────────────────────────────────────────────
+export function OfflineBanner() {
+  const [offline, setOffline] = useState(!navigator.onLine);
+  useEffect(() => {
+    const goOff = () => setOffline(true);
+    const goOn  = () => setOffline(false);
+    window.addEventListener('offline', goOff);
+    window.addEventListener('online', goOn);
+    return () => {
+      window.removeEventListener('offline', goOff);
+      window.removeEventListener('online', goOn);
+    };
+  }, []);
+  if (!offline) return null;
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 9999,
+      background: C.red, color: '#fff', textAlign: 'center',
+      padding: '8px 16px', fontSize: 13, fontWeight: 600,
+    }}>
+      Sin conexión a internet — Los cambios no se guardarán hasta que vuelvas a conectarte
+    </div>
+  );
+}
+
+// ─── LOADING SPINNER ─────────────────────────────────────────────────────────
+export function Loading({ text = 'Cargando...' }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: 40, color: C.text2, fontSize: 14 }}>
+      <div style={{
+        width: 20, height: 20, border: `2px solid ${C.border}`,
+        borderTopColor: C.primary, borderRadius: '50%',
+        animation: 'spin .6s linear infinite', marginRight: 10,
+      }} />
+      {text}
+      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+    </div>
+  );
+}
+
+export function ErrorMsg({ message = 'Error al cargar datos', onRetry }) {
+  return (
+    <div style={{ padding: 40, textAlign: 'center' }}>
+      <p style={{ color: C.red, fontSize: 14, margin: '0 0 12px' }}>{message}</p>
+      {onRetry && <Btn variant="secondary" size="sm" onClick={onRetry}>Reintentar</Btn>}
     </div>
   );
 }

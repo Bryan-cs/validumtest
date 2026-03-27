@@ -4,6 +4,7 @@ import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import useAuthStore from './hooks/useAuth';
 
+import { ErrorBoundary, OfflineBanner } from './components/UI';
 import Login          from './pages/Login';
 import Layout         from './components/Layout';
 import Dashboard      from './pages/Dashboard';
@@ -20,7 +21,17 @@ import Actividad      from './pages/Actividad';
 import PortalCliente       from './pages/PortalCliente';
 import NovedadesClientes   from './pages/NovedadesClientes';
 
-const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, staleTime: 0, refetchInterval: 10_000 } } });
+const qc = new QueryClient({
+  defaultOptions: {
+    queries: { retry: 1, staleTime: 0, refetchInterval: 10_000 },
+    mutations: {
+      onError: (err) => {
+        const msg = err?.response?.data?.detail || err?.message || 'Error inesperado';
+        import('react-hot-toast').then(m => m.default.error(msg));
+      },
+    },
+  },
+});
 
 function PrivateRoute({ children, adminOnly = false }) {
   const { token, user } = useAuthStore();
@@ -48,7 +59,9 @@ export default function App() {
   return (
     <QueryClientProvider client={qc}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+        <OfflineBanner />
         <Toaster position="bottom-center" toastOptions={{ duration: 3000 }} />
+        <ErrorBoundary>
         <Routes>
           <Route path="/login" element={<Login />} />
 
@@ -72,6 +85,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </ErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>
   );
