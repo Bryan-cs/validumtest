@@ -1,7 +1,7 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 import models, schemas, json, math
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from passlib.context import CryptContext
 
@@ -164,7 +164,7 @@ def get_afiliado_by_doc(db, doc): return db.query(models.Afiliado).filter_by(doc
 
 def create_afiliado(db, data: schemas.AfiliadoCreate):
     from sqlalchemy.exc import IntegrityError
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     a = models.Afiliado(**{
         "nombre":data.nombre,"tipo_doc":data.tipo_doc,"doc":data.doc,"empresa":data.empresa,
         "cargo":data.cargo,"cliente_txt":data.cliente_txt,
@@ -187,7 +187,7 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
 def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     from sqlalchemy.exc import IntegrityError
     from fastapi import HTTPException
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     # Lock de fila para evitar edición concurrente con eliminación
     a = db.query(models.Afiliado).filter_by(id=id, activo=True).with_for_update().first()
     if not a:
@@ -213,7 +213,7 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     db.refresh(a); return _afiliado_to_dict(a)
 
 def delete_afiliado(db, id, deleted_by=""):
-    cache_invalidar("cobro:")  # eliminar afiliado afecta cobro
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # eliminar afiliado afecta cobro
     a = db.query(models.Afiliado).filter_by(id=id).first()
     if not a: return
     # Guardar en eliminados
@@ -299,7 +299,7 @@ def create_factura(db, data: schemas.FacturaCreate):
     if duplicada:
         raise HTTPException(400, f"Ya existe una factura del mes")
 
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     # Retry para manejar race condition en código FVE concurrente
     max_retries = 3
     for attempt in range(max_retries):
@@ -327,7 +327,7 @@ def create_factura(db, data: schemas.FacturaCreate):
             data.codigo = ""  # forzar regeneración de código
 
 def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     f = db.query(models.Factura).filter_by(id=id).first()
     if not f: return None
     for k, v in data.model_dump(exclude_none=True).items():
@@ -337,13 +337,13 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
 def pagar_factura(db, id, banco="", user=""):
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     f = db.query(models.Factura).filter_by(id=id).with_for_update().first()
     if not f: return None
     if f.estado == "pagado":
         return _factura_to_dict(f)  # idempotente: ya está pagado
     f.estado = "pagado"
-    f.pagado_en = datetime.utcnow()
+    f.pagado_en = datetime.now(timezone.utc)
     if banco:
         f.banco = banco
     _log(db, user, "marcó factura como pagada", "Facturación", f.codigo)
@@ -356,7 +356,7 @@ def delete_factura(db, id, user=""):
     db.delete(f)
     _log(db, user, "eliminó una factura", "Facturación", codigo)
     db.commit()
-    cache_invalidar("cobro:")  # invalidar caché al eliminar factura
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # invalidar caché al eliminar factura
 
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
 def get_retiros(db, anio="", mes=""):
@@ -371,7 +371,7 @@ def get_retiros(db, anio="", mes=""):
 def create_retiro(db, data: schemas.RetiroCreate):
     from sqlalchemy.exc import IntegrityError
     from fastapi import HTTPException
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     afil = get_afiliado_by_doc(db, data.doc)
     if not afil: return None
     # Verificar si ya tiene un retiro registrado
@@ -397,7 +397,7 @@ def create_retiro(db, data: schemas.RetiroCreate):
     return {"id":r.id,"nombre":r.nombre,"doc":r.doc,"fecha":r.fecha,"motivo":r.motivo}
 
 def delete_retiro(db, id, user=""):
-    cache_invalidar("cobro:")  # reactivación afecta cobro
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # reactivación afecta cobro
     r = db.query(models.Retiro).filter_by(id=id).first()
     if r:
         _log(db, user, "eliminó un retiro", "Retiros", r.nombre)
@@ -472,14 +472,19 @@ def delete_gasto(db, id, user=""):
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 def get_config(db):
+    cached = _cache_get("config:global")
+    if cached is not None:
+        return cached
     c = db.query(models.Config).first()
     if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200}
-    return {
+    result = {
         "ibc_global": c.ibc_global,
         "porcentajes": json.loads(c.porcentajes or "{}"),
         "plantilla_whatsapp": c.plantilla_whatsapp or "",
         "cargo_adicional": c.cargo_adicional if c.cargo_adicional is not None else 2200,
     }
+    _cache_set("config:global", result)
+    return result
 
 def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
     c = db.query(models.Config).first()
@@ -491,17 +496,24 @@ def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
     if data.plantilla_whatsapp is not None: c.plantilla_whatsapp = data.plantilla_whatsapp
     if data.cargo_adicional is not None: c.cargo_adicional = data.cargo_adicional
     _log(db, user, "actualizó configuración global", "Config", "")
+    cache_invalidar("config:")
     db.commit(); return get_config(db)
 
 # ─── LISTAS ───────────────────────────────────────────────────────────────────
 def get_listas(db):
-    return {l.nombre: json.loads(l.items or "[]") for l in db.query(models.Lista).all()}
+    cached = _cache_get("listas:all")
+    if cached is not None:
+        return cached
+    result = {l.nombre: json.loads(l.items or "[]") for l in db.query(models.Lista).all()}
+    _cache_set("listas:all", result)
+    return result
 
 def update_lista(db, nombre, items, user="sistema"):
     l = db.query(models.Lista).filter_by(nombre=nombre).first()
     if not l: l = models.Lista(nombre=nombre); db.add(l)
     l.items = json.dumps(items)
     _log(db, user, "actualizó lista", "Listas", nombre)
+    cache_invalidar("listas:")
     db.commit()
     return {"nombre":nombre,"items":items}
 
@@ -542,6 +554,10 @@ def clear_actividad(db, user=""):
 
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
 def get_dashboard(db, anio="", mes=""):
+    cache_key = f"dashboard:{anio}:{mes}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from sqlalchemy import func, case
     # Contar afiliados por estado con una sola query SQL
     stats = db.query(
@@ -576,7 +592,7 @@ def get_dashboard(db, anio="", mes=""):
 
     util_neta = float(facts.utilidad) - (float(nominas) + float(gastos)) * meses_factor
 
-    return {
+    result = {
         "activos": int(stats.activos or 0), "retirados": int(stats.retirados or 0),
         "suspendidos": int(stats.suspendidos or 0), "total_afiliados": int(stats.total or 0),
         "facturas": int(facts.n or 0), "ingresos": float(facts.ingresos),
@@ -585,6 +601,8 @@ def get_dashboard(db, anio="", mes=""):
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "meses_factor": meses_factor,
     }
+    _cache_set(cache_key, result)
+    return result
 
 # ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
 def get_dashboard_meses(db):
@@ -854,7 +872,7 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
     estado_anterior = t.estado
     t.estado = nuevo_estado
     if nuevo_estado == "completada":
-        t.completado_en = datetime.utcnow()
+        t.completado_en = datetime.now(timezone.utc)
     if nota:
         db.add(models.TareaComentario(tarea_id=tarea_id, usuario=usuario, texto=nota))
     label_nuevo = _ESTADO_LABEL.get(nuevo_estado, nuevo_estado)
@@ -873,7 +891,7 @@ def finalizar_tarea(db, tarea_id: int, admin_username: str):
     if t.estado != "completada":
         return {"error": "Solo se pueden finalizar tareas en estado 'completada'"}
     t.estado = "finalizada"
-    t.finalizado_en = datetime.utcnow()
+    t.finalizado_en = datetime.now(timezone.utc)
     t.finalizado_por = admin_username
     db.add(models.Notificacion(
         usuario=t.asignado_a,

@@ -2,6 +2,7 @@
 BBC File — Backend FastAPI
 Ejecutar: uvicorn main:app --reload
 """
+APP_VERSION = "1.1.0"
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
@@ -9,7 +10,7 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from database import get_db, init_db
 from sqlalchemy.orm import Session
 import models, schemas, crud
@@ -44,7 +45,7 @@ def _limpiar_actividad_antigua():
     from datetime import timedelta
     db = SessionLocal()
     try:
-        limite = datetime.utcnow() - timedelta(days=90)
+        limite = datetime.now(timezone.utc) - timedelta(days=90)
         db.query(models.Actividad).filter(models.Actividad.fecha < limite).delete()
         db.commit()
     except Exception:
@@ -53,8 +54,12 @@ def _limpiar_actividad_antigua():
         db.close()
 
 
+_start_time = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _start_time
+    _start_time = datetime.now(timezone.utc)
     init_db()
     # Advertencia si las credenciales por defecto no han sido cambiadas
     try:
@@ -101,6 +106,20 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── HEADERS DE SEGURIDAD ────────────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
 
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 from routers import auth as auth_router
@@ -379,9 +398,12 @@ def health_check(db: Session = Depends(get_db)):
         redis_ok = False
     status = "ok" if db_ok else "degraded"
     code = 200 if db_ok else 503
-    result = {"status": status, "db": "ok" if db_ok else "error"}
+    result = {"status": status, "version": APP_VERSION, "db": "ok" if db_ok else "error"}
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"
+    if _start_time:
+        uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
+        result["uptime_seconds"] = int(uptime)
     if code != 200:
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=code, content=result)

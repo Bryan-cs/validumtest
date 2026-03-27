@@ -1,7 +1,10 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime
+from datetime import datetime, timezone
+
+def _utcnow():
+    return datetime.now(timezone.utc)
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -12,7 +15,7 @@ class Usuario(Base):
     rol         = Column(String(20), default="empleado")   # admin | empleado | cliente
     cliente_ref = Column(String(120), nullable=True)       # para rol=cliente: valor de cliente_txt
     activo      = Column(Boolean, default=True)
-    creado      = Column(DateTime, default=datetime.utcnow)
+    creado      = Column(DateTime, default=_utcnow)
 
 class Afiliado(Base):
     __tablename__ = "afiliados"
@@ -42,14 +45,18 @@ class Afiliado(Base):
     fecha_afiliacion= Column(String(10))
     registrado_por  = Column(String(60))
     activo          = Column(Boolean, default=True)
-    creado          = Column(DateTime, default=datetime.utcnow)
-    actualizado     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    creado          = Column(DateTime, default=_utcnow)
+    actualizado     = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import UniqueConstraint, Index
 
 class Factura(Base):
     __tablename__ = "facturas"
-    __table_args__ = (UniqueConstraint('doc', 'mes', 'anio', name='uq_factura_doc_mes_anio'),)
+    __table_args__ = (
+        UniqueConstraint('doc', 'mes', 'anio', name='uq_factura_doc_mes_anio'),
+        Index('ix_factura_cliente_estado', 'cliente', 'estado'),
+        Index('ix_factura_anio_mes', 'anio', 'mes'),
+    )
     id               = Column(Integer, primary_key=True, index=True)
     codigo           = Column(String(20), unique=True, index=True)
     nombre_afiliado  = Column(String(150), index=True)
@@ -71,8 +78,8 @@ class Factura(Base):
     afiliado_eliminado = Column(Boolean, default=False)
     pagado_en        = Column(DateTime, nullable=True)
     creado_por       = Column(String(60))
-    creado           = Column(DateTime, default=datetime.utcnow)
-    actualizado      = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    creado           = Column(DateTime, default=_utcnow)
+    actualizado      = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
 class Retiro(Base):
     __tablename__ = "retiros"
@@ -86,7 +93,7 @@ class Retiro(Base):
     mes             = Column(String(20))
     anio            = Column(String(4))
     registrado_por  = Column(String(60))
-    creado          = Column(DateTime, default=datetime.utcnow)
+    creado          = Column(DateTime, default=_utcnow)
 
 class Eliminado(Base):
     __tablename__ = "eliminados"
@@ -98,7 +105,7 @@ class Eliminado(Base):
     fecha_eliminacion   = Column(String(10))
     mes                 = Column(String(20))
     eliminado_por       = Column(String(60))
-    creado              = Column(DateTime, default=datetime.utcnow)
+    creado              = Column(DateTime, default=_utcnow)
 
 class Empleado(Base):
     __tablename__ = "empleados"
@@ -112,7 +119,7 @@ class Empleado(Base):
     nomina        = Column(Float, default=0)
     activo        = Column(Boolean, default=True)
     fecha_ingreso = Column(String(10))
-    creado        = Column(DateTime, default=datetime.utcnow)
+    creado        = Column(DateTime, default=_utcnow)
 
 class Gasto(Base):
     __tablename__ = "gastos"
@@ -120,7 +127,7 @@ class Gasto(Base):
     nombre  = Column(String(120))
     valor   = Column(Float, default=0)
     activo  = Column(Boolean, default=True)
-    creado  = Column(DateTime, default=datetime.utcnow)
+    creado  = Column(DateTime, default=_utcnow)
 
 class Config(Base):
     __tablename__ = "config"
@@ -147,7 +154,7 @@ class SolicitudNovedad(Base):
     descripcion      = Column(Text)
     estado           = Column(String(20), default="pendiente")  # pendiente | atendido
     respuesta        = Column(Text, nullable=True)
-    creado           = Column(DateTime, default=datetime.utcnow)
+    creado           = Column(DateTime, default=_utcnow)
 
 
 class NovedadPago(Base):
@@ -162,7 +169,7 @@ class NovedadPago(Base):
     obs              = Column(Text, default="")
     estado           = Column(String(20), default="pendiente")  # pendiente | procesado
     respuesta        = Column(Text, nullable=True)
-    creado           = Column(DateTime, default=datetime.utcnow)
+    creado           = Column(DateTime, default=_utcnow)
 
 
 class SolicitudRetiro(Base):
@@ -176,7 +183,7 @@ class SolicitudRetiro(Base):
     obs              = Column(Text, default="")
     estado           = Column(String(20), default="pendiente")  # pendiente | ejecutado | rechazado
     respuesta        = Column(Text, nullable=True)
-    creado           = Column(DateTime, default=datetime.utcnow)
+    creado           = Column(DateTime, default=_utcnow)
 
 
 class Actividad(Base):
@@ -186,7 +193,7 @@ class Actividad(Base):
     accion  = Column(String(200))
     modulo  = Column(String(60))
     detalle = Column(String(200))
-    fecha   = Column(DateTime, default=datetime.utcnow)
+    fecha   = Column(DateTime, default=_utcnow)
 
 class Tarea(Base):
     __tablename__ = "tareas"
@@ -197,7 +204,7 @@ class Tarea(Base):
     creado_por    = Column(String(60))
     estado        = Column(String(20), default="pendiente", index=True)  # pendiente|en_proceso|completada|finalizada
     fecha_limite  = Column(String(10), nullable=True)
-    creado        = Column(DateTime, default=datetime.utcnow)
+    creado        = Column(DateTime, default=_utcnow)
     completado_en = Column(DateTime, nullable=True)
     finalizado_en = Column(DateTime, nullable=True)
     finalizado_por= Column(String(60), nullable=True)
@@ -208,7 +215,7 @@ class TareaComentario(Base):
     tarea_id = Column(Integer, index=True)
     usuario  = Column(String(60))
     texto    = Column(Text)
-    creado   = Column(DateTime, default=datetime.utcnow)
+    creado   = Column(DateTime, default=_utcnow)
 
 class LoginAttempt(Base):
     __tablename__ = "login_attempts"
@@ -224,4 +231,4 @@ class Notificacion(Base):
     mensaje  = Column(String(300))
     leida    = Column(Boolean, default=False)
     tarea_id = Column(Integer, nullable=True)
-    creado   = Column(DateTime, default=datetime.utcnow)
+    creado   = Column(DateTime, default=_utcnow)

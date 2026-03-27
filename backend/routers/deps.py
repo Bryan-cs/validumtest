@@ -2,7 +2,7 @@
 import os
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import jwt
 
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -23,7 +23,7 @@ def create_token(data: dict, expires: timedelta = None):
     payload = data.copy()
     if expires is None:
         expires = timedelta(hours=TOKEN_EXPIRE_HOURS)
-    payload["exp"] = datetime.utcnow() + expires
+    payload["exp"] = datetime.now(timezone.utc) + expires
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
