@@ -366,10 +366,26 @@ def health_check(db: Session = Depends(get_db)):
     try:
         from sqlalchemy import text
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "db": "ok"}
-    except Exception as e:
+        db_ok = True
+    except Exception:
+        db_ok = False
+    # Check Redis
+    redis_ok = None
+    try:
+        from crud import _redis_client
+        if _redis_client:
+            redis_ok = _redis_client.ping()
+    except Exception:
+        redis_ok = False
+    status = "ok" if db_ok else "degraded"
+    code = 200 if db_ok else 503
+    result = {"status": status, "db": "ok" if db_ok else "error"}
+    if redis_ok is not None:
+        result["redis"] = "ok" if redis_ok else "error"
+    if code != 200:
         from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=503, content={"status": "degraded", "db": str(e)})
+        return JSONResponse(status_code=code, content=result)
+    return result
 
 
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────

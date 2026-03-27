@@ -600,37 +600,84 @@ def get_dashboard_meses(db):
         })
     return result
 
-# ─── CACHÉ EN MEMORIA (thread-safe) ──────────────────────────────────────────
+# ─── CACHÉ (Redis en producción, dict en memoria para dev) ───────────────────
 import time as _time
+import os as _os
+
+CACHE_TTL = 120  # segundos
+
+# Intentar conectar a Redis si REDIS_URL está disponible
+_redis_client = None
+try:
+    _redis_url = _os.getenv("REDIS_URL")
+    if _redis_url:
+        import redis as _redis_mod
+        _redis_client = _redis_mod.from_url(_redis_url, decode_responses=True)
+        _redis_client.ping()  # verificar conexión
+except Exception:
+    _redis_client = None  # fallback a cache en memoria
+
+# Fallback: cache en memoria (para desarrollo local sin Redis)
 import threading as _threading
-_cache: dict = {}
+_mem_cache: dict = {}
 _cache_lock = _threading.Lock()
-CACHE_TTL = 120  # segundos que vive el caché (2 minutos)
+
 
 def _cache_get(key: str):
-    """Obtiene un valor del caché si no ha expirado."""
+    """Obtiene un valor del caché (Redis o memoria)."""
+    if _redis_client:
+        try:
+            raw = _redis_client.get(key)
+            if raw:
+                return json.loads(raw)
+        except Exception:
+            pass
+        return None
+    # Fallback memoria
     with _cache_lock:
-        entry = _cache.get(key)
+        entry = _mem_cache.get(key)
         if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
             return entry["data"]
         return None
 
+
 def _cache_set(key: str, data):
-    """Guarda un valor en el caché con timestamp actual. Evicta expiradas si crece."""
+    """Guarda un valor en el caché con TTL automático."""
+    if _redis_client:
+        try:
+            _redis_client.setex(key, CACHE_TTL, json.dumps(data, default=str))
+        except Exception:
+            pass
+        return
+    # Fallback memoria
     with _cache_lock:
-        _cache[key] = {"data": data, "ts": _time.time()}
-        if len(_cache) > 500:
+        _mem_cache[key] = {"data": data, "ts": _time.time()}
+        if len(_mem_cache) > 500:
             now = _time.time()
-            expired = [k for k, v in list(_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
+            expired = [k for k, v in list(_mem_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
             for k in expired:
-                _cache.pop(k, None)
+                _mem_cache.pop(k, None)
+
 
 def cache_invalidar(prefijo: str = ""):
     """Invalida entradas del caché que empiecen con el prefijo dado."""
+    if _redis_client:
+        try:
+            cursor = 0
+            while True:
+                cursor, keys = _redis_client.scan(cursor, match=f"{prefijo}*", count=100)
+                if keys:
+                    _redis_client.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception:
+            pass
+        return
+    # Fallback memoria
     with _cache_lock:
-        keys = [k for k in _cache if k.startswith(prefijo)]
+        keys = [k for k in _mem_cache if k.startswith(prefijo)]
         for k in keys:
-            del _cache[k]
+            del _mem_cache[k]
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
 def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
