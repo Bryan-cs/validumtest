@@ -16,7 +16,7 @@ router = APIRouter(prefix="/facturas", tags=["facturas"])
 @router.get("")
 def list_facturas(
     anio: str = "", mes: str = "", cliente: str = "",
-    estado: str = "", banco: str = "",
+    estado: str = "", banco: str = "", doc: str = "",
     skip: int = 0, limit: int = 0,
     db: Session = Depends(get_db), token=Depends(verify_token)
 ):
@@ -24,7 +24,7 @@ def list_facturas(
     Sin limit devuelve todas. Con limit retorna {"total": N, "items": [...]}
     """
     return crud.get_facturas(db, anio=anio, mes=mes, cliente=cliente,
-                              estado=estado, banco=banco,
+                              estado=estado, banco=banco, doc=doc,
                               skip=skip, limit=limit)
 
 

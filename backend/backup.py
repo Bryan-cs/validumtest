@@ -5,7 +5,7 @@ Automático:   configurado desde main.py con APScheduler (diario a las 2am).
 En producción (Railway con PostgreSQL) este script no hace nada.
 """
 import os
-import shutil
+import sqlite3
 import datetime
 
 DB_PATH     = os.path.join(os.path.dirname(__file__), "bbcfile.db")
@@ -21,8 +21,16 @@ def run_backup():
     os.makedirs(BACKUP_DIR, exist_ok=True)
     ts  = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     dst = os.path.join(BACKUP_DIR, f"bbcfile_{ts}.db")
-    shutil.copy2(DB_PATH, dst)
-    print(f"Backup creado: {dst}")
+
+    # Usar API nativa de SQLite para backup consistente (no shutil.copy2)
+    src_conn = sqlite3.connect(DB_PATH)
+    dst_conn = sqlite3.connect(dst)
+    try:
+        src_conn.backup(dst_conn)
+        print(f"Backup creado: {dst}")
+    finally:
+        dst_conn.close()
+        src_conn.close()
 
     # Eliminar backups más antiguos si hay más de MAX_BACKUPS
     archivos = sorted(

@@ -73,10 +73,12 @@ export default function Afiliados() {
   const POR_PAG = 50;
 
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
-  // Sin paginación: para filtros y exportaciones
+  // Sin paginación: para filtros y exportaciones (no necesita polling cada 10s)
   const { data: todos=[] } = useQuery({
     queryKey:['afiliados_all'],
     queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]),
+    refetchInterval: false,
+    staleTime: 60_000,
   });
   // Con paginación: para la tabla principal
   const { data: resp={total:0,items:[]}, isLoading } = useQuery({
@@ -97,16 +99,20 @@ export default function Afiliados() {
   const afilSelObj = todos.find(a => a.doc === docSeleccionado);
   const { data: factAfil=[], isLoading: loadFact } = useQuery({
     queryKey: ['facturas_afil', docSeleccionado],
-    queryFn: () => api.get('/facturas', { params: { limit: 0 } })
-      .then(r => (r.data.items || []).filter(f => f.doc === docSeleccionado)),
+    queryFn: () => api.get('/facturas', { params: { doc: docSeleccionado, limit: 0 } })
+      .then(r => r.data.items || []),
     enabled: !!docSeleccionado,
+    refetchInterval: false,
   });
 
   const clientesUnicos = [...new Set(todos.map(a=>a.cliente_txt).filter(Boolean))].sort();
   const subtiposUnicos = [...new Set(todos.map(a=>a.subtipo).filter(Boolean))].sort();
   const estadosOpts    = [...new Set(todos.map(a=>a.estado_srv||a.estado).filter(Boolean))].sort();
 
-  const dataFiltrada = data.filter(a => {
+  // Filtrar sobre TODOS los registros (no solo la página actual) cuando hay filtros o búsqueda activos
+  const hayFiltrosActivos = busqueda || Object.values(filtros).some(v => v.length > 0);
+  const fuenteDatos = hayFiltrosActivos ? todos : data;
+  const dataFiltrada = fuenteDatos.filter(a => {
     const q = busqueda.toLowerCase();
     if (busqueda && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
     if (filtros.empresa.length && !filtros.empresa.includes(a.empresa))               return false;
@@ -245,7 +251,7 @@ export default function Afiliados() {
                   <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}` }}>
                     <td style={tdc}>
                       <span style={{ fontWeight:600, cursor:'pointer', color:C.primary }}
-                        onClick={() => { setAfilSelHist(a.nombre); setTab('historial'); }}>
+                        onClick={() => { setDocSeleccionado(a.doc); setTab('pagos'); }}>
                         {a.nombre}
                       </span>
                     </td>

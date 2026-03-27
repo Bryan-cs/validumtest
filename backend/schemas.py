@@ -42,10 +42,17 @@ class AfiliadoCreate(BaseModel):
 class FacturaCreate(BaseModel):
     codigo: str = ""
     nombre_afiliado: str = ""
-    doc: str = ""
+    doc: str
     cliente: str = ""
     anio: str = ""
-    mes: str = ""
+    mes: str
+
+    @field_validator('doc', 'mes', mode='before')
+    @classmethod
+    def no_vacio(cls, v, info):
+        if not v or not str(v).strip():
+            raise ValueError(f'{info.field_name} es requerido y no puede estar vacío')
+        return v
     periodo: str = "30"
     estado: str = "pendiente"
     banco: str = ""

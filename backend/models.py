@@ -207,6 +207,13 @@ class TareaComentario(Base):
     texto    = Column(Text)
     creado   = Column(DateTime, default=datetime.utcnow)
 
+class LoginAttempt(Base):
+    __tablename__ = "login_attempts"
+    id             = Column(Integer, primary_key=True)
+    ip             = Column(String(45), unique=True, index=True)
+    count          = Column(Integer, default=0)
+    last_attempt   = Column(Float, default=0.0)
+
 class Notificacion(Base):
     __tablename__ = "notificaciones"
     id       = Column(Integer, primary_key=True)

@@ -26,10 +26,10 @@ limiter = Limiter(key_func=get_remote_address)
 def _limpiar_notificaciones_diario():
     """Elimina todas las notificaciones del día anterior al iniciar un nuevo día."""
     from database import SessionLocal
-    from datetime import date
+    from datetime import date, time
     db = SessionLocal()
     try:
-        hoy = datetime.combine(date.today(), datetime.min.time())
+        hoy = datetime.combine(date.today(), time())
         db.query(models.Notificacion).filter(models.Notificacion.creado < hoy).delete()
         db.commit()
     except Exception:

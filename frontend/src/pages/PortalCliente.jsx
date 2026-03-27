@@ -65,7 +65,7 @@ function ModalResumen({ doc, onClose }) {
 
   const descargarPDF = () => {
     if (!data?.afiliado) return;
-    api.get(`/afiliados/${data.afiliado.id}/estado-cuenta`, { responseType: 'blob' })
+    api.get(`/portal/afiliados/${doc}/estado-cuenta`, { responseType: 'blob' })
       .then(r => {
         const url = window.URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' }));
         const a = document.createElement('a'); a.href = url;

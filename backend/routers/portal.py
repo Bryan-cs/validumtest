@@ -1,6 +1,8 @@
 """Router del Portal de Cliente."""
 import io
+import os
 import json
+from datetime import datetime
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -496,3 +498,22 @@ def portal_update_novedad_afil_estado(
         db.add(models.Notificacion(usuario=s.username_cliente, mensaje=msg))
     db.commit()
     return {"ok": True}
+
+
+# ─── ESTADO DE CUENTA PDF (accesible para clientes) ─────────────────────────
+
+@router.get("/afiliados/{doc}/estado-cuenta")
+def portal_estado_cuenta(doc: str, db: Session = Depends(get_db), token=Depends(_require_portal)):
+    """Genera PDF de estado de cuenta accesible para clientes."""
+    from routers.afiliados import estado_cuenta_afiliado as _gen_pdf
+
+    rol = token.get("rol", "")
+    cliente_ref = (token.get("cliente_ref") or "").strip()
+
+    afil = db.query(models.Afiliado).filter_by(doc=doc, activo=True).first()
+    if not afil:
+        raise HTTPException(404, "Afiliado no encontrado")
+    if rol != "admin" and afil.cliente_txt != cliente_ref:
+        raise HTTPException(403, "Sin acceso a este afiliado")
+
+    return _gen_pdf(afil.id, db, token)

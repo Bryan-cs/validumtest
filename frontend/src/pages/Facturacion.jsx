@@ -509,10 +509,12 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const pagar = useMutation({
     mutationFn: ({ id, banco }) => api.patch(`/facturas/${id}/pagar`, null, { params: { banco } }),
     onSuccess: () => { toast.success('Factura marcada como pagada'); qc.invalidateQueries({queryKey:['facturas']}); setModalPagar(null); setBancoPago(''); },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar como pagada'),
   });
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/facturas/${id}`),
     onSuccess: () => { toast.success('Factura eliminada'); qc.invalidateQueries({queryKey:['facturas']}); },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al eliminar factura'),
   });
 
   const totIng  = rowsFiltradas.reduce((s,f)=>s+(f.ingresos||0),0);

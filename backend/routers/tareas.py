@@ -60,7 +60,7 @@ def cambiar_estado(id: int, body: dict = {}, db: Session = Depends(get_db), toke
     """Empleado cambia estado: pendiente → en_proceso → completada."""
     nuevo = body.get("estado", "")
     nota  = body.get("nota", "")
-    t = crud.cambiar_estado_tarea(db, id, nuevo, token["sub"], nota)
+    t = crud.cambiar_estado_tarea(db, id, nuevo, token["sub"], nota, rol=token.get("rol", ""))
     if not t:
         raise HTTPException(400, "Estado inválido o tarea no encontrada")
     return t
@@ -72,6 +72,8 @@ def finalizar(id: int, db: Session = Depends(get_db), token=Depends(require_admi
     t = crud.finalizar_tarea(db, id, token["sub"])
     if not t:
         raise HTTPException(404, "Tarea no encontrada")
+    if isinstance(t, dict) and "error" in t:
+        raise HTTPException(400, t["error"])
     return t
 
 
@@ -79,4 +81,7 @@ def finalizar(id: int, db: Session = Depends(get_db), token=Depends(require_admi
 def comentar(id: int, data: schemas.TareaComentarioCreate,
              db: Session = Depends(get_db), token=Depends(verify_token)):
     data.usuario = token["sub"]
-    return crud.add_comentario(db, id, data)
+    result = crud.add_comentario(db, id, data)
+    if not result:
+        raise HTTPException(404, "Tarea no encontrada")
+    return result

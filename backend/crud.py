@@ -11,9 +11,10 @@ def hash_password(plain: str) -> str:
     return _pwd_ctx.hash(plain)
 
 def verify_password(plain: str, hashed: str) -> bool:
+    import secrets
     # Soporta contraseñas antiguas en texto plano durante migración
     if not hashed.startswith("$2"):
-        return plain == hashed
+        return secrets.compare_digest(plain, hashed)
     return _pwd_ctx.verify(plain, hashed)
 
 MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
@@ -185,8 +186,11 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
 
 def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     from sqlalchemy.exc import IntegrityError
-    cache_invalidar("cobro:")  # novedades u otros campos del afiliado afectan el cobro
-    a = db.query(models.Afiliado).filter_by(id=id).first()
+    cache_invalidar("cobro:")
+    a = db.query(models.Afiliado).filter_by(id=id, activo=True).first()
+    if not a:
+        from fastapi import HTTPException
+        raise HTTPException(404, "Afiliado no encontrado o eliminado")
     for field, val in [
         ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
         ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
@@ -235,7 +239,7 @@ def _next_codigo(db):
         except: pass
     return f"FVE-{str(n+1).zfill(4)}"
 
-def get_facturas(db, anio="", mes="", cliente="", estado="", banco="",
+def get_facturas(db, anio="", mes="", cliente="", estado="", banco="", doc="",
                 skip: int = 0, limit: int = 0):
     """Lista facturas con filtros opcionales y paginación (skip/limit).
     Si limit=0 devuelve todas (para exportaciones Excel y dashboard).
@@ -246,6 +250,7 @@ def get_facturas(db, anio="", mes="", cliente="", estado="", banco="",
     if cliente: q = q.filter_by(cliente=cliente)
     if estado:  q = q.filter_by(estado=estado)
     if banco:   q = q.filter_by(banco=banco)
+    if doc:     q = q.filter_by(doc=doc)
     total = q.count()
     q = q.order_by(models.Factura.id.desc())
     if limit > 0:
@@ -279,40 +284,51 @@ def get_facturas_pendientes_by_doc(db, doc, mes=None):
 
 def create_factura(db, data: schemas.FacturaCreate):
     from sqlalchemy.exc import IntegrityError
-    # Validar que no exista ya una factura para este afiliado en el mismo mes/año
+    from fastapi import HTTPException
+
+    if not data.doc or not data.doc.strip():
+        raise HTTPException(400, "El documento del afiliado es requerido")
+    if not data.mes or not data.mes.strip():
+        raise HTTPException(400, "El mes es requerido")
+
     anio_fact = data.anio or str(datetime.now().year)
     duplicada = db.query(models.Factura).filter_by(
         doc=data.doc, mes=data.mes, anio=anio_fact
     ).first()
     if duplicada:
-        from fastapi import HTTPException
         raise HTTPException(400, f"Ya existe una factura del mes")
 
-    cache_invalidar("cobro:")  # invalidar caché de cobro al crear factura
-    codigo = data.codigo or _next_codigo(db)
-    f = models.Factura(
-        codigo=codigo, nombre_afiliado=data.nombre_afiliado, doc=data.doc,
-        cliente=data.cliente, anio=data.anio or str(datetime.now().year),
-        mes=data.mes, periodo=data.periodo, estado=data.estado, banco=data.banco,
-        ingresos=data.ingresos, costos=data.costos, costo_adm=data.costo_adm,
-        conceptos_extra=data.conceptos_extra, utilidad=data.utilidad,
-        novedades=data.novedades,
-        servicios_detalle=json.dumps(data.servicios_detalle),
-        conceptos_detalle=json.dumps(data.conceptos_detalle),
-        creado_por=data.creado_por,
-    )
-    db.add(f); _log(db, data.creado_por, "agregó una factura", "Facturación", codigo)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        from fastapi import HTTPException
-        raise HTTPException(400, f"Ya existe una factura con código {codigo}")
-    db.refresh(f); return _factura_to_dict(f)
+    cache_invalidar("cobro:")
+    # Retry para manejar race condition en código FVE concurrente
+    max_retries = 3
+    for attempt in range(max_retries):
+        codigo = data.codigo or _next_codigo(db)
+        f = models.Factura(
+            codigo=codigo, nombre_afiliado=data.nombre_afiliado, doc=data.doc,
+            cliente=data.cliente, anio=data.anio or str(datetime.now().year),
+            mes=data.mes, periodo=data.periodo, estado=data.estado, banco=data.banco,
+            ingresos=data.ingresos, costos=data.costos, costo_adm=data.costo_adm,
+            conceptos_extra=data.conceptos_extra, utilidad=data.utilidad,
+            novedades=data.novedades,
+            servicios_detalle=json.dumps(data.servicios_detalle),
+            conceptos_detalle=json.dumps(data.conceptos_detalle),
+            creado_por=data.creado_por,
+        )
+        db.add(f); _log(db, data.creado_por, "agregó una factura", "Facturación", codigo)
+        try:
+            db.commit()
+            db.refresh(f)
+            return _factura_to_dict(f)
+        except IntegrityError:
+            db.rollback()
+            if attempt == max_retries - 1:
+                raise HTTPException(400, f"No se pudo generar código de factura único. Intente nuevamente.")
+            data.codigo = ""  # forzar regeneración de código
 
 def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
-    cache_invalidar("cobro:")  # editar factura afecta cobro
+    cache_invalidar("cobro:")
     f = db.query(models.Factura).filter_by(id=id).first()
+    if not f: return None
     for k, v in data.model_dump(exclude_none=True).items():
         if k in ("servicios_detalle","conceptos_detalle"): v = json.dumps(v)
         setattr(f, k, v)
@@ -320,8 +336,9 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
 def pagar_factura(db, id, banco="", user=""):
-    cache_invalidar("cobro:")  # invalidar caché al pagar
+    cache_invalidar("cobro:")
     f = db.query(models.Factura).filter_by(id=id).first()
+    if not f: return None
     if f.estado == "pagado":
         return _factura_to_dict(f)  # idempotente: ya está pagado
     f.estado = "pagado"
@@ -333,8 +350,9 @@ def pagar_factura(db, id, banco="", user=""):
 
 def delete_factura(db, id, user=""):
     f = db.query(models.Factura).filter_by(id=id).first()
-    codigo = f.codigo if f else "?"
-    db.query(models.Factura).filter_by(id=id).delete()
+    if not f: return None
+    codigo = f.codigo
+    db.delete(f)
     _log(db, user, "eliminó una factura", "Facturación", codigo)
     db.commit()
     cache_invalidar("cobro:")  # invalidar caché al eliminar factura
@@ -575,32 +593,37 @@ def get_dashboard_meses(db):
         })
     return result
 
-# ─── CACHÉ EN MEMORIA ────────────────────────────────────────────────────────
+# ─── CACHÉ EN MEMORIA (thread-safe) ──────────────────────────────────────────
 import time as _time
+import threading as _threading
 _cache: dict = {}
+_cache_lock = _threading.Lock()
 CACHE_TTL = 120  # segundos que vive el caché (2 minutos)
 
 def _cache_get(key: str):
     """Obtiene un valor del caché si no ha expirado."""
-    entry = _cache.get(key)
-    if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
-        return entry["data"]
-    return None
+    with _cache_lock:
+        entry = _cache.get(key)
+        if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
+            return entry["data"]
+        return None
 
 def _cache_set(key: str, data):
     """Guarda un valor en el caché con timestamp actual. Evicta expiradas si crece."""
-    _cache[key] = {"data": data, "ts": _time.time()}
-    if len(_cache) > 500:
-        now = _time.time()
-        expired = [k for k, v in list(_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
-        for k in expired:
-            _cache.pop(k, None)
+    with _cache_lock:
+        _cache[key] = {"data": data, "ts": _time.time()}
+        if len(_cache) > 500:
+            now = _time.time()
+            expired = [k for k, v in list(_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
+            for k in expired:
+                _cache.pop(k, None)
 
 def cache_invalidar(prefijo: str = ""):
     """Invalida entradas del caché que empiecen con el prefijo dado."""
-    keys = [k for k in _cache if k.startswith(prefijo)]
-    for k in keys:
-        del _cache[k]
+    with _cache_lock:
+        keys = [k for k in _cache if k.startswith(prefijo)]
+        for k in keys:
+            del _cache[k]
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
 def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
@@ -758,13 +781,16 @@ def get_tareas(db, username: str, rol: str):
         q = q.filter_by(asignado_a=username)
     return [_tarea_to_dict(db, t) for t in q.order_by(models.Tarea.creado.desc()).all()]
 
-def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, nota: str = ""):
+def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, nota: str = "", rol: str = ""):
     """Empleado cambia estado (pendiente→en_proceso→completada). Notifica al admin."""
     estados_validos = ["pendiente", "en_proceso", "completada"]
     if nuevo_estado not in estados_validos:
         return None
     t = db.query(models.Tarea).filter_by(id=tarea_id).first()
     if not t: return None
+    # Solo admin o el asignado pueden cambiar el estado
+    if rol != "admin" and t.asignado_a != usuario:
+        return None
     estado_anterior = t.estado
     t.estado = nuevo_estado
     if nuevo_estado == "completada":
@@ -784,6 +810,8 @@ def finalizar_tarea(db, tarea_id: int, admin_username: str):
     """Admin finaliza una tarea completada. Queda en historial como finalizada."""
     t = db.query(models.Tarea).filter_by(id=tarea_id).first()
     if not t: return None
+    if t.estado != "completada":
+        return {"error": "Solo se pueden finalizar tareas en estado 'completada'"}
     t.estado = "finalizada"
     t.finalizado_en = datetime.utcnow()
     t.finalizado_por = admin_username
@@ -796,6 +824,8 @@ def finalizar_tarea(db, tarea_id: int, admin_username: str):
     return _tarea_to_dict(db, t)
 
 def add_comentario(db, tarea_id: int, data: schemas.TareaComentarioCreate):
+    t = db.query(models.Tarea).filter_by(id=tarea_id).first()
+    if not t: return None
     c = models.TareaComentario(tarea_id=tarea_id, **data.model_dump())
     db.add(c); db.commit(); db.refresh(c)
     return {"id": c.id, "tarea_id": c.tarea_id, "usuario": c.usuario,

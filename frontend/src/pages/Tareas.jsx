@@ -233,8 +233,11 @@ export default function Tareas() {
   const handleConfirmPassword = async (pwd) => {
     try {
       await api.post('/auth/login', { username: user.username, password: pwd });
-    } catch {
-      throw new Error('Contraseña incorrecta');
+    } catch (e) {
+      if (e.response?.status === 401) {
+        throw new Error('Contraseña incorrecta');
+      }
+      throw new Error(e.response?.data?.detail || 'Error de conexión. Intente nuevamente.');
     }
     setModalPwd(false);
     finalizarLote.mutate(Array.from(seleccionadas));
