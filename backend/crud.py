@@ -186,11 +186,12 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
 
 def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     from sqlalchemy.exc import IntegrityError
+    from fastapi import HTTPException
     cache_invalidar("cobro:")
-    a = db.query(models.Afiliado).filter_by(id=id, activo=True).first()
+    # Lock de fila para evitar edición concurrente con eliminación
+    a = db.query(models.Afiliado).filter_by(id=id, activo=True).with_for_update().first()
     if not a:
-        from fastapi import HTTPException
-        raise HTTPException(404, "Afiliado no encontrado o eliminado")
+        raise HTTPException(404, "Afiliado no encontrado o fue eliminado por otro usuario")
     for field, val in [
         ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
         ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
@@ -337,7 +338,7 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
 
 def pagar_factura(db, id, banco="", user=""):
     cache_invalidar("cobro:")
-    f = db.query(models.Factura).filter_by(id=id).first()
+    f = db.query(models.Factura).filter_by(id=id).with_for_update().first()
     if not f: return None
     if f.estado == "pagado":
         return _factura_to_dict(f)  # idempotente: ya está pagado
@@ -368,13 +369,14 @@ def get_retiros(db, anio="", mes=""):
              "anio":r.anio,"registrado_por":r.registrado_por} for r in rows]
 
 def create_retiro(db, data: schemas.RetiroCreate):
-    cache_invalidar("cobro:")  # retiro cambia estado_srv → afecta cobro
+    from sqlalchemy.exc import IntegrityError
+    from fastapi import HTTPException
+    cache_invalidar("cobro:")
     afil = get_afiliado_by_doc(db, data.doc)
     if not afil: return None
     # Verificar si ya tiene un retiro registrado
     retiro_existente = db.query(models.Retiro).filter_by(doc=data.doc).first()
     if retiro_existente:
-        from fastapi import HTTPException
         raise HTTPException(400,
             f"El afiliado ya tiene un retiro registrado del {retiro_existente.fecha}")
     afil.estado = "RETIRADO"; afil.estado_srv = "RETIRADO"
@@ -386,7 +388,12 @@ def create_retiro(db, data: schemas.RetiroCreate):
         mes=mes_actual, anio=anio_actual, registrado_por=data.registrado_por,
     )
     db.add(r); _log(db, data.registrado_por, "aplicó un retiro", "Retiros", afil.nombre)
-    db.commit(); db.refresh(r)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "Otro empleado ya registró este retiro. Recargue la página.")
+    db.refresh(r)
     return {"id":r.id,"nombre":r.nombre,"doc":r.doc,"fecha":r.fecha,"motivo":r.motivo}
 
 def delete_retiro(db, id, user=""):
@@ -786,7 +793,7 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
     estados_validos = ["pendiente", "en_proceso", "completada"]
     if nuevo_estado not in estados_validos:
         return None
-    t = db.query(models.Tarea).filter_by(id=tarea_id).first()
+    t = db.query(models.Tarea).filter_by(id=tarea_id).with_for_update().first()
     if not t: return None
     # Solo admin o el asignado pueden cambiar el estado
     if rol != "admin" and t.asignado_a != usuario:
@@ -808,7 +815,7 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
 
 def finalizar_tarea(db, tarea_id: int, admin_username: str):
     """Admin finaliza una tarea completada. Queda en historial como finalizada."""
-    t = db.query(models.Tarea).filter_by(id=tarea_id).first()
+    t = db.query(models.Tarea).filter_by(id=tarea_id).with_for_update().first()
     if not t: return None
     if t.estado != "completada":
         return {"error": "Solo se pueden finalizar tareas en estado 'completada'"}

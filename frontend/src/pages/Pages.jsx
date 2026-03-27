@@ -38,7 +38,7 @@ export function Cobro() {
     queryFn:()=>api.get('/cobro',{params:{empresa,cliente,tipo}}).then(r=>r.data),
     refetchInterval:60_000,
   });
-  const { data: todosAfil=[] } = useQuery({ queryKey:['afiliados_all'], queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]) });
+  const { data: todosAfil=[] } = useQuery({ queryKey:['afiliados_all'], queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]), refetchInterval: false, staleTime: 60_000 });
   const clientes = ['', ...new Set(todosAfil.map(a=>a.cliente_txt).filter(Boolean))];
 
   const colorEstado = { VENCIDO:[C.red,C.redBg], HOY:[C.green,C.greenBg], PROXIMO:[C.text2,C.surface2], COBRADO:[C.blue,C.blueBg] };

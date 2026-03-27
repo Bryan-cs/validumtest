@@ -67,13 +67,13 @@ async def lifespan(app: FastAPI):
         _db.close()
     except Exception:
         pass
-    # Backup automático diario a las 2:00 AM
+    # Tareas programadas de limpieza
+    # Nota: con --workers 2, cada worker inicia su propio scheduler.
+    # Los jobs de limpieza son DELETEs idempotentes, así que correr 2x es inofensivo.
+    # El backup de SQLite se omite aquí; en producción se usa PostgreSQL de Railway.
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
-        from backup import run_backup
-        from logger import logger as _log
         _scheduler = BackgroundScheduler()
-        _scheduler.add_job(run_backup, "cron", hour=2, minute=0)
         _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
         _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
         _scheduler.start()

@@ -45,8 +45,11 @@ class Afiliado(Base):
     creado          = Column(DateTime, default=datetime.utcnow)
     actualizado     = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+from sqlalchemy import UniqueConstraint
+
 class Factura(Base):
     __tablename__ = "facturas"
+    __table_args__ = (UniqueConstraint('doc', 'mes', 'anio', name='uq_factura_doc_mes_anio'),)
     id               = Column(Integer, primary_key=True, index=True)
     codigo           = Column(String(20), unique=True, index=True)
     nombre_afiliado  = Column(String(150), index=True)
@@ -75,7 +78,7 @@ class Retiro(Base):
     __tablename__ = "retiros"
     id              = Column(Integer, primary_key=True, index=True)
     nombre          = Column(String(150))
-    doc             = Column(String(20), index=True)
+    doc             = Column(String(20), unique=True, index=True)
     empresa         = Column(String(80))
     fecha           = Column(String(10))
     motivo          = Column(String(50))

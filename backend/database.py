@@ -12,10 +12,13 @@ DATABASE_URL = os.getenv(
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
+_is_sqlite = "sqlite" in DATABASE_URL
+
 engine = create_engine(
     DATABASE_URL,
-    connect_args={"check_same_thread": False} if "sqlite" in DATABASE_URL else {},
+    connect_args={"check_same_thread": False} if _is_sqlite else {},
     pool_pre_ping=True,
+    **({} if _is_sqlite else {"pool_size": 10, "max_overflow": 5, "pool_timeout": 30}),
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -41,6 +44,8 @@ def init_db():
             "ALTER TABLE solicitudes_novedad ADD COLUMN respuesta TEXT",
             "ALTER TABLE afiliados ADD COLUMN detalle TEXT",
             "ALTER TABLE config ADD COLUMN cargo_adicional REAL DEFAULT 2200",
+            "ALTER TABLE retiros ADD CONSTRAINT uq_retiro_doc UNIQUE (doc)",
+            "ALTER TABLE facturas ADD CONSTRAINT uq_factura_doc_mes_anio UNIQUE (doc, mes, anio)",
         ]:
             try:
                 conn.execute(_sql(stmt)); conn.commit()
