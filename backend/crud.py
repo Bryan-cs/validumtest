@@ -1,21 +1,20 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 import models, schemas, json, math
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from models import COL_TZ
 from typing import Optional
-from passlib.context import CryptContext
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 def hash_password(plain: str) -> str:
-    return _pwd_ctx.hash(plain)
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 def verify_password(plain: str, hashed: str) -> bool:
     import secrets
     # Soporta contraseñas antiguas en texto plano durante migración
     if not hashed.startswith("$2"):
         return secrets.compare_digest(plain, hashed)
-    return _pwd_ctx.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
          "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
@@ -87,7 +86,7 @@ def _afiliado_to_dict(a: models.Afiliado) -> dict:
         "ccf": a.ccf, "afp": a.afp, "subtipo": a.subtipo,
         "estado": a.estado, "estado_srv": a.estado_srv,
         "servicios": json.loads(a.servicios or "[]"),
-        "tel": a.tel, "email": a.email, "dir": a.dir, "obs": a.obs, "novedades": a.novedades, "detalle": a.detalle or "",
+        "tel": a.tel, "email": a.email, "dir": a.dir, "ciudad": a.ciudad or "", "obs": a.obs, "novedades": a.novedades, "detalle": a.detalle or "",
         "ibc": a.ibc, "fecha_ingreso": a.fecha_ingreso,
         "fecha_afiliacion": a.fecha_afiliacion,
         "registrado_por": a.registrado_por, "activo": a.activo,
@@ -171,7 +170,7 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
         "eps":data.eps,"arl":data.arl,"ccf":data.ccf,"afp":data.afp,
         "subtipo":data.subtipo,"estado":data.estado,"estado_srv":data.estado_srv,
         "servicios":json.dumps(data.servicios),"tel":data.tel,
-        "email":data.email,"dir":data.dir,"obs":data.obs,"novedades":data.novedades,"detalle":data.detalle,
+        "email":data.email,"dir":data.dir,"ciudad":data.ciudad,"obs":data.obs,"novedades":data.novedades,"detalle":data.detalle,
         "ibc":data.ibc,"fecha_ingreso":data.fecha_ingreso,
         "fecha_afiliacion":data.fecha_afiliacion,"registrado_por":data.registrado_por,
     })
@@ -198,7 +197,7 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         ("eps",data.eps),("arl",data.arl),("ccf",data.ccf),("afp",data.afp),
         ("subtipo",data.subtipo),("estado",data.estado),("estado_srv",data.estado_srv),
         ("servicios",json.dumps(data.servicios)),("tel",data.tel),
-        ("email",data.email),("dir",data.dir),("obs",data.obs),("novedades",data.novedades),("detalle",data.detalle),
+        ("email",data.email),("dir",data.dir),("ciudad",data.ciudad),("obs",data.obs),("novedades",data.novedades),("detalle",data.detalle),
         ("ibc",data.ibc),("fecha_ingreso",data.fecha_ingreso),
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
@@ -220,8 +219,8 @@ def delete_afiliado(db, id, deleted_by=""):
     elim = models.Eliminado(
         nombre=a.nombre, doc=a.doc, empresa=a.empresa,
         datos_completos=json.dumps(_afiliado_to_dict(a)),
-        fecha_eliminacion=datetime.now().strftime("%Y-%m-%d"),
-        mes=MESES[datetime.now().month-1], eliminado_por=deleted_by,
+        fecha_eliminacion=datetime.now(COL_TZ).strftime("%Y-%m-%d"),
+        mes=MESES[datetime.now(COL_TZ).month-1], eliminado_por=deleted_by,
     )
     db.add(elim)
     # Marcar TODAS las facturas del afiliado como huérfanas (no solo pendientes)
@@ -257,23 +256,32 @@ def get_facturas(db, anio="", mes="", cliente="", estado="", banco="", doc="",
     if limit > 0:
         q = q.offset(skip).limit(limit)
     items = q.all()
-    # Obtener teléfonos y fecha_afiliacion de afiliados en una sola consulta
+    # Obtener datos del afiliado en una sola consulta
     docs = list({f.doc for f in items if f.doc})
-    tels = {}
-    fechas_afiliacion = {}
+    afil_map = {}
     if docs:
         for a in db.query(
-            models.Afiliado.doc,
-            models.Afiliado.tel,
-            models.Afiliado.fecha_afiliacion
+            models.Afiliado.doc, models.Afiliado.tel, models.Afiliado.fecha_afiliacion,
+            models.Afiliado.eps, models.Afiliado.afp, models.Afiliado.arl,
+            models.Afiliado.ccf, models.Afiliado.ibc, models.Afiliado.email,
+            models.Afiliado.dir, models.Afiliado.ciudad, models.Afiliado.empresa,
+            models.Afiliado.estado, models.Afiliado.detalle,
         ).filter(models.Afiliado.doc.in_(docs)).all():
-            tels[a.doc] = a.tel or ""
-            fechas_afiliacion[a.doc] = a.fecha_afiliacion or ""
+            afil_map[a.doc] = {
+                "tel": a.tel or "", "fecha_afiliacion": a.fecha_afiliacion or "",
+                "eps": a.eps or "", "afp": a.afp or "", "arl": a.arl or "",
+                "ccf": a.ccf or "", "ibc": a.ibc or 0, "email": a.email or "",
+                "dir": a.dir or "", "ciudad": a.ciudad or "",
+                "empresa": a.empresa or "", "estado_afil": a.estado or "",
+                "detalle": a.detalle or "",
+            }
     result = []
     for f in items:
         d = _factura_to_dict(f)
-        d["tel"] = tels.get(f.doc, "")
-        d["fecha_afiliacion"] = fechas_afiliacion.get(f.doc, "")
+        info = afil_map.get(f.doc, {})
+        d["tel"] = info.get("tel", "")
+        d["fecha_afiliacion"] = info.get("fecha_afiliacion", "")
+        d["afil_info"] = info
         result.append(d)
     return {"total": total, "items": result}
 
@@ -292,7 +300,7 @@ def create_factura(db, data: schemas.FacturaCreate):
     if not data.mes or not data.mes.strip():
         raise HTTPException(400, "El mes es requerido")
 
-    anio_fact = data.anio or str(datetime.now().year)
+    anio_fact = data.anio or str(datetime.now(COL_TZ).year)
     duplicada = db.query(models.Factura).filter_by(
         doc=data.doc, mes=data.mes, anio=anio_fact
     ).first()
@@ -306,7 +314,7 @@ def create_factura(db, data: schemas.FacturaCreate):
         codigo = data.codigo or _next_codigo(db)
         f = models.Factura(
             codigo=codigo, nombre_afiliado=data.nombre_afiliado, doc=data.doc,
-            cliente=data.cliente, anio=data.anio or str(datetime.now().year),
+            cliente=data.cliente, anio=data.anio or str(datetime.now(COL_TZ).year),
             mes=data.mes, periodo=data.periodo, estado=data.estado, banco=data.banco,
             ingresos=data.ingresos, costos=data.costos, costo_adm=data.costo_adm,
             conceptos_extra=data.conceptos_extra, utilidad=data.utilidad,
@@ -380,8 +388,8 @@ def create_retiro(db, data: schemas.RetiroCreate):
         raise HTTPException(400,
             f"El afiliado ya tiene un retiro registrado del {retiro_existente.fecha}")
     afil.estado = "RETIRADO"; afil.estado_srv = "RETIRADO"
-    anio_actual = str(datetime.now().year)
-    mes_actual  = MESES[datetime.now().month-1]
+    anio_actual = str(datetime.now(COL_TZ).year)
+    mes_actual  = MESES[datetime.now(COL_TZ).month-1]
     r = models.Retiro(
         nombre=afil.nombre, doc=data.doc, empresa=afil.empresa,
         fecha=data.fecha, motivo=data.motivo, obs=data.obs,
@@ -542,7 +550,7 @@ def get_actividad(db, modulo="", usuario="", desde="", hasta="",
     rows = q.all()
     return {"total": total, "items": [
         {"id":r.id,"usuario":r.usuario,"accion":r.accion,"modulo":r.modulo,
-         "detalle":r.detalle,"fecha":r.fecha.strftime("%d/%m/%Y %H:%M:%S") if r.fecha else ""}
+         "detalle":r.detalle,"fecha":r.fecha.replace(tzinfo=timezone.utc).astimezone(COL_TZ).strftime("%d/%m/%Y %H:%M:%S") if r.fecha else ""}
         for r in rows
     ]}
 
@@ -607,9 +615,8 @@ def get_dashboard(db, anio="", mes=""):
 # ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
 def get_dashboard_meses(db):
     """Retorna lista de {mes, anio, ingresos, facturas} de los últimos 6 meses."""
-    from datetime import datetime
     result = []
-    now = datetime.now()
+    now = datetime.now(COL_TZ)
     for i in range(5, -1, -1):
         month = (now.month - 1 - i) % 12 + 1
         year  = now.year + ((now.month - 1 - i) // 12)
@@ -714,7 +721,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     if cached is not None:
         return cached
 
-    hoy = datetime.now()
+    hoy = datetime.now(COL_TZ)
     dia_hoy = hoy.day
 
     # Generar los últimos 6 meses (mes-5 ... mes actual) como lista (año, mes_idx 1-12)
@@ -766,9 +773,16 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
         planilla = sum(_ceil100(ibc * pcts.get(s, pcts.get(s.upper(), 0.0))) for s in srvs)
         cliente_afil = a.cliente_txt or ""
 
+        # Primer cobro = mes siguiente a la afiliación
+        primer_cobro_m = afil_month + 1
+        primer_cobro_y = afil_year
+        if primer_cobro_m > 12:
+            primer_cobro_m = 1
+            primer_cobro_y += 1
+
         for (y, m) in meses_ventana:
-            # No mostrar meses anteriores a la fecha de afiliación
-            if (y, m) < (afil_year, afil_month): continue
+            # No mostrar meses anteriores al primer cobro (mes siguiente a afiliación)
+            if (y, m) < (primer_cobro_y, primer_cobro_m): continue
 
             mes_nombre = MESES[m - 1]
             anio_str   = str(y)
@@ -834,6 +848,7 @@ def _tarea_to_dict(db, t):
         "asignado_a": t.asignado_a, "creado_por": t.creado_por,
         "estado": t.estado,
         "fecha_limite": t.fecha_limite or "",
+        "privada": bool(t.privada),
         "creado": t.creado.isoformat(),
         "completado_en": t.completado_en.isoformat() if t.completado_en else None,
         "finalizado_en": t.finalizado_en.isoformat() if t.finalizado_en else None,
@@ -845,18 +860,23 @@ def _tarea_to_dict(db, t):
 def create_tarea(db, data: schemas.TareaCreate):
     t = models.Tarea(**data.model_dump())
     db.add(t); db.commit(); db.refresh(t)
-    db.add(models.Notificacion(
-        usuario=data.asignado_a,
-        mensaje=f"Nueva tarea asignada: {data.titulo}",
-        tarea_id=t.id
-    ))
-    db.commit()
+    # No notificar en tareas privadas (el creador es el asignado)
+    if not data.privada:
+        db.add(models.Notificacion(
+            usuario=data.asignado_a,
+            mensaje=f"Nueva tarea asignada: {data.titulo}",
+            tarea_id=t.id
+        ))
+        db.commit()
     return _tarea_to_dict(db, t)
 
 def get_tareas(db, username: str, rol: str):
+    from sqlalchemy import or_
     q = db.query(models.Tarea)
     if rol != "admin":
         q = q.filter_by(asignado_a=username)
+    # Hide private tasks from users who didn't create them
+    q = q.filter(or_(models.Tarea.privada == False, models.Tarea.creado_por == username))
     return [_tarea_to_dict(db, t) for t in q.order_by(models.Tarea.creado.desc()).all()]
 
 def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, nota: str = "", rol: str = ""):

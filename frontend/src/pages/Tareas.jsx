@@ -118,7 +118,7 @@ export default function Tareas() {
 
   const [tab, setTab]               = useState('pendiente');
   const [modalNueva, setModalNueva] = useState(false);
-  const [form, setForm]             = useState({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '' });
+  const [form, setForm]             = useState({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
   const [expandida, setExpandida]   = useState(null);
   const [notaEstado, setNotaEstado] = useState({});
   const [txtComent, setTxtComent]   = useState({});
@@ -129,6 +129,11 @@ export default function Tareas() {
   // Selección múltiple (solo en tab completada)
   const [seleccionadas, setSeleccionadas] = useState(new Set());
   const [modalPwd, setModalPwd]           = useState(false);
+
+  // Archivos adjuntos al crear tarea
+  const [nuevaFiles, setNuevaFiles] = useState([]);
+  // Archivos adjuntos al completar tarea (por id de tarea)
+  const [completarFiles, setCompletarFiles] = useState({});
 
   // Limpiar selección al cambiar tab
   useEffect(() => { setSeleccionadas(new Set()); }, [tab]);
@@ -146,12 +151,31 @@ export default function Tareas() {
   });
 
   const crear = useMutation({
-    mutationFn: () => api.post('/tareas', form),
+    mutationFn: async () => {
+      const payload = { ...form };
+      if (payload.privada && !isAdmin) {
+        payload.asignado_a = user?.username || '';
+      }
+      const res = await api.post('/tareas', payload);
+      const tareaId = res.data?.id;
+      if (tareaId && nuevaFiles.length > 0) {
+        for (const file of nuevaFiles) {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('afiliado_doc', '');
+          fd.append('contexto', 'tarea');
+          fd.append('contexto_id', String(tareaId));
+          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
+      }
+      return res;
+    },
     onSuccess: () => {
       toast.success('Tarea creada');
       qc.invalidateQueries({ queryKey: ['tareas'] });
       setModalNueva(false);
-      setForm({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '' });
+      setForm({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
+      setNuevaFiles([]);
     },
     onError: e => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
   });
@@ -185,6 +209,12 @@ export default function Tareas() {
       setSeleccionadas(new Set());
     },
     onError: e => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
+  });
+
+  const eliminarTarea = useMutation({
+    mutationFn: id => api.delete(`/tareas/${id}`),
+    onSuccess: () => { toast.success('Tarea eliminada'); qc.invalidateQueries({ queryKey: ['tareas'] }); },
+    onError: e => { const d = e.response?.data?.detail; toast.error(d || 'Error al eliminar'); },
   });
 
   const comentar = useMutation({
@@ -258,10 +288,10 @@ export default function Tareas() {
         <div>
           <h2 style={{ margin: 0, color: C.primary, fontSize: 22, fontWeight: 700 }}>✅ Tareas</h2>
           <p style={{ margin: '4px 0 0', color: C.text2, fontSize: 13 }}>
-            {isAdmin ? 'Gestión y asignación de tareas' : 'Mis tareas asignadas'}
+            {isAdmin ? 'Gestión y asignación de tareas' : 'Mis tareas asignadas y personales'}
           </p>
         </div>
-        {isAdmin && <Btn variant="accent" onClick={() => setModalNueva(true)}>+ Nueva tarea</Btn>}
+        <Btn variant="accent" onClick={() => setModalNueva(true)}>+ Nueva tarea</Btn>
       </div>
 
       {/* Tabs */}
@@ -368,6 +398,9 @@ export default function Tareas() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                       <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>{t.titulo}</span>
                       <EstadoBadge estado={t.estado} />
+                      {t.privada && (
+                        <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 10, padding: '2px 10px', background: C.amberBg, color: C.amber }}>🔒 Privada</span>
+                      )}
                       {vencida && (
                         <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 10, padding: '2px 10px', background: C.redBg, color: C.red }}>¡Vencida!</span>
                       )}
@@ -386,12 +419,12 @@ export default function Tareas() {
 
                   {/* Botones */}
                   <div style={{ display: 'flex', gap: 6, flexShrink: 0, flexWrap: 'wrap', alignItems: 'center' }}>
-                    {!isAdmin && t.estado === 'pendiente' && (
+                    {t.asignado_a === user?.username && t.estado === 'pendiente' && (
                       <Btn size="sm" variant="blue" onClick={() => cambiarEstado.mutate({ id: t.id, estado: 'en_proceso', nota: '' })}>
                         ▶ Iniciar
                       </Btn>
                     )}
-                    {!isAdmin && t.estado === 'en_proceso' && (
+                    {t.asignado_a === user?.username && t.estado === 'en_proceso' && (
                       <Btn size="sm" variant="success" onClick={() => setExpandida(abierta ? null : t.id)}>
                         ✓ Completar
                       </Btn>
@@ -399,6 +432,17 @@ export default function Tareas() {
                     {isAdmin && t.estado === 'completada' && (
                       <Btn size="sm" variant="primary" onClick={() => handleFinalizar(t)}>
                         ⬛ Finalizar
+                      </Btn>
+                    )}
+                    {(t.privada || isAdmin) && (t.estado === 'completada' || t.estado === 'finalizada') && (isAdmin || t.creado_por === user?.username) && (
+                      <Btn size="sm" variant="danger" disabled={eliminarTarea.isPending}
+                        onClick={() => setConfirm({
+                          title: 'Eliminar tarea',
+                          message: `¿Eliminar "${t.titulo}"? Esta acción no se puede deshacer.`,
+                          confirmLabel: 'Eliminar', variant: 'danger',
+                          onConfirm: () => { eliminarTarea.mutate(t.id); setConfirm(null); },
+                        })}>
+                        🗑️
                       </Btn>
                     )}
                     <Btn size="sm" variant="secondary" onClick={() => setExpandida(abierta ? null : t.id)}>
@@ -410,18 +454,55 @@ export default function Tareas() {
                 {/* Panel expandido */}
                 {abierta && (
                   <div style={{ borderTop: `1px solid ${C.border}`, padding: '14px 18px', background: C.surface2 }}>
-                    {!isAdmin && t.estado === 'en_proceso' && (
+                    {t.asignado_a === user?.username && t.estado === 'en_proceso' && (
                       <div style={{ background: C.greenBg, borderRadius: 8, padding: 12, marginBottom: 12 }}>
                         <label style={{ ...lbl, color: C.green }}>Nota de cierre (opcional)</label>
-                        <div style={{ display: 'flex', gap: 8 }}>
+                        <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
                           <input style={{ ...inp, flex: 1 }} placeholder="Describe qué se realizó..."
                             value={notaEstado[t.id] || ''}
                             onChange={e => setNotaEstado(prev => ({ ...prev, [t.id]: e.target.value }))} />
-                          <Btn variant="success" size="sm"
-                            onClick={() => { cambiarEstado.mutate({ id: t.id, estado: 'completada', nota: notaEstado[t.id] || '' }); setExpandida(null); }}>
-                            Confirmar
-                          </Btn>
                         </div>
+                        <div style={{ marginBottom: 8 }}>
+                          <label style={{ display:'inline-block',padding:'5px 10px',border:`1px dashed ${C.green}`,
+                            borderRadius:6,cursor:'pointer',fontSize:11,color:C.green }}>
+                            📎 {(completarFiles[t.id]||[]).length > 0 ? `${completarFiles[t.id].length} archivo(s)` : 'Adjuntar evidencia'}
+                            <input type="file" multiple style={{ display:'none' }}
+                              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                              onChange={e => setCompletarFiles(p=>({...p,[t.id]:[...(p[t.id]||[]),...Array.from(e.target.files)]}))} />
+                          </label>
+                          {(completarFiles[t.id]||[]).length > 0 && (
+                            <div style={{ display:'inline-flex',flexWrap:'wrap',gap:4,marginLeft:8 }}>
+                              {(completarFiles[t.id]||[]).map((f,i)=>(
+                                <span key={i} style={{ fontSize:10,padding:'2px 6px',background:C.surface,
+                                  borderRadius:4,color:C.text,border:`1px solid ${C.border}` }}>
+                                  {f.name}
+                                  <span style={{ cursor:'pointer',color:C.red,marginLeft:4,fontWeight:700 }}
+                                    onClick={()=>setCompletarFiles(p=>({...p,[t.id]:p[t.id].filter((_,j)=>j!==i)}))}>×</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <Btn variant="success" size="sm"
+                          onClick={async () => {
+                            const files = completarFiles[t.id] || [];
+                            if (files.length > 0) {
+                              for (const file of files) {
+                                const fd = new FormData();
+                                fd.append('file', file);
+                                fd.append('afiliado_doc', '');
+                                fd.append('contexto', 'tarea');
+                                fd.append('contexto_id', String(t.id));
+                                await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+                              }
+                              qc.invalidateQueries({ queryKey: ['documentos-tarea', t.id] });
+                              setCompletarFiles(p => ({ ...p, [t.id]: [] }));
+                            }
+                            cambiarEstado.mutate({ id: t.id, estado: 'completada', nota: notaEstado[t.id] || '' });
+                            setExpandida(null);
+                          }}>
+                          ✓ Confirmar completada
+                        </Btn>
                       </div>
                     )}
 
@@ -437,6 +518,9 @@ export default function Tareas() {
                         ))}
                       </div>
                     )}
+
+                    {/* Documentos adjuntos de la tarea */}
+                    <TareaDocumentos tareaId={t.id} />
 
                     {t.estado !== 'finalizada' && (
                       <div style={{ display: 'flex', gap: 8 }}>
@@ -473,22 +557,60 @@ export default function Tareas() {
                 onChange={e => setForm(f => ({ ...f, descripcion: e.target.value }))} placeholder="Detalle de la tarea..." />
             </div>
             <div style={{ marginBottom: 12 }}>
-              <label style={lbl}>Asignar a *</label>
-              <select style={inp} value={form.asignado_a} onChange={e => setForm(f => ({ ...f, asignado_a: e.target.value }))}>
-                <option value="">— Seleccionar usuario —</option>
-                {usuarios.filter(u => u.activo).map(u => (
-                  <option key={u.id} value={u.username}>{u.nombre} ({u.username})</option>
-                ))}
-              </select>
+              <label style={{ display:'flex',alignItems:'center',gap:8,cursor:'pointer',fontSize:13,color:C.text }}>
+                <input type="checkbox" checked={form.privada}
+                  onChange={e=>setForm(f=>({...f, privada:e.target.checked, asignado_a: e.target.checked && !isAdmin ? user?.username||'' : f.asignado_a}))}
+                  style={{ width:16,height:16,accentColor:C.primary }} />
+                🔒 Tarea privada (solo visible para mí)
+              </label>
             </div>
+            {!form.privada && isAdmin && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={lbl}>Asignar a *</label>
+                <select style={inp} value={form.asignado_a} onChange={e => setForm(f => ({ ...f, asignado_a: e.target.value }))}>
+                  <option value="">— Seleccionar usuario —</option>
+                  {usuarios.filter(u => u.activo).map(u => (
+                    <option key={u.id} value={u.username}>{u.nombre} ({u.username})</option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {!form.privada && !isAdmin && (
+              <div style={{ marginBottom: 12 }}>
+                <label style={lbl}>Asignada a</label>
+                <input style={{ ...inp, background:C.surface2 }} readOnly value={user?.username || ''} />
+              </div>
+            )}
             <div style={{ marginBottom: 18 }}>
               <label style={lbl}>Fecha límite</label>
               <input type="date" style={inp} value={form.fecha_limite} onChange={e => setForm(f => ({ ...f, fecha_limite: e.target.value }))} />
             </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={lbl}>Adjuntar archivos (opcional)</label>
+              <label style={{ display:'block',padding:'8px 12px',border:`2px dashed ${C.border}`,
+                borderRadius:7,textAlign:'center',cursor:'pointer',color:C.text2,fontSize:12,background:C.surface2 }}>
+                📎 {nuevaFiles.length > 0 ? `${nuevaFiles.length} archivo(s) seleccionado(s)` : 'Haz clic para adjuntar'}
+                <input type="file" multiple style={{ display:'none' }}
+                  accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  onChange={e => setNuevaFiles(prev => [...prev, ...Array.from(e.target.files)])} />
+              </label>
+              {nuevaFiles.length > 0 && (
+                <div style={{ marginTop:6,display:'flex',flexWrap:'wrap',gap:4 }}>
+                  {nuevaFiles.map((f,i) => (
+                    <div key={i} style={{ display:'flex',alignItems:'center',gap:4,padding:'3px 8px',
+                      background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:5,fontSize:11 }}>
+                      <span style={{ color:C.blue }}>{f.name}</span>
+                      <span style={{ cursor:'pointer',color:C.red,fontWeight:700 }}
+                        onClick={()=>setNuevaFiles(p=>p.filter((_,j)=>j!==i))}>×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-              <Btn variant="secondary" onClick={() => setModalNueva(false)}>Cancelar</Btn>
+              <Btn variant="secondary" onClick={() => { setModalNueva(false); setNuevaFiles([]); }}>Cancelar</Btn>
               <Btn variant="accent"
-                disabled={!form.titulo.trim() || !form.asignado_a || crear.isPending}
+                disabled={!form.titulo.trim() || (!form.privada && !form.asignado_a && isAdmin) || crear.isPending}
                 onClick={() => crear.mutate()}>
                 {crear.isPending ? 'Creando...' : 'Crear tarea'}
               </Btn>
@@ -517,6 +639,73 @@ export default function Tareas() {
           onCancel={() => setConfirm(null)}
         />
       )}
+    </div>
+  );
+}
+
+// ─── DOCUMENTOS DE TAREA ────────────────────────────────────────────────────
+function TareaDocumentos({ tareaId }) {
+  const qc = useQueryClient();
+  const [uploading, setUploading] = useState(false);
+  const { data: docs=[] } = useQuery({
+    queryKey: ['documentos-tarea', tareaId],
+    queryFn: () => api.get('/documentos', { params: { contexto: 'tarea', contexto_id: tareaId } }).then(r=>r.data),
+  });
+
+  const handleUpload = async (files) => {
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('afiliado_doc', '');
+        fd.append('contexto', 'tarea');
+        fd.append('contexto_id', String(tareaId));
+        await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Error subiendo archivo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDownload = async (doc) => {
+    try {
+      const res = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(res.data);
+      a.download = doc.nombre;
+      a.click();
+    } catch { alert('Error descargando'); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Eliminar documento?')) return;
+    try {
+      await api.delete(`/documentos/${id}`);
+      qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
+    } catch { alert('Error eliminando'); }
+  };
+
+  if (docs.length === 0) return null;
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display:'flex',alignItems:'center',gap:8,marginBottom:6 }}>
+        <span style={{ fontSize:12,fontWeight:600,color:C.text2 }}>📎 Adjuntos ({docs.length})</span>
+      </div>
+      {docs.map(d=>(
+        <div key={d.id} style={{ display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.text,
+          background:C.surface,padding:'4px 10px',borderRadius:6,marginBottom:3,border:`1px solid ${C.border}` }}>
+          <span style={{ flex:1,cursor:'pointer',textDecoration:'underline',color:C.blue }} onClick={()=>handleDownload(d)}>
+            {d.nombre}
+          </span>
+          <span style={{ color:C.text2,fontSize:11 }}>{d.subido_por}</span>
+          <span style={{ cursor:'pointer',color:C.red,fontWeight:700 }} onClick={()=>handleDelete(d.id)}>×</span>
+        </div>
+      ))}
     </div>
   );
 }

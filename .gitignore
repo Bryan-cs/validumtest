@@ -27,6 +27,7 @@ env/
 *.db
 *.sqlite3
 backend/backups/
+backend/uploads/
 
 # Node
 node_modules/

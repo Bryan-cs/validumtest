@@ -1,10 +1,16 @@
 from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey
 from sqlalchemy.orm import relationship
 from database import Base
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+
+COL_TZ = timezone(timedelta(hours=-5))   # Colombia UTC-5
 
 def _utcnow():
     return datetime.now(timezone.utc)
+
+def _col_now():
+    """Hora actual en Colombia (UTC-5)."""
+    return datetime.now(COL_TZ)
 
 class Usuario(Base):
     __tablename__ = "usuarios"
@@ -37,6 +43,7 @@ class Afiliado(Base):
     tel             = Column(String(20))
     email           = Column(String(100))
     dir             = Column(String(200))
+    ciudad          = Column(String(100))
     obs             = Column(Text)
     novedades       = Column(Text)
     detalle         = Column(Text)
@@ -204,6 +211,7 @@ class Tarea(Base):
     creado_por    = Column(String(60))
     estado        = Column(String(20), default="pendiente", index=True)  # pendiente|en_proceso|completada|finalizada
     fecha_limite  = Column(String(10), nullable=True)
+    privada       = Column(Boolean, default=False)
     creado        = Column(DateTime, default=_utcnow)
     completado_en = Column(DateTime, nullable=True)
     finalizado_en = Column(DateTime, nullable=True)
@@ -232,3 +240,16 @@ class Notificacion(Base):
     leida    = Column(Boolean, default=False)
     tarea_id = Column(Integer, nullable=True)
     creado   = Column(DateTime, default=_utcnow)
+
+class Documento(Base):
+    __tablename__ = "documentos"
+    id           = Column(Integer, primary_key=True, index=True)
+    afiliado_doc = Column(String(20), index=True)       # doc del afiliado dueño
+    nombre       = Column(String(200))                   # nombre original del archivo
+    tipo         = Column(String(20))                    # extension: pdf, jpg, png, docx, xlsx
+    ruta         = Column(String(500))                   # path relativo en backend/uploads/
+    tamano       = Column(Integer, default=0)            # bytes
+    subido_por   = Column(String(60))
+    contexto     = Column(String(60), default="afiliado") # afiliado | tarea | novedad_portal
+    contexto_id  = Column(Integer, nullable=True)        # id de tarea o solicitud si aplica
+    creado       = Column(DateTime, default=_utcnow)

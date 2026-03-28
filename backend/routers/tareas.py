@@ -14,8 +14,15 @@ def list_tareas(db: Session = Depends(get_db), token=Depends(verify_token)):
 
 
 @router.post("", status_code=201)
-def create_tarea(data: schemas.TareaCreate, db: Session = Depends(get_db), token=Depends(require_admin)):
+def create_tarea(data: schemas.TareaCreate, db: Session = Depends(get_db), token=Depends(verify_token)):
+    # Solo admin puede crear tareas no privadas (asignadas a otros)
+    if not data.privada and token.get("rol") != "admin":
+        # Empleados pueden crear solo privadas auto-asignadas
+        data.privada = True
+        data.asignado_a = token["sub"]
     data.creado_por = token["sub"]
+    if data.privada:
+        data.asignado_a = token["sub"]
     return crud.create_tarea(db, data)
 
 
@@ -75,6 +82,26 @@ def finalizar(id: int, db: Session = Depends(get_db), token=Depends(require_admi
     if isinstance(t, dict) and "error" in t:
         raise HTTPException(400, t["error"])
     return t
+
+
+@router.delete("/{id}")
+def eliminar_tarea(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Admin puede eliminar tareas finalizadas o privadas que creó. Empleado solo sus privadas."""
+    t = db.query(models.Tarea).filter_by(id=id).first()
+    if not t:
+        raise HTTPException(404, "Tarea no encontrada")
+    es_admin = token.get("rol") == "admin"
+    es_dueno = t.creado_por == token["sub"]
+    estado_ok = t.estado in ("completada", "finalizada")
+    if es_admin and estado_ok:
+        pass  # admin puede eliminar cualquier tarea finalizada/completada
+    elif es_dueno and t.privada and estado_ok:
+        pass  # dueño puede eliminar sus privadas completadas/finalizadas
+    else:
+        raise HTTPException(403, "No tienes permiso para eliminar esta tarea")
+    db.delete(t)
+    db.commit()
+    return {"ok": True}
 
 
 @router.post("/{id}/comentarios", status_code=201)

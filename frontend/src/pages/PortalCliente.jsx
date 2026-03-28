@@ -115,7 +115,6 @@ function ModalResumen({ doc, onClose }) {
                 <Badge color={data.afiliado.estado==='ACTIVO'?C.green:C.red} bg={data.afiliado.estado==='ACTIVO'?C.greenBg:C.redBg}>
                   {data.afiliado.estado}
                 </Badge>
-                <Badge color={C.blue} bg={C.blueBg}>{data.afiliado.estado_srv}</Badge>
               </div>
             </div>
 
@@ -177,13 +176,31 @@ function ModalNovedadPago({ seleccionados, afiliados, onClose, onSuccess }) {
   const [mes, setMes] = useState(MESES[new Date().getMonth()]);
   const [anio, setAnio] = useState(String(anioActual));
   const [obs, setObs] = useState('');
+  const [archivos, setArchivos] = useState([]);
+  const [subiendo, setSubiendo] = useState(false);
 
   const crear = useMutation({
-    mutationFn: () => api.post('/portal/novedades-pago', {
-      mes, anio, afiliados_docs: seleccionados, obs,
-    }),
+    mutationFn: async () => {
+      const res = await api.post('/portal/novedades-pago', {
+        mes, anio, afiliados_docs: seleccionados, obs,
+      });
+      const novId = res.data?.id;
+      if (archivos.length > 0 && novId) {
+        setSubiendo(true);
+        for (const file of archivos) {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('afiliado_doc', seleccionados[0] || '');
+          fd.append('contexto', 'novedad_portal');
+          fd.append('contexto_id', String(novId));
+          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
+        setSubiendo(false);
+      }
+      return res;
+    },
     onSuccess: () => { toast.success('Novedad de pago reportada al administrador'); onSuccess(); onClose(); },
-    onError: (e) => { const d = e?.response?.data?.detail; toast.error(d || 'Error al reportar novedad'); },
+    onError: (e) => { setSubiendo(false); const d = e?.response?.data?.detail; toast.error(d || 'Error al reportar novedad'); },
   });
 
   const selAfiliados = afiliados.filter(a => seleccionados.includes(a.doc));
@@ -220,15 +237,38 @@ function ModalNovedadPago({ seleccionados, afiliados, onClose, onSuccess }) {
           </div>
         </div>
 
-        <div style={{ marginBottom:16 }}>
+        <div style={{ marginBottom:12 }}>
           <label style={lbl}>Observaciones (opcional)</label>
           <textarea style={{ ...inp, resize:'vertical', minHeight:60 }} value={obs} onChange={e => setObs(e.target.value)} />
         </div>
 
+        <div style={{ marginBottom:16 }}>
+          <label style={lbl}>Adjuntar documentos (opcional)</label>
+          <div style={{ border:`2px dashed ${C.border}`,borderRadius:8,padding:'12px',textAlign:'center',
+            background:C.surface2,cursor:'pointer' }}
+            onClick={()=>document.getElementById('portal-pago-files')?.click()}>
+            <input id="portal-pago-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+              style={{ display:'none' }}
+              onChange={e=>{ setArchivos(prev=>[...prev,...Array.from(e.target.files)]); e.target.value=''; }} />
+            <div style={{ fontSize:12,color:C.text2 }}>📂 Click para adjuntar comprobantes</div>
+          </div>
+          {archivos.length > 0 && (
+            <div style={{ marginTop:6,display:'flex',flexDirection:'column',gap:3 }}>
+              {archivos.map((f,i)=>(
+                <div key={i} style={{ display:'flex',alignItems:'center',gap:6,fontSize:11,color:C.text,
+                  background:C.surface2,padding:'3px 8px',borderRadius:5 }}>
+                  <span style={{ flex:1 }}>{f.name}</span>
+                  <span style={{ cursor:'pointer',color:C.red,fontWeight:700 }} onClick={()=>setArchivos(prev=>prev.filter((_,j)=>j!==i))}>×</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ display:'flex',gap:10,justifyContent:'flex-end' }}>
           <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn variant="success" onClick={() => crear.mutate()} disabled={crear.isPending}>
-            {crear.isPending ? 'Enviando...' : 'Confirmar y Notificar'}
+          <Btn variant="success" onClick={() => crear.mutate()} disabled={crear.isPending||subiendo}>
+            {subiendo ? 'Subiendo archivos...' : crear.isPending ? 'Enviando...' : 'Confirmar y Notificar'}
           </Btn>
         </div>
       </div>
@@ -245,23 +285,41 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
   ];
   const [tipo, setTipo] = useState('');
   const [descripcion, setDescripcion] = useState('');
+  const [archivos, setArchivos] = useState([]);
+  const [subiendo, setSubiendo] = useState(false);
 
   const crear = useMutation({
-    mutationFn: () => {
-      if (!tipo) return Promise.reject(new Error('Selecciona el tipo de novedad'));
-      if (!descripcion.trim()) return Promise.reject(new Error('La descripción es obligatoria'));
-      return api.post('/portal/solicitudes-novedad', { afiliado_doc: afiliado.doc, tipo, descripcion });
+    mutationFn: async () => {
+      if (!tipo) throw new Error('Selecciona el tipo de novedad');
+      if (!descripcion.trim()) throw new Error('La descripción es obligatoria');
+      const res = await api.post('/portal/solicitudes-novedad', { afiliado_doc: afiliado.doc, tipo, descripcion });
+      const novId = res.data?.id;
+      if (archivos.length > 0 && novId) {
+        setSubiendo(true);
+        for (const file of archivos) {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('afiliado_doc', afiliado.doc);
+          fd.append('contexto', 'novedad_portal');
+          fd.append('contexto_id', String(novId));
+          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
+        setSubiendo(false);
+      }
+      return res;
     },
     onSuccess: () => { toast.success('Novedad enviada al administrador'); onSuccess(); onClose(); },
-    onError: (e) => { const d = e?.message || e?.response?.data?.detail; toast.error(d || 'Error'); },
+    onError: (e) => { setSubiendo(false); const d = e?.message || e?.response?.data?.detail; toast.error(d || 'Error'); },
   });
+
+  const removeFile = (idx) => setArchivos(prev => prev.filter((_,i) => i !== idx));
 
   return (
     <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-      <div style={{ background:C.surface,borderRadius:14,padding:28,width:460,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
+      <div style={{ background:C.surface,borderRadius:14,padding:28,width:500,boxShadow:'0 20px 60px rgba(0,0,0,.3)',maxHeight:'90vh',overflowY:'auto' }}>
         <h3 style={{ margin:'0 0 16px',color:C.primary }}>Reportar Novedad del Afiliado</h3>
 
-        <div style={{ background:C.surface,borderRadius:8,padding:12,marginBottom:16 }}>
+        <div style={{ background:C.surface2,borderRadius:8,padding:12,marginBottom:16 }}>
           <div style={{ fontWeight:600,fontSize:14,color:C.text }}>{afiliado.nombre}</div>
           <div style={{ fontSize:12,color:C.text2 }}>{afiliado.tipo_doc} {afiliado.doc} — {afiliado.empresa}</div>
         </div>
@@ -274,17 +332,40 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
           </select>
         </div>
 
-        <div style={{ marginBottom:16 }}>
+        <div style={{ marginBottom:12 }}>
           <label style={lbl}>Descripción *</label>
           <textarea style={{ ...inp, resize:'vertical', minHeight:90 }}
             placeholder="Describe la situación del afiliado..."
             value={descripcion} onChange={e => setDescripcion(e.target.value)} />
         </div>
 
+        <div style={{ marginBottom:16 }}>
+          <label style={lbl}>Adjuntar documentos (opcional)</label>
+          <div style={{ border:`2px dashed ${C.border}`,borderRadius:8,padding:'14px',textAlign:'center',
+            background:C.surface2,cursor:'pointer',position:'relative' }}
+            onClick={()=>document.getElementById('portal-nov-files')?.click()}>
+            <input id="portal-nov-files" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+              style={{ display:'none' }}
+              onChange={e=>{ setArchivos(prev=>[...prev,...Array.from(e.target.files)]); e.target.value=''; }} />
+            <div style={{ fontSize:13,color:C.text2 }}>📂 Click para seleccionar archivos</div>
+          </div>
+          {archivos.length > 0 && (
+            <div style={{ marginTop:8,display:'flex',flexDirection:'column',gap:4 }}>
+              {archivos.map((f,i)=>(
+                <div key={i} style={{ display:'flex',alignItems:'center',gap:8,fontSize:12,color:C.text,
+                  background:C.surface2,padding:'4px 8px',borderRadius:6 }}>
+                  <span style={{ flex:1 }}>{f.name} ({(f.size/1024).toFixed(0)} KB)</span>
+                  <span style={{ cursor:'pointer',color:C.red,fontWeight:700 }} onClick={()=>removeFile(i)}>×</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         <div style={{ display:'flex',gap:10,justifyContent:'flex-end' }}>
           <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn variant="accent" onClick={() => crear.mutate()} disabled={crear.isPending||!tipo||!descripcion.trim()}>
-            {crear.isPending ? 'Enviando...' : 'Enviar novedad'}
+          <Btn variant="accent" onClick={() => crear.mutate()} disabled={crear.isPending||subiendo||!tipo||!descripcion.trim()}>
+            {subiendo ? 'Subiendo archivos...' : crear.isPending ? 'Enviando...' : 'Enviar novedad'}
           </Btn>
         </div>
       </div>
@@ -344,6 +425,45 @@ function ModalRetiro({ afiliado, onClose, onSuccess }) {
           </Btn>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ─── ADJUNTOS POR NOVEDAD ────────────────────────────────────────────────────
+function DocsNovedad({ novedadId }) {
+  const [open, setOpen] = useState(false);
+  const { data: docs=[], isLoading } = useQuery({
+    queryKey: ['docs-novedad-portal', novedadId],
+    queryFn: () => api.get('/documentos', { params: { contexto: 'novedad_resp', contexto_id: novedadId } }).then(r => r.data),
+    enabled: open,
+  });
+  if (!open) return (
+    <button onClick={() => setOpen(true)}
+      style={{ fontSize:11, color:C.blue, background:'none', border:'none', cursor:'pointer', padding:0, textDecoration:'underline', marginTop:6, display:'block' }}>
+      📎 Ver adjuntos
+    </button>
+  );
+  return (
+    <div style={{ marginTop:8 }}>
+      {isLoading ? <span style={{ fontSize:11, color:C.text2 }}>Cargando...</span> :
+        docs.length === 0 ? <span style={{ fontSize:11, color:C.text2 }}>Sin adjuntos</span> :
+        docs.map(d => (
+          <div key={d.id} style={{ fontSize:12, marginBottom:3 }}>
+            <span style={{ color:C.blue, cursor:'pointer', textDecoration:'underline' }}
+              onClick={async () => {
+                const res = await api.get(`/documentos/${d.id}/descargar`, { responseType:'blob' });
+                const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = d.nombre; a.click();
+              }}>
+              📄 {d.nombre}
+            </span>
+            <span style={{ color:C.text2, fontSize:10, marginLeft:6 }}>{d.subido_por}</span>
+          </div>
+        ))
+      }
+      <button onClick={() => setOpen(false)}
+        style={{ fontSize:10, color:C.text2, background:'none', border:'none', cursor:'pointer', padding:0, marginTop:4 }}>
+        Ocultar
+      </button>
     </div>
   );
 }
@@ -458,6 +578,7 @@ function TabHistorial() {
                     <strong>✅ Respuesta:</strong> {item.respuesta}
                   </div>
                 )}
+                <DocsNovedad novedadId={item.id} />
                 <div style={{ fontSize:11, color:C.text2, marginTop:6 }}>{new Date(item.creado).toLocaleString('es-CO')}</div>
               </div>
             );
@@ -543,6 +664,11 @@ export default function PortalCliente() {
   const qc = useQueryClient();
 
   const handleLogout = () => { logout(); navigate('/login'); };
+  const [dark, setDark] = useState(() => localStorage.getItem('theme-portal') === 'dark');
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+    localStorage.setItem('theme-portal', dark ? 'dark' : 'light');
+  }, [dark]);
   const [q, setQ] = useState('');
   const [filtroEstado, setFiltroEstado] = useState('');
   const [filtroEmpresa, setFiltroEmpresa] = useState('');
@@ -629,6 +755,9 @@ export default function PortalCliente() {
             <div style={{ display:'flex', alignItems:'center', gap:12 }}>
               <span style={{ color:'rgba(255,255,255,.75)', fontSize:13 }}>👤 {user?.nombre}</span>
               <CampanaNotif />
+              <button onClick={() => setDark(d => !d)} title={dark ? 'Modo claro' : 'Modo oscuro'} style={{ padding:'5px 10px', background:'rgba(255,255,255,.15)', border:'1px solid rgba(255,255,255,.25)', borderRadius:6, color:'#fff', fontSize:15, cursor:'pointer' }}>
+                {dark ? '☀️' : '🌙'}
+              </button>
               <button onClick={handleLogout} style={{ padding:'5px 12px', background:'rgba(255,255,255,.15)', border:'1px solid rgba(255,255,255,.25)', borderRadius:6, color:'#fff', fontSize:12, cursor:'pointer' }}>
                 Salir
               </button>

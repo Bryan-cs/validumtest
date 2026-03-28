@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from database import get_db, init_db
 from sqlalchemy.orm import Session
 import models, schemas, crud
+from models import COL_TZ
 from routers.deps import verify_token, require_admin
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
@@ -54,6 +55,24 @@ def _limpiar_actividad_antigua():
         db.close()
 
 
+def _limpiar_tareas_mensuales():
+    """Elimina tareas finalizadas con más de 30 días para liberar espacio."""
+    from database import SessionLocal
+    from datetime import timedelta
+    db = SessionLocal()
+    try:
+        limite = datetime.now(timezone.utc) - timedelta(days=30)
+        db.query(models.Tarea).filter(
+            models.Tarea.estado == "finalizada",
+            models.Tarea.actualizado < limite,
+        ).delete()
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
 _start_time = None
 
 @asynccontextmanager
@@ -81,6 +100,7 @@ async def lifespan(app: FastAPI):
         _scheduler = BackgroundScheduler()
         _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
         _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
+        _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
         _scheduler.start()
     except Exception as e:
         from logger import logger as _log
@@ -128,6 +148,7 @@ from routers import facturas as facturas_router
 from routers import reportes as reportes_router
 from routers import tareas as tareas_router
 from routers import portal as portal_router
+from routers.documentos import router as documentos_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
@@ -135,6 +156,7 @@ app.include_router(facturas_router.router)
 app.include_router(reportes_router.router)
 app.include_router(tareas_router.router)
 app.include_router(portal_router.router)
+app.include_router(documentos_router)
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
@@ -244,7 +266,7 @@ def create_retiro(data: schemas.RetiroCreate,
     afil = crud.get_afiliado_by_doc(db, data.doc)
     if not afil: raise HTTPException(404, "Afiliado no encontrado")
     mes_actual = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][datetime.now().month-1]
+                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][datetime.now(COL_TZ).month-1]
     pendientes = crud.get_facturas_pendientes_by_doc(db, data.doc, mes=mes_actual)
     data.registrado_por = token.get("sub","sistema")
     retiro = crud.create_retiro(db, data)

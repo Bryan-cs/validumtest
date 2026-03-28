@@ -3,6 +3,7 @@ import io
 import os
 import json
 from datetime import datetime
+from models import COL_TZ
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -65,7 +66,7 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
         else:
             c.drawString(x, y, str(text or ""))
 
-    fecha_hoy = datetime.now().strftime("%d de %B de %Y").replace(
+    fecha_hoy = datetime.now(COL_TZ).strftime("%d de %B de %Y").replace(
         "January","enero").replace("February","febrero").replace("March","marzo"
         ).replace("April","abril").replace("May","mayo").replace("June","junio"
         ).replace("July","julio").replace("August","agosto").replace("September","septiembre"
@@ -247,7 +248,7 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     c.drawString(320, y, f"Empresa:  {a.get('empresa','—')}")
     y -= 14
     c.drawString(80, y, f"Cliente:  {a.get('cliente_txt','—')}")
-    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    fecha_hoy = datetime.now(COL_TZ).strftime("%d/%m/%Y")
     c.drawString(320, y, f"Fecha:  {fecha_hoy}")
 
     # Tabla de facturas
@@ -293,6 +294,13 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
         except (json.JSONDecodeError, TypeError):
             srvs = []
         nombres_srvs = ", ".join(s.get("servicio", "") for s in srvs if s.get("incluido", True))
+        # Si no hay servicios_detalle, usar servicios del afiliado como fallback
+        if not nombres_srvs:
+            try:
+                srvs_afil = json.loads(a.get('servicios') or "[]") if isinstance(a.get('servicios'), str) else (a.get('servicios') or [])
+                nombres_srvs = ", ".join(str(s) for s in srvs_afil if s)
+            except Exception:
+                pass
 
         total_val    = fac.costos or 0
         estado_color = colors.HexColor("#16A34A") if fac.estado == "pagado" else colors.HexColor("#DC2626")
@@ -334,8 +342,6 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
     c.drawString(50, y, f"Total pagado: {money(total_pagado)}")
     c.setFillColor(colors.HexColor("#DC2626"))
     c.drawString(230, y, f"Total pendiente: {money(total_pendiente)}")
-    c.setFillColor(colors.HexColor("#1E40AF"))
-    c.drawString(430, y, f"Total general: {money(total_pagado + total_pendiente)}")
 
     c.save()
 
