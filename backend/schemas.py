@@ -10,6 +10,13 @@ class AfiliadoCreate(BaseModel):
     nombre: str
     tipo_doc: str = "CC"
     doc: str
+
+    @field_validator('doc', mode='before')
+    @classmethod
+    def doc_no_vacio(cls, v):
+        if not v or not str(v).strip():
+            raise ValueError('Documento es requerido')
+        return str(v).strip()
     empresa: str = ""
     cargo: str = ""
     cliente_txt: str = ""
@@ -118,6 +125,13 @@ class RetiroCreate(BaseModel):
     obs: str = ""
     registrado_por: str = ""
 
+    @field_validator('fecha', mode='before')
+    @classmethod
+    def fecha_formato(cls, v):
+        if not v or not str(v).strip():
+            raise ValueError('Fecha es requerida')
+        return str(v).strip()
+
 class EmpleadoCreate(BaseModel):
     nombre: str
     doc: str = ""
@@ -182,6 +196,13 @@ class ConfigUpdate(BaseModel):
     plantilla_whatsapp: Optional[str] = None
     cargo_adicional: Optional[float] = None
 
+    @field_validator('ibc_global', 'cargo_adicional', mode='before')
+    @classmethod
+    def no_negativos(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('El valor no puede ser negativo')
+        return v
+
 class ListaUpdate(BaseModel):
     items: List[str]
 
@@ -192,6 +213,9 @@ class TareaCreate(BaseModel):
     creado_por: str = ""
     fecha_limite: str = ""
     privada: bool = False
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 class TareaComentarioCreate(BaseModel):
     texto: str

@@ -5,12 +5,12 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
 import jwt
 
-SECRET_KEY = os.getenv("SECRET_KEY")
+_INSECURE_KEYS = {"dev-only-key-do-not-use-in-prod", "cambia-esta-clave-por-una-segura-antes-de-produccion"}
+SECRET_KEY = os.getenv("SECRET_KEY", "")
+_is_production = os.getenv("ENVIRONMENT", "development") == "production" or os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("DATABASE_URL", "").startswith("postgresql")
+if _is_production and (not SECRET_KEY or SECRET_KEY in _INSECURE_KEYS):
+    raise RuntimeError("SECRET_KEY env var segura es requerida en producción (detectado entorno de producción)")
 if not SECRET_KEY:
-    # En cualquier entorno sin SECRET_KEY configurada se usa clave de desarrollo
-    # En producción (ENVIRONMENT=production) se bloquea el arranque
-    if os.getenv("ENVIRONMENT", "development") == "production":
-        raise RuntimeError("SECRET_KEY env var is required in production")
     SECRET_KEY = "dev-only-key-do-not-use-in-prod"
 ALGORITHM  = "HS256"
 TOKEN_EXPIRE_HOURS = 12
@@ -30,9 +30,18 @@ def create_token(data: dict, expires: timedelta = None):
 def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
     try:
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        # Reject refresh tokens used as access tokens
         if payload.get("type") == "refresh":
             raise HTTPException(status_code=401, detail="Token de refresco no válido como token de acceso")
+        # Verificar que el usuario siga activo en DB
+        from database import SessionLocal
+        import models
+        db = SessionLocal()
+        try:
+            user = db.query(models.Usuario).filter_by(username=payload.get("sub"), activo=True).first()
+            if not user:
+                raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")
+        finally:
+            db.close()
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")

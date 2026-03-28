@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { resetRedirectFlag } from '../utils/api';
 
 function _loadUser() {
   try {
@@ -44,6 +45,7 @@ const useAuthStore = create((set) => ({
     if (refresh_token) {
       localStorage.setItem('refresh_token', refresh_token);
     }
+    resetRedirectFlag();
     set({ token, user, refresh_token: refresh_token || null });
   },
 

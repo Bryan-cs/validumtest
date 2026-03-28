@@ -63,13 +63,19 @@ def finalizar_lote(body: dict, db: Session = Depends(get_db), token=Depends(requ
 # ── Rutas dinámicas ───────────────────────────────────────────────────────────
 
 @router.put("/{id}/estado")
-def cambiar_estado(id: int, body: dict = {}, db: Session = Depends(get_db), token=Depends(verify_token)):
+def cambiar_estado(id: int, body: dict = None, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Empleado cambia estado: pendiente → en_proceso → completada."""
+    if body is None:
+        body = {}
     nuevo = body.get("estado", "")
     nota  = body.get("nota", "")
     t = crud.cambiar_estado_tarea(db, id, nuevo, token["sub"], nota, rol=token.get("rol", ""))
     if not t:
         raise HTTPException(400, "Estado inválido o tarea no encontrada")
+    if isinstance(t, dict) and "error" in t:
+        if t["error"] == "unauthorized":
+            raise HTTPException(403, "No tienes permiso sobre esta tarea")
+        raise HTTPException(400, t["error"])
     return t
 
 

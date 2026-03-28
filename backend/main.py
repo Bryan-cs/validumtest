@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
 from datetime import datetime, timezone
-from database import get_db, init_db
+from database import get_db, init_db, _is_sqlite
 from sqlalchemy.orm import Session
 import models, schemas, crud
 from models import COL_TZ
@@ -28,14 +28,16 @@ limiter = Limiter(key_func=get_remote_address)
 def _limpiar_notificaciones_diario():
     """Elimina todas las notificaciones del día anterior al iniciar un nuevo día."""
     from database import SessionLocal
-    from datetime import date, time
+    from logger import logger as _log
     db = SessionLocal()
     try:
-        hoy = datetime.combine(date.today(), time())
-        db.query(models.Notificacion).filter(models.Notificacion.creado < hoy).delete()
+        hoy = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+        count = db.query(models.Notificacion).filter(models.Notificacion.creado < hoy).delete()
         db.commit()
-    except Exception:
-        pass
+        if count: _log.info(f"Limpieza: {count} notificaciones antiguas eliminadas")
+    except Exception as e:
+        db.rollback()
+        _log.error(f"Error limpieza notificaciones: {e}")
     finally:
         db.close()
 
@@ -44,13 +46,16 @@ def _limpiar_actividad_antigua():
     """Elimina registros de actividad con más de 90 días."""
     from database import SessionLocal
     from datetime import timedelta
+    from logger import logger as _log
     db = SessionLocal()
     try:
         limite = datetime.now(timezone.utc) - timedelta(days=90)
-        db.query(models.Actividad).filter(models.Actividad.fecha < limite).delete()
+        count = db.query(models.Actividad).filter(models.Actividad.fecha < limite).delete()
         db.commit()
-    except Exception:
-        pass
+        if count: _log.info(f"Limpieza: {count} registros de actividad antiguos eliminados")
+    except Exception as e:
+        db.rollback()
+        _log.error(f"Error limpieza actividad: {e}")
     finally:
         db.close()
 
@@ -59,16 +64,19 @@ def _limpiar_tareas_mensuales():
     """Elimina tareas finalizadas con más de 30 días para liberar espacio."""
     from database import SessionLocal
     from datetime import timedelta
+    from logger import logger as _log
     db = SessionLocal()
     try:
         limite = datetime.now(timezone.utc) - timedelta(days=30)
-        db.query(models.Tarea).filter(
+        count = db.query(models.Tarea).filter(
             models.Tarea.estado == "finalizada",
-            models.Tarea.actualizado < limite,
+            models.Tarea.finalizado_en < limite,
         ).delete()
         db.commit()
-    except Exception:
-        pass
+        if count: _log.info(f"Limpieza: {count} tareas finalizadas antiguas eliminadas")
+    except Exception as e:
+        db.rollback()
+        _log.error(f"Error limpieza tareas: {e}")
     finally:
         db.close()
 
@@ -91,20 +99,31 @@ async def lifespan(app: FastAPI):
         _db.close()
     except Exception:
         pass
-    # Tareas programadas de limpieza
-    # Nota: con --workers 2, cada worker inicia su propio scheduler.
-    # Los jobs de limpieza son DELETEs idempotentes, así que correr 2x es inofensivo.
-    # El backup de SQLite se omite aquí; en producción se usa PostgreSQL de Railway.
-    try:
-        from apscheduler.schedulers.background import BackgroundScheduler
-        _scheduler = BackgroundScheduler()
-        _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
-        _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
-        _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
-        _scheduler.start()
-    except Exception as e:
-        from logger import logger as _log
-        _log.error(f"APScheduler no pudo iniciar: {e}")
+    # Tareas programadas de limpieza — solo iniciar en un worker
+    # Usa un lock en DB para evitar que múltiples workers ejecuten el scheduler
+    _should_schedule = True
+    if not _is_sqlite:
+        try:
+            from database import SessionLocal
+            from sqlalchemy import text
+            _sdb = SessionLocal()
+            # Intentar advisory lock de PostgreSQL (no bloqueante)
+            _got_lock = _sdb.execute(text("SELECT pg_try_advisory_lock(1)")).scalar()
+            _sdb.close()
+            _should_schedule = bool(_got_lock)
+        except Exception:
+            _should_schedule = True  # si falla, dejar que corra
+    if _should_schedule:
+        try:
+            from apscheduler.schedulers.background import BackgroundScheduler
+            _scheduler = BackgroundScheduler()
+            _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
+            _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
+            _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
+            _scheduler.start()
+        except Exception as e:
+            from logger import logger as _log
+            _log.error(f"APScheduler no pudo iniciar: {e}")
     yield
 
 
@@ -114,10 +133,13 @@ app = FastAPI(title="BBC File API", version="1.0.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# En producción: ALLOWED_ORIGINS=https://tu-app.netlify.app
+# En producción: ALLOWED_ORIGINS=https://tu-app.vercel.app
 # En desarrollo: dejar vacío → permite cualquier origen
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
+if _allowed_origins == ["*"] and (os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ENVIRONMENT") == "production"):
+    from logger import logger as _cors_log
+    _cors_log.warning("⚠️  SEGURIDAD: ALLOWED_ORIGINS no configurado — CORS permite cualquier origen en producción")
 
 app.add_middleware(
     CORSMiddleware,
@@ -438,6 +460,7 @@ def actividad(modulo: str = "", usuario: str = "",
               desde: str = "", hasta: str = "",
               skip: int = 0, limit: int = 200,
               db: Session = Depends(get_db), token=Depends(require_admin)):
+    limit = min(limit, 1000) if limit > 0 else 200
     return crud.get_actividad(db, modulo=modulo, usuario=usuario, desde=desde, hasta=hasta,
                               skip=skip, limit=limit)
 

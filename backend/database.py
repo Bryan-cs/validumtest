@@ -27,6 +27,9 @@ def get_db():
     db = SessionLocal()
     try:
         yield db
+    except Exception:
+        db.rollback()
+        raise
     finally:
         db.close()
 
@@ -41,8 +44,9 @@ def init_db():
         alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
         alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
         command.upgrade(alembic_cfg, "head")
-    except Exception:
-        pass  # Si Alembic falla, las tablas ya están creadas por create_all
+    except Exception as e:
+        import logging
+        logging.getLogger("bbcfile").warning(f"Alembic upgrade falló (create_all ya creó las tablas): {e}")
     # Safety net: agregar columnas nuevas si Alembic no las creó
     _ensure_columns()
     # Seed data inicial si la DB está vacía
@@ -58,18 +62,28 @@ def _ensure_columns():
     insp = inspect(engine)
     _missing = []
     def _check(table, column, ddl):
-        cols = [c["name"] for c in insp.get_columns(table)] if insp.has_table(table) else []
+        if not insp.has_table(table):
+            return
+        cols = [c["name"] for c in insp.get_columns(table)]
         if column not in cols:
             _missing.append((table, column, ddl))
     _check("afiliados", "ciudad", "ALTER TABLE afiliados ADD COLUMN ciudad VARCHAR(100)")
-    _check("tareas", "privada", "ALTER TABLE tareas ADD COLUMN privada BOOLEAN DEFAULT FALSE")
+    _check("afiliados", "detalle", "ALTER TABLE afiliados ADD COLUMN detalle TEXT")
+    _check("tareas", "privada", "ALTER TABLE tareas ADD COLUMN privada BOOLEAN DEFAULT 0")
+    _check("tareas", "completado_en", "ALTER TABLE tareas ADD COLUMN completado_en TIMESTAMP")
+    _check("tareas", "finalizado_en", "ALTER TABLE tareas ADD COLUMN finalizado_en TIMESTAMP")
+    _check("tareas", "finalizado_por", "ALTER TABLE tareas ADD COLUMN finalizado_por VARCHAR(60)")
+    _check("config", "plantilla_whatsapp", "ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT")
+    _check("config", "cargo_adicional", "ALTER TABLE config ADD COLUMN cargo_adicional FLOAT")
+    _check("facturas", "afiliado_eliminado", "ALTER TABLE facturas ADD COLUMN afiliado_eliminado BOOLEAN DEFAULT 0")
     if _missing:
         with engine.begin() as conn:
             for table, col, ddl in _missing:
                 try:
                     conn.execute(text(ddl))
-                except Exception:
-                    pass
+                except Exception as e:
+                    import logging
+                    logging.getLogger("bbcfile").warning(f"_ensure_columns: no se pudo agregar {table}.{col}: {e}")
 
 
 def _seed(db):

@@ -57,7 +57,7 @@ export default function Layout() {
     if (noLeidas > 0) {
       api.put('/tareas/notificaciones/leer').then(() =>
         qc.invalidateQueries({ queryKey: ['notificaciones'] })
-      );
+      ).catch(() => {});
     }
   };
 
@@ -184,7 +184,7 @@ export default function Layout() {
                     <button onClick={() => {
                       api.delete('/tareas/notificaciones').then(() =>
                         qc.invalidateQueries({ queryKey: ['notificaciones'] })
-                      );
+                      ).catch(() => {});
                     }} style={{ background: 'var(--c-red-bg)', border: 'none', cursor: 'pointer', color: 'var(--c-red)', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6 }}>
                       Limpiar todo
                     </button>

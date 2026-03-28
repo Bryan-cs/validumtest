@@ -92,7 +92,7 @@ export default function Afiliados() {
   const { data: resp={total:0,items:[]}, isLoading } = useQuery({
     queryKey:['afiliados', pagina],
     queryFn:()=>api.get('/afiliados', { params:{ skip:(pagina-1)*POR_PAG, limit:POR_PAG } }).then(r=>r.data),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
   });
   const data     = resp.items || [];
   const totalReg = resp.total || 0;
@@ -173,7 +173,7 @@ export default function Afiliados() {
           fd.append('file', file);
           fd.append('afiliado_doc', doc);
           fd.append('contexto', 'afiliado');
-          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          await api.post('/documentos', fd);
         }
       }
       return res;
@@ -855,7 +855,7 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
         fd.append('file', file);
         fd.append('afiliado_doc', docDocSel);
         fd.append('contexto', 'afiliado');
-        await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.post('/documentos', fd);
       }
       qc.invalidateQueries({ queryKey: ['documentos', docDocSel] });
     } catch (e) {

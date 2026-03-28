@@ -159,13 +159,17 @@ export default function Tareas() {
       const res = await api.post('/tareas', payload);
       const tareaId = res.data?.id;
       if (tareaId && nuevaFiles.length > 0) {
-        for (const file of nuevaFiles) {
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('afiliado_doc', '');
-          fd.append('contexto', 'tarea');
-          fd.append('contexto_id', String(tareaId));
-          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        try {
+          for (const file of nuevaFiles) {
+            const fd = new FormData();
+            fd.append('file', file);
+            fd.append('afiliado_doc', '');
+            fd.append('contexto', 'tarea');
+            fd.append('contexto_id', String(tareaId));
+            await api.post('/documentos', fd);
+          }
+        } catch(err) {
+          toast.error('Error al subir archivo: ' + (err?.response?.data?.detail || err.message));
         }
       }
       return res;
@@ -487,13 +491,18 @@ export default function Tareas() {
                           onClick={async () => {
                             const files = completarFiles[t.id] || [];
                             if (files.length > 0) {
-                              for (const file of files) {
-                                const fd = new FormData();
-                                fd.append('file', file);
-                                fd.append('afiliado_doc', '');
-                                fd.append('contexto', 'tarea');
-                                fd.append('contexto_id', String(t.id));
-                                await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+                              try {
+                                for (const file of files) {
+                                  const fd = new FormData();
+                                  fd.append('file', file);
+                                  fd.append('afiliado_doc', '');
+                                  fd.append('contexto', 'tarea');
+                                  fd.append('contexto_id', String(t.id));
+                                  await api.post('/documentos', fd);
+                                }
+                              } catch(err) {
+                                toast.error('Error al subir archivo: ' + (err?.response?.data?.detail || err.message));
+                                return;
                               }
                               qc.invalidateQueries({ queryKey: ['documentos-tarea', t.id] });
                               setCompletarFiles(p => ({ ...p, [t.id]: [] }));
@@ -662,7 +671,7 @@ function TareaDocumentos({ tareaId }) {
         fd.append('afiliado_doc', '');
         fd.append('contexto', 'tarea');
         fd.append('contexto_id', String(tareaId));
-        await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        await api.post('/documentos', fd);
       }
       qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
     } catch (e) {

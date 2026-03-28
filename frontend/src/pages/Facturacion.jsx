@@ -482,7 +482,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0 }
       : { skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F }
     }).then(r=>r.data),
-    keepPreviousData: true,
+    placeholderData: (prev) => prev,
   });
 
   // Resetear página cuando cambien los filtros

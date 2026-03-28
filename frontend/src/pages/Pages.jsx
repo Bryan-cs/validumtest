@@ -139,6 +139,7 @@ export function Retiros() {
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/retiros/${id}`),
     onSuccess:()=>{ toast.success('Retiro eliminado'); qc.invalidateQueries({queryKey:['retiros']}); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
   const anios = [...new Set(rows.map(r=>r.anio).filter(Boolean))];
@@ -283,10 +284,12 @@ export function Facturacion() {
   const pagar = useMutation({
     mutationFn:(id)=>api.patch(`/facturas/${id}/pagar`),
     onSuccess:()=>{ toast.success('Factura marcada como pagada'); qc.invalidateQueries({queryKey:['facturas']}); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/facturas/${id}`),
     onSuccess:()=>{ toast.success('Factura eliminada'); qc.invalidateQueries({queryKey:['facturas']}); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
   const totIng  = rows.reduce((s,f)=>s+(f.ingresos||0),0);
@@ -400,14 +403,17 @@ export function Empleados() {
   const addGasto = useMutation({
     mutationFn:()=>api.post('/gastos',{nombre:gnombre,valor:+gvalor}),
     onSuccess:()=>{ toast.success('Gasto agregado'); qc.invalidateQueries({queryKey:['gastos']}); setGnom(''); setGval(0); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
   const toggleG = useMutation({
     mutationFn:(id)=>api.patch(`/gastos/${id}/toggle`),
     onSuccess:()=>qc.invalidateQueries({queryKey:['gastos']}),
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
   const delGasto = useMutation({
     mutationFn:(id)=>api.delete(`/gastos/${id}`),
     onSuccess:()=>{ toast.success('Gasto eliminado'); qc.invalidateQueries({queryKey:['gastos']}); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
   return (
@@ -614,6 +620,7 @@ export function Listas() {
   const update = useMutation({
     mutationFn:(items)=>api.put(`/listas/${sel}`,{items}),
     onSuccess:()=>{ toast.success('Lista actualizada'); qc.invalidateQueries({queryKey:['listas']}); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
   const items = listas[sel]||[];
@@ -697,6 +704,7 @@ export function Calculadora() {
   const guardar = useMutation({
     mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts, plantilla_whatsapp:plantilla, cargo_adicional:+cargoAdicional }),
     onSuccess:()=>{ toast.success('Configuración actualizada'); qc.invalidateQueries({queryKey:['config']}); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
   const ibcN = +ibc || 0;

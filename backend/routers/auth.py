@@ -26,7 +26,11 @@ _attempts_lock = threading.Lock()
 
 def _get_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For", "")
-    return xff.split(",")[0].strip() if xff else (request.client.host if request.client else "unknown")
+    if xff:
+        # Usar el último IP (el que agrega el proxy/Railway), no el primero (inyectable por cliente)
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        return parts[-1] if parts else (request.client.host if request.client else "unknown")
+    return request.client.host if request.client else "unknown"
 
 def _get_attempts(db: Session, ip: str):
     """Obtiene intentos de login desde la tabla login_attempts."""
@@ -68,14 +72,15 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
     if rec["count"] >= _MAX_ATTEMPTS and now - rec["last"] >= _BLOCK_WINDOW:
         rec = {"count": 0, "last": 0.0}
 
+    _generic_error = "Credenciales inválidas"
     user = crud.get_user_by_username(db, data.username)
     if not user or not user.activo:
         _set_attempts(db, ip, rec["count"] + 1, now)
-        raise HTTPException(status_code=401, detail="Usuario no encontrado o inactivo")
+        raise HTTPException(status_code=401, detail=_generic_error)
     if not user.password or not crud.verify_password(data.password, user.password):
         _set_attempts(db, ip, rec["count"] + 1, now)
-        logger.warning(f"Contraseña incorrecta para usuario '{data.username}' desde IP {ip} (intento {rec['count']+1})")
-        raise HTTPException(status_code=401, detail="Contraseña incorrecta")
+        logger.warning(f"Login fallido para '{data.username}' desde IP {ip} (intento {rec['count']+1})")
+        raise HTTPException(status_code=401, detail=_generic_error)
     # Login exitoso — limpiar intentos fallidos
     _clear_attempts(db, ip)
 
@@ -102,13 +107,11 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
 
 
 @router.post("/refresh")
-def refresh_token(body: dict):
+@_limiter.limit("10/minute")
+def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
     """Obtiene un nuevo access token usando el refresh token."""
-    rt = body.get("refresh_token", "")
-    if not rt:
-        raise HTTPException(status_code=401, detail="refresh_token requerido")
     try:
-        payload = jwt.decode(rt, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Token no es de tipo refresh")
     except jwt.ExpiredSignatureError:
@@ -116,7 +119,12 @@ def refresh_token(body: dict):
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Refresh token inválido")
 
-    new_access = create_token({"sub": payload["sub"], "rol": payload["rol"], "nombre": payload.get("nombre", ""), "cliente_ref": payload.get("cliente_ref", "")})
+    # Verificar que el usuario siga activo
+    user = crud.get_user_by_username(db, payload.get("sub", ""))
+    if not user or not user.activo:
+        raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")
+
+    new_access = create_token({"sub": payload["sub"], "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""})
     return {"access_token": new_access, "token_type": "bearer"}
 
 

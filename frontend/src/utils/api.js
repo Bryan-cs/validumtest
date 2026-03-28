@@ -13,6 +13,9 @@ api.interceptors.request.use(config => {
 
 let _redirigiendo = false;
 
+// Resetear flag cuando se navega a /login exitosamente
+export function resetRedirectFlag() { _redirigiendo = false; }
+
 api.interceptors.response.use(
   res => res,
   async err => {

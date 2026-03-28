@@ -48,9 +48,3 @@ Thumbs.db
 *.swp
 *.swo
 
-# Archivos extraños
-26.0.1
-cd
-pip
-uvicorn
-{backend,frontend

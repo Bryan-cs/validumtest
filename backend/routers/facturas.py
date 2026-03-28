@@ -61,6 +61,8 @@ def delete_factura(id: int, force: bool = False,
     f = crud.get_factura(db, id)
     if not f:
         raise HTTPException(404, "Factura no encontrada")
+    if force and token.get("rol") != "admin":
+        raise HTTPException(403, "Solo un administrador puede forzar la eliminación")
     if f.estado == "pagado" and not force:
         raise HTTPException(400,
             "No se puede eliminar una factura pagada. "

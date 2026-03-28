@@ -89,7 +89,22 @@ def descargar_documento(
     doc = db.query(models.Documento).filter_by(id=doc_id).first()
     if not doc:
         raise HTTPException(404, "Documento no encontrado")
-    filepath = os.path.join(UPLOAD_DIR, doc.ruta)
+    # Clientes solo pueden descargar sus propios documentos
+    if token.get("rol") == "cliente":
+        cliente_ref = token.get("cliente_ref", "")
+        if doc.contexto not in ("novedad_portal", "novedad_resp") or doc.subido_por != token["sub"]:
+            # Verificar que el documento pertenezca a un afiliado del cliente
+            if doc.afiliado_doc:
+                afil = db.query(models.Afiliado).filter_by(doc=doc.afiliado_doc, cliente_txt=cliente_ref).first()
+                if not afil:
+                    raise HTTPException(403, "No tienes acceso a este documento")
+            elif doc.contexto == "novedad_resp":
+                pass  # Respuestas del admin son visibles para el cliente destinatario
+            else:
+                raise HTTPException(403, "No tienes acceso a este documento")
+    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, doc.ruta))
+    if not filepath.startswith(os.path.realpath(UPLOAD_DIR)):
+        raise HTTPException(403, "Ruta de archivo no permitida")
     if not os.path.exists(filepath):
         raise HTTPException(404, "Archivo no encontrado en disco")
     return FileResponse(filepath, filename=doc.nombre, media_type="application/octet-stream")
@@ -104,8 +119,10 @@ def eliminar_documento(
     doc = db.query(models.Documento).filter_by(id=doc_id).first()
     if not doc:
         raise HTTPException(404, "Documento no encontrado")
-    filepath = os.path.join(UPLOAD_DIR, doc.ruta)
-    if os.path.exists(filepath):
+    if token.get("rol") != "admin" and doc.subido_por != token.get("sub"):
+        raise HTTPException(403, "Solo puedes eliminar tus propios documentos")
+    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, doc.ruta))
+    if filepath.startswith(os.path.realpath(UPLOAD_DIR)) and os.path.exists(filepath):
         os.remove(filepath)
     db.delete(doc)
     db.commit()

@@ -645,8 +645,10 @@ try:
         import redis as _redis_mod
         _redis_client = _redis_mod.from_url(_redis_url, decode_responses=True)
         _redis_client.ping()  # verificar conexión
-except Exception:
+except Exception as _redis_err:
     _redis_client = None  # fallback a cache en memoria
+    from logger import logger as _rlog
+    _rlog.warning(f"Redis no disponible, usando cache en memoria: {_redis_err}")
 
 # Fallback: cache en memoria (para desarrollo local sin Redis)
 import threading as _threading
@@ -885,10 +887,11 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
     if nuevo_estado not in estados_validos:
         return None
     t = db.query(models.Tarea).filter_by(id=tarea_id).with_for_update().first()
-    if not t: return None
+    if not t:
+        return {"error": "not_found"}
     # Solo admin o el asignado pueden cambiar el estado
     if rol != "admin" and t.asignado_a != usuario:
-        return None
+        return {"error": "unauthorized"}
     estado_anterior = t.estado
     t.estado = nuevo_estado
     if nuevo_estado == "completada":

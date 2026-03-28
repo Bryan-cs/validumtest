@@ -193,7 +193,7 @@ function ModalNovedadPago({ seleccionados, afiliados, onClose, onSuccess }) {
           fd.append('afiliado_doc', seleccionados[0] || '');
           fd.append('contexto', 'novedad_portal');
           fd.append('contexto_id', String(novId));
-          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          await api.post('/documentos', fd);
         }
         setSubiendo(false);
       }
@@ -302,7 +302,7 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
           fd.append('afiliado_doc', afiliado.doc);
           fd.append('contexto', 'novedad_portal');
           fd.append('contexto_id', String(novId));
-          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+          await api.post('/documentos', fd);
         }
         setSubiendo(false);
       }
@@ -451,8 +451,10 @@ function DocsNovedad({ novedadId }) {
           <div key={d.id} style={{ fontSize:12, marginBottom:3 }}>
             <span style={{ color:C.blue, cursor:'pointer', textDecoration:'underline' }}
               onClick={async () => {
-                const res = await api.get(`/documentos/${d.id}/descargar`, { responseType:'blob' });
-                const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = d.nombre; a.click();
+                try {
+                  const res = await api.get(`/documentos/${d.id}/descargar`, { responseType:'blob' });
+                  const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = d.nombre; a.click();
+                } catch { toast.error('Error al descargar archivo'); }
               }}>
               📄 {d.nombre}
             </span>
@@ -610,10 +612,12 @@ function CampanaNotif() {
   const leer = useMutation({
     mutationFn: () => api.put('/tareas/notificaciones/leer'),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-notifs'] }),
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error al marcar como leídas'),
   });
   const limpiar = useMutation({
     mutationFn: () => api.delete('/tareas/notificaciones'),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['portal-notifs'] }); setOpen(false); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error al limpiar notificaciones'),
   });
 
   const noLeidas = notifs.filter(n => !n.leida).length;

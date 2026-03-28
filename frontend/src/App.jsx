@@ -23,7 +23,7 @@ import NovedadesClientes   from './pages/NovedadesClientes';
 
 const qc = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 0, refetchInterval: 10_000 },
+    queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: true },
     mutations: {
       onError: (err) => {
         const msg = err?.response?.data?.detail || err?.message || 'Error inesperado';
