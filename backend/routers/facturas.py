@@ -3,6 +3,7 @@ import io
 import os
 import json
 from datetime import datetime
+from models import COL_TZ
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -33,7 +34,7 @@ def create_factura(data: schemas.FacturaCreate,
                    db: Session = Depends(get_db), token=Depends(verify_token)):
     data.creado_por = token.get("sub", "sistema")
     if not data.anio:
-        data.anio = str(datetime.now().year)
+        data.anio = str(datetime.now(COL_TZ).year)
     return crud.create_factura(db, data)
 
 
@@ -127,7 +128,7 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
     txt(400, y, f"N° {fact.get('codigo','')}", size=11, bold=True)
 
     y -= 18
-    fecha_hoy = datetime.now().strftime("%d/%m/%Y")
+    fecha_hoy = datetime.now(COL_TZ).strftime("%d/%m/%Y")
     txt(400, y, f"Fecha: {fecha_hoy}", size=9, color=colors.gray)
 
     y -= 10
@@ -157,7 +158,7 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
 
     eps_val = (afil_obj.eps if afil_obj else '') or ''
     afp_val = (afil_obj.afp if afil_obj else '') or ''
-    arl_val = 'Sura' if (afil_obj and afil_obj.arl) else ''
+    arl_val = (afil_obj.arl if afil_obj else '') or ''
     ccf_val = (afil_obj.ccf if afil_obj else '') or ''
 
     y -= 18
@@ -179,8 +180,16 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
     srvs_activos = [s for s in srvs_detalle if s.get('incluido', True) is not False]
     row_color = [colors.HexColor("#F8FAFC"), colors.white]
 
-    # Filas de servicios
-    servicios_nombres = [srv.get('servicio', srv.get('nombre', '')) for srv in srvs_activos] or ["Planilla seguridad social"]
+    # Filas de servicios — si servicios_detalle está vacío, usar servicios del afiliado
+    servicios_nombres = [srv.get('servicio', srv.get('nombre', '')) for srv in srvs_activos]
+    if not servicios_nombres and afil_obj and afil_obj.servicios:
+        try:
+            srvs_raw = json.loads(afil_obj.servicios) if isinstance(afil_obj.servicios, str) else (afil_obj.servicios or [])
+            servicios_nombres = [s for s in srvs_raw if s]
+        except Exception:
+            pass
+    if not servicios_nombres:
+        servicios_nombres = ["Planilla seguridad social"]
     entidades_pares = [
         ("EPS", eps_val or "—"),
         ("AFP", afp_val or "—"),
@@ -248,7 +257,7 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
                         'Julio':7,'Agosto':8,'Septiembre':9,'Octubre':10,'Noviembre':11,'Diciembre':12}
             partes_venc = fecha_venc.split(' de ')  # ['05', 'Marzo', '2026']
             d_venc = datetime(int(partes_venc[2]), meses_es[partes_venc[1]], int(partes_venc[0]))
-            dias_mora = max(0, (datetime.now() - d_venc).days)
+            dias_mora = max(0, (datetime.now(COL_TZ).replace(tzinfo=None) - d_venc).days)
         except Exception:
             pass
 

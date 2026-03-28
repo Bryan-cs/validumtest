@@ -24,6 +24,7 @@ class AfiliadoCreate(BaseModel):
     tel: str = ""
     email: str = ""
     dir: str = ""
+    ciudad: str = ""
     obs: str = ""
     novedades: str = ""
     detalle: str = ""
@@ -190,6 +191,7 @@ class TareaCreate(BaseModel):
     asignado_a: str
     creado_por: str = ""
     fecha_limite: str = ""
+    privada: bool = False
 
 class TareaComentarioCreate(BaseModel):
     texto: str

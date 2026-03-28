@@ -38,7 +38,7 @@ export function Cobro() {
     queryFn:()=>api.get('/cobro',{params:{empresa,cliente,tipo}}).then(r=>r.data),
     refetchInterval:60_000,
   });
-  const { data: todosAfil=[] } = useQuery({ queryKey:['afiliados_all'], queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]) });
+  const { data: todosAfil=[] } = useQuery({ queryKey:['afiliados_all'], queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]), refetchInterval: false, staleTime: 60_000 });
   const clientes = ['', ...new Set(todosAfil.map(a=>a.cliente_txt).filter(Boolean))];
 
   const colorEstado = { VENCIDO:[C.red,C.redBg], HOY:[C.green,C.greenBg], PROXIMO:[C.text2,C.surface2], COBRADO:[C.blue,C.blueBg] };
@@ -145,7 +145,7 @@ export function Retiros() {
 
   const { data: historial=[] } = useQuery({
     queryKey: ['actividad','Retiros'],
-    queryFn: () => api.get('/actividad', { params:{ modulo:'Retiros' } }).then(r=>r.data),
+    queryFn: () => api.get('/actividad', { params:{ modulo:'Retiros' } }).then(r=> r.data?.items || r.data),
     enabled: tab === 'historial',
   });
 
@@ -787,6 +787,14 @@ export function NovedadesClientes() {
   // Modal para responder al resolver
   const [modalResp, setModalResp] = useState(null); // { tipo, id, estado, label }
   const [respTexto, setRespTexto] = useState('');
+  const [respFiles, setRespFiles] = useState([]);
+
+  // Docs del cliente para la novedad abierta
+  const { data: docsNovedad=[] } = useQuery({
+    queryKey: ['docs-novedad', modalResp?.id, modalResp?.tipo],
+    queryFn: () => api.get('/documentos', { params: { contexto: 'novedad_portal', contexto_id: modalResp.id } }).then(r => r.data),
+    enabled: !!modalResp,
+  });
 
   const { data: novedades=[], isLoading: loadNov } = useQuery({
     queryKey:['admin-novedades-pago'],
@@ -804,7 +812,7 @@ export function NovedadesClientes() {
     refetchInterval:30_000,
   });
 
-  const cerrarModalResp = () => { setModalResp(null); setRespTexto(''); };
+  const cerrarModalResp = () => { setModalResp(null); setRespTexto(''); setRespFiles([]); };
 
   const updNovedad = useMutation({
     mutationFn:({id,estado,respuesta})=>api.patch(`/portal/novedades-pago/${id}/estado`,{estado,respuesta}),
@@ -822,9 +830,28 @@ export function NovedadesClientes() {
     onError:()=>toast.error('Error al actualizar'),
   });
 
-  const confirmarRespuesta = () => {
+  const confirmarRespuesta = async () => {
     if(!modalResp) return;
     const payload = { id: modalResp.id, estado: modalResp.estado, respuesta: respTexto };
+    // Subir archivos de respuesta si los hay
+    if (respFiles.length > 0) {
+      for (const file of respFiles) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('afiliado_doc', '');
+        fd.append('contexto', 'novedad_resp');
+        fd.append('contexto_id', String(modalResp.id));
+        try {
+          await api.post('/documentos', fd);
+        } catch(err) {
+          const det = err?.response?.data?.detail;
+          const msg = typeof det === 'string' ? det : JSON.stringify(det);
+          console.error('[confirmarRespuesta] upload error', err?.response?.status, err?.response?.data);
+          toast.error('Error al subir archivo: ' + (msg || err.message || 'desconocido'));
+          return;
+        }
+      }
+    }
     if(modalResp.tipo==='novedad') updNovedad.mutate(payload);
     else if(modalResp.tipo==='retiro') updSolicitud.mutate(payload);
     else updNovedadAfil.mutate(payload);
@@ -1035,13 +1062,55 @@ export function NovedadesClientes() {
       {/* ── Modal respuesta al resolver ── */}
       {modalResp&&(
         <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center'}}>
-          <div style={{background:C.surface,borderRadius:14,padding:28,width:440,maxWidth:'95vw',boxShadow:'0 20px 60px rgba(0,0,0,.3)'}}>
+          <div style={{background:C.surface,borderRadius:14,padding:28,width:500,maxWidth:'95vw',boxShadow:'0 20px 60px rgba(0,0,0,.3)',maxHeight:'90vh',overflowY:'auto'}}>
             <h3 style={{margin:'0 0 6px',fontSize:15,fontWeight:700}}>Resolver solicitud</h3>
             <p style={{margin:'0 0 16px',fontSize:13,color:C.text2}}>{modalResp.label}</p>
-            <div style={{marginBottom:16}}>
+
+            {/* Archivos adjuntos del cliente */}
+            {docsNovedad.length > 0 && (
+              <div style={{marginBottom:16,background:C.surface2,borderRadius:8,padding:'10px 12px'}}>
+                <p style={{margin:'0 0 8px',fontSize:12,fontWeight:600,color:C.text2}}>📎 Adjuntos del cliente ({docsNovedad.length}):</p>
+                {docsNovedad.map(d=>(
+                  <div key={d.id} style={{display:'flex',alignItems:'center',gap:8,fontSize:12,marginBottom:4}}>
+                    <span style={{flex:1,color:C.blue,cursor:'pointer',textDecoration:'underline'}}
+                      onClick={async()=>{
+                        const res = await api.get(`/documentos/${d.id}/descargar`,{responseType:'blob'});
+                        const a = document.createElement('a'); a.href=URL.createObjectURL(res.data); a.download=d.nombre; a.click();
+                      }}>
+                      📄 {d.nombre}
+                    </span>
+                    <span style={{color:C.text2,fontSize:11}}>{d.subido_por}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div style={{marginBottom:12}}>
               <label style={lbl}>Nota / respuesta para el cliente <span style={{fontWeight:400,color:C.text2}}>(opcional)</span></label>
-              <textarea style={{...inp,height:90,resize:'vertical'}} placeholder="Ej: Se procesó el pago, se ejecutó el retiro el día..." value={respTexto} onChange={e=>setRespTexto(e.target.value)} autoFocus />
+              <textarea style={{...inp,height:80,resize:'vertical'}} placeholder="Ej: Se procesó el pago, se ejecutó el retiro el día..." value={respTexto} onChange={e=>setRespTexto(e.target.value)} autoFocus />
             </div>
+
+            {/* Adjuntar doc de respuesta */}
+            <div style={{marginBottom:16}}>
+              <label style={{display:'block',padding:'7px 12px',border:`2px dashed ${C.border}`,borderRadius:7,
+                textAlign:'center',cursor:'pointer',color:C.text2,fontSize:12,background:C.surface2}}>
+                📎 {respFiles.length > 0 ? `${respFiles.length} archivo(s) de respuesta` : 'Adjuntar documento de respuesta (opcional)'}
+                <input type="file" multiple style={{display:'none'}} accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  onChange={e=>setRespFiles(p=>[...p,...Array.from(e.target.files)])} />
+              </label>
+              {respFiles.length > 0 && (
+                <div style={{marginTop:6,display:'flex',flexWrap:'wrap',gap:4}}>
+                  {respFiles.map((f,i)=>(
+                    <div key={i} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',
+                      background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:5,fontSize:11}}>
+                      <span style={{color:C.blue}}>{f.name}</span>
+                      <span style={{cursor:'pointer',color:C.red,fontWeight:700}} onClick={()=>setRespFiles(p=>p.filter((_,j)=>j!==i))}>×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
               <Btn variant="secondary" onClick={cerrarModalResp}>Cancelar</Btn>
               <Btn variant="success" onClick={confirmarRespuesta} disabled={updNovedad.isPending||updSolicitud.isPending||updNovedadAfil.isPending}>

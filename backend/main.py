@@ -2,6 +2,7 @@
 BBC File — Backend FastAPI
 Ejecutar: uvicorn main:app --reload
 """
+APP_VERSION = "1.1.0"
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
@@ -9,10 +10,11 @@ from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from database import get_db, init_db
 from sqlalchemy.orm import Session
 import models, schemas, crud
+from models import COL_TZ
 from routers.deps import verify_token, require_admin
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
@@ -44,7 +46,7 @@ def _limpiar_actividad_antigua():
     from datetime import timedelta
     db = SessionLocal()
     try:
-        limite = datetime.utcnow() - timedelta(days=90)
+        limite = datetime.now(timezone.utc) - timedelta(days=90)
         db.query(models.Actividad).filter(models.Actividad.fecha < limite).delete()
         db.commit()
     except Exception:
@@ -53,8 +55,30 @@ def _limpiar_actividad_antigua():
         db.close()
 
 
+def _limpiar_tareas_mensuales():
+    """Elimina tareas finalizadas con más de 30 días para liberar espacio."""
+    from database import SessionLocal
+    from datetime import timedelta
+    db = SessionLocal()
+    try:
+        limite = datetime.now(timezone.utc) - timedelta(days=30)
+        db.query(models.Tarea).filter(
+            models.Tarea.estado == "finalizada",
+            models.Tarea.actualizado < limite,
+        ).delete()
+        db.commit()
+    except Exception:
+        pass
+    finally:
+        db.close()
+
+
+_start_time = None
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    global _start_time
+    _start_time = datetime.now(timezone.utc)
     init_db()
     # Advertencia si las credenciales por defecto no han sido cambiadas
     try:
@@ -67,15 +91,16 @@ async def lifespan(app: FastAPI):
         _db.close()
     except Exception:
         pass
-    # Backup automático diario a las 2:00 AM
+    # Tareas programadas de limpieza
+    # Nota: con --workers 2, cada worker inicia su propio scheduler.
+    # Los jobs de limpieza son DELETEs idempotentes, así que correr 2x es inofensivo.
+    # El backup de SQLite se omite aquí; en producción se usa PostgreSQL de Railway.
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
-        from backup import run_backup
-        from logger import logger as _log
         _scheduler = BackgroundScheduler()
-        _scheduler.add_job(run_backup, "cron", hour=2, minute=0)
         _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
         _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
+        _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
         _scheduler.start()
     except Exception as e:
         from logger import logger as _log
@@ -102,6 +127,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ─── HEADERS DE SEGURIDAD ────────────────────────────────────────────────────
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 from routers import auth as auth_router
 from routers import afiliados as afiliados_router
@@ -109,6 +148,7 @@ from routers import facturas as facturas_router
 from routers import reportes as reportes_router
 from routers import tareas as tareas_router
 from routers import portal as portal_router
+from routers.documentos import router as documentos_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
@@ -116,6 +156,7 @@ app.include_router(facturas_router.router)
 app.include_router(reportes_router.router)
 app.include_router(tareas_router.router)
 app.include_router(portal_router.router)
+app.include_router(documentos_router)
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
@@ -225,7 +266,7 @@ def create_retiro(data: schemas.RetiroCreate,
     afil = crud.get_afiliado_by_doc(db, data.doc)
     if not afil: raise HTTPException(404, "Afiliado no encontrado")
     mes_actual = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][datetime.now().month-1]
+                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][datetime.now(COL_TZ).month-1]
     pendientes = crud.get_facturas_pendientes_by_doc(db, data.doc, mes=mes_actual)
     data.registrado_por = token.get("sub","sistema")
     retiro = crud.create_retiro(db, data)
@@ -366,18 +407,39 @@ def health_check(db: Session = Depends(get_db)):
     try:
         from sqlalchemy import text
         db.execute(text("SELECT 1"))
-        return {"status": "ok", "db": "ok"}
-    except Exception as e:
+        db_ok = True
+    except Exception:
+        db_ok = False
+    # Check Redis
+    redis_ok = None
+    try:
+        from crud import _redis_client
+        if _redis_client:
+            redis_ok = _redis_client.ping()
+    except Exception:
+        redis_ok = False
+    status = "ok" if db_ok else "degraded"
+    code = 200 if db_ok else 503
+    result = {"status": status, "version": APP_VERSION, "db": "ok" if db_ok else "error"}
+    if redis_ok is not None:
+        result["redis"] = "ok" if redis_ok else "error"
+    if _start_time:
+        uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
+        result["uptime_seconds"] = int(uptime)
+    if code != 200:
         from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=503, content={"status": "degraded", "db": str(e)})
+        return JSONResponse(status_code=code, content=result)
+    return result
 
 
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────
 @app.get("/actividad")
 def actividad(modulo: str = "", usuario: str = "",
               desde: str = "", hasta: str = "",
+              skip: int = 0, limit: int = 200,
               db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_actividad(db, modulo=modulo, usuario=usuario, desde=desde, hasta=hasta)
+    return crud.get_actividad(db, modulo=modulo, usuario=usuario, desde=desde, hasta=hasta,
+                              skip=skip, limit=limit)
 
 
 @app.delete("/actividad")

@@ -10,6 +10,7 @@ import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate } from 're
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Toaster } from 'react-hot-toast';
 import useAuthStore from './hooks/useAuth';
+import { C } from '../components/UI';
 
 // ─── LAZY IMPORTS — cada página carga solo cuando se necesita ─────────────────
 const Login       = lazy(() => import('./pages/Login'));
@@ -92,7 +93,7 @@ function Layout({ children }) {
   const handleLogout = () => { logout(); navigate('/login'); };
 
   return (
-    <div style={{ display:'flex', minHeight:'100vh', background:'#F8FAFC' }}>
+    <div style={{ display:'flex', minHeight:'100vh', background:C.bg }}>
       {/* Sidebar */}
       <nav style={{ width:220, background:'#0D3B6E', display:'flex',
         flexDirection:'column', padding:'20px 0', flexShrink:0 }}>

@@ -63,11 +63,12 @@ export default function Actividad() {
   const [confirm, setConfirm] = useState(false);
   const [page, setPage] = useState(1);
 
-  const { data: act = [], isLoading } = useQuery({
+  const { data: actRaw = { total: 0, items: [] }, isLoading } = useQuery({
     queryKey: ['actividad', desde, hasta, modulo, usuario],
-    queryFn: () => api.get('/actividad', { params: { desde, hasta, modulo, usuario } }).then(r => r.data),
+    queryFn: () => api.get('/actividad', { params: { desde, hasta, modulo, usuario, limit: 0 } }).then(r => r.data),
     refetchInterval: 60_000,
   });
+  const act = actRaw.items || actRaw;
 
   // Filtro local por texto libre
   const filtradas = buscar.trim()

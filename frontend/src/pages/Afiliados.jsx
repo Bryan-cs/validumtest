@@ -6,7 +6,7 @@ import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../compone
 import { BarraFiltros } from '../components/FiltroCheck';
 import useAuthStore from '../hooks/useAuth';
 
-const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5'];
+const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5','N/A'];
 
 async function dlExcel(url, filename) {
   try {
@@ -54,7 +54,7 @@ export default function Afiliados() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
   const esAdmin = user?.rol === 'admin';
-  const [tab, setTab]           = useState('activos'); // 'activos' | 'eliminados' | 'pagos'
+  const [tab, setTab]           = useState('activos');
   const [busqueda, setBusqueda] = useState('');
   const [filtros,  setFiltros]  = useState({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
   const [modal,    setModal]    = useState(null);
@@ -65,6 +65,14 @@ export default function Afiliados() {
   const [docSeleccionado, setDocSeleccionado] = useState('');
   const [busquedaPagos,   setBusquedaPagos]   = useState('');
   const [anioFiltro,      setAnioFiltro]      = useState('Todos');
+
+  // Documentos tab state
+  const [docBusqDoc, setDocBusqDoc] = useState('');
+  const [docDocSel,  setDocDocSel]  = useState('');
+  const [uploading,  setUploading]  = useState(false);
+
+  // Adjuntos pendientes en formulario de afiliado
+  const [pendingFiles, setPendingFiles] = useState([]);
 
   const setFiltro = (key,vals) => setFiltros(f=>({...f,[key]:vals}));
   const limpiar   = () => setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
@@ -89,7 +97,7 @@ export default function Afiliados() {
   const data     = resp.items || [];
   const totalReg = resp.total || 0;
   const totalPags = Math.ceil(totalReg / POR_PAG);
-  const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data), enabled: esAdmin });
+  const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data?.items||r.data), enabled: esAdmin });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
     enabled: tab === 'eliminados' && esAdmin,
@@ -129,28 +137,52 @@ export default function Afiliados() {
     : [];
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
-  const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setModal('nuevo'); };
-  const openEditar = (a) => { setForm({...a}); setModal(a); };
+  const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setPendingFiles([]); setModal('nuevo'); };
+  const openEditar = (a) => { setForm({...a}); setPendingFiles([]); setModal(a); };
   const toggleSrv  = (s) => {
-    const srvs = form.servicios || [];
-    if (srvs.includes(s)) {
-      sf('servicios', srvs.filter(x => x !== s));
-    } else {
-      // Si es ARL, quitar cualquier otro ARL antes de agregar el nuevo
-      const base = s.startsWith('ARL') ? srvs.filter(x => !x.startsWith('ARL')) : srvs;
-      sf('servicios', [...base, s]);
-    }
+    setForm(f => {
+      const srvs = f.servicios || [];
+      if (srvs.includes(s)) {
+        return {
+          ...f,
+          servicios: srvs.filter(x => x !== s),
+          arl: s.startsWith('ARL') ? '' : f.arl,
+        };
+      } else {
+        const base = s.startsWith('ARL') ? srvs.filter(x => !x.startsWith('ARL')) : srvs;
+        return {
+          ...f,
+          servicios: [...base, s],
+          arl: s.startsWith('ARL') ? s.split(' ')[1] : f.arl,
+        };
+      }
+    });
   };
 
   const guardar = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const payload = { ...form,
         fecha_ingreso:    form.fecha_ingreso    || new Date().toISOString().slice(0,10),
         fecha_afiliacion: form.fecha_afiliacion || new Date().toISOString().slice(0,10),
       };
-      return modal==='nuevo' ? api.post('/afiliados',payload) : api.put(`/afiliados/${modal.id}`,payload);
+      const res = modal==='nuevo' ? await api.post('/afiliados',payload) : await api.put(`/afiliados/${modal.id}`,payload);
+      const doc = res.data?.doc || form.doc;
+      if (pendingFiles.length > 0 && doc) {
+        for (const file of pendingFiles) {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('afiliado_doc', doc);
+          fd.append('contexto', 'afiliado');
+          await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+        }
+      }
+      return res;
     },
-    onSuccess: () => { toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['facturas']}); setModal(null); },
+    onSuccess: () => {
+      toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado');
+      if (pendingFiles.length > 0) toast.success(`${pendingFiles.length} documento(s) adjuntado(s)`);
+      qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['documentos']}); setModal(null);
+    },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
@@ -170,6 +202,25 @@ export default function Afiliados() {
     mutationFn: id => api.delete(`/eliminados/${id}`),
     onSuccess: () => { toast.success('Eliminado permanentemente'); qc.invalidateQueries({queryKey:['eliminados']}); },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
+  });
+
+  // Seguimiento state
+  const [segBusqueda, setSegBusqueda] = useState('');
+  const [segFiltros,  setSegFiltros]  = useState({ empresa:[], cliente:[] });
+
+  const activarAfiliado = useMutation({
+    mutationFn: (a) => api.put(`/afiliados/${a.id}`, { ...a, estado:'ACTIVO', estado_srv:'ACTIVO' }),
+    onSuccess: () => { toast.success('Afiliado activado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); },
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
+  });
+
+  const enSeguimiento = todos.filter(a => (a.estado_srv||a.estado||'').toUpperCase() === 'EN ESPERA DE ACTIVACION');
+  const enSeguimientoFiltrado = enSeguimiento.filter(a => {
+    const q = segBusqueda.toLowerCase();
+    if (segBusqueda && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
+    if (segFiltros.empresa.length && !segFiltros.empresa.includes(a.empresa)) return false;
+    if (segFiltros.cliente.length && !segFiltros.cliente.includes(a.cliente_txt)) return false;
+    return true;
   });
 
   // Filtro por año y totales
@@ -203,6 +254,8 @@ export default function Afiliados() {
           { key:'activos',    label:`👥 Activos (${totalReg})` },
           { key:'eliminados', label:`🗑️ Eliminados (${eliminados.length || '...'})` },
           { key:'pagos',      label:'💳 Historial de pagos' },
+          { key:'documentos', label:'📎 Documentos' },
+          { key:'seguimiento', label:'📋 En seguimiento' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
@@ -221,7 +274,7 @@ export default function Afiliados() {
           <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
             value={busqueda} onChange={e=>setBusqueda(e.target.value)}
             style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
-              fontSize:13,outline:'none',marginBottom:12,boxSizing:'border-box' }} />
+              fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
           <BarraFiltros
             filtros={[
               { key:'empresa',  label:'Empresa',   icon:'🏢', options: listas.empresas||[] },
@@ -328,7 +381,7 @@ export default function Afiliados() {
                   <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros eliminados</td></tr>
                 )}
                 {eliminados.map(e=>(
-                  <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`, background:'#FFF5F5' }}>
+                  <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`, background:C.redBg }}>
                     <td style={{ ...tdc,fontWeight:600,color:C.red }}>{e.nombre}</td>
                     <td style={tdc}>{e.empresa||'—'}</td>
                     <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{e.doc}</td>
@@ -367,7 +420,7 @@ export default function Afiliados() {
                 value={busquedaPagos}
                 onChange={e => { setBusquedaPagos(e.target.value); if (!e.target.value) setDocSeleccionado(''); }}
                 style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
-                  fontSize:13,outline:'none',boxSizing:'border-box' }}
+                  fontSize:14,outline:'none',boxSizing:'border-box',background:C.surface,color:C.text }}
               />
               {sugerenciasPagos.length > 0 && !docSeleccionado && (
                 <div style={{ position:'absolute',top:'100%',left:0,right:0,background:C.surface,
@@ -455,7 +508,7 @@ export default function Afiliados() {
                     )}
                     {factAfil_filtradas.map((f,i)=>(
                       <tr key={f.id} style={{ borderBottom:`1px solid ${C.border}`,
-                        background: f.estado==='pagado' ? '#F0FDF4' : '#FFF5F5' }}>
+                        background: f.estado==='pagado' ? C.greenBg : C.redBg }}>
                         <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{f.codigo}</td>
                         <td style={tdc}>{f.mes}</td>
                         <td style={tdc}>{f.anio}</td>
@@ -463,7 +516,7 @@ export default function Afiliados() {
                         <td style={tdc}>
                           <span style={{
                             padding:'3px 8px',borderRadius:6,fontSize:11,fontWeight:600,
-                            background: f.estado==='pagado' ? '#DCFCE7' : '#FEE2E2',
+                            background: f.estado==='pagado' ? C.greenBg : C.redBg,
                             color: f.estado==='pagado' ? C.green : C.red,
                           }}>
                             {(f.estado||'').toUpperCase()}
@@ -483,6 +536,96 @@ export default function Afiliados() {
               </div>
             </>
           )}
+        </div>
+      )}
+
+      {/* ═══ TAB: DOCUMENTOS ═══ */}
+      {tab === 'documentos' && (
+        <DocumentosTab
+          todos={todos} api={api} qc={qc}
+          docBusqDoc={docBusqDoc} setDocBusqDoc={setDocBusqDoc}
+          docDocSel={docDocSel} setDocDocSel={setDocDocSel}
+          uploading={uploading} setUploading={setUploading}
+        />
+      )}
+
+      {/* ═══ TAB: SEGUIMIENTO ═══ */}
+      {tab === 'seguimiento' && (
+        <div>
+          <div style={{ background:C.amberBg, border:`1px solid ${C.amber}`, borderRadius:8,
+            padding:'10px 14px', marginBottom:14, fontSize:12, color:C.amber, fontWeight:500 }}>
+            📋 Afiliados en espera de activación. Usa el botón <strong>Activar</strong> para cambiar su estado a ACTIVO.
+          </div>
+          <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
+            value={segBusqueda} onChange={e=>setSegBusqueda(e.target.value)}
+            style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
+              fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
+          <BarraFiltros
+            filtros={[
+              { key:'empresa', label:'Empresa', icon:'🏢', options: listas.empresas||[] },
+              { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
+            ]}
+            valores={segFiltros}
+            onChange={(key,vals) => setSegFiltros(f=>({...f,[key]:vals}))}
+            onLimpiar={() => setSegFiltros({ empresa:[], cliente:[] })}
+          />
+          <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+              <thead>
+                <tr style={{ background:C.surface2 }}>
+                  {['Nombre','Empresa','Documento','Cliente','EPS','AFP','ARL','CCF','Novedades','Detalle','Acciones'].map(h=>(
+                    <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
+                      color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {enSeguimientoFiltrado.length===0 && (
+                  <tr><td colSpan={11} style={{ padding:30,textAlign:'center',color:C.text2 }}>
+                    No hay afiliados en espera de activación
+                  </td></tr>
+                )}
+                {enSeguimientoFiltrado.map(a=>(
+                  <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}`, background:C.amberBg }}>
+                    <td style={{ ...tdc,fontWeight:600,color:C.amber }}>{a.nombre}</td>
+                    <td style={tdc}>{a.empresa||'—'}</td>
+                    <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>
+                      <span style={{ fontSize:10,fontWeight:700,color:C.text2,marginRight:4 }}>{a.tipo_doc||'CC'}</span>{a.doc}
+                    </td>
+                    <td style={tdc}>{a.cliente_txt||'—'}</td>
+                    <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.eps||'—'}</td>
+                    <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.afp||'—'}</td>
+                    <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.arl||'—'}</td>
+                    <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.ccf||'—'}</td>
+                    <td style={{ ...tdc,maxWidth:160 }}>
+                      <span style={{ fontSize:11,color:C.text2,display:'-webkit-box',
+                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+                        {a.novedades||'—'}
+                      </span>
+                    </td>
+                    <td style={{ ...tdc,maxWidth:180 }}>
+                      <span style={{ fontSize:11,color:C.blue,display:'-webkit-box',
+                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+                        {a.detalle||'—'}
+                      </span>
+                    </td>
+                    <td style={tdc}>
+                      <div style={{ display:'flex',gap:4 }}>
+                        <Btn size="sm" variant="success" disabled={activarAfiliado.isPending}
+                          onClick={()=>setConfirm({ title:'Activar afiliado',
+                            message:`¿Activar a "${a.nombre}"? Su estado cambiará a ACTIVO.`,
+                            confirmLabel:'Activar', variant:'success',
+                            onConfirm:()=>activarAfiliado.mutate(a) })}>
+                          ✓ Activar
+                        </Btn>
+                        <Btn size="sm" variant="secondary" onClick={()=>openEditar(a)}>✏️ Editar</Btn>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
@@ -517,13 +660,14 @@ export default function Afiliados() {
               <input value={form.doc||''} onChange={e=>sf('doc',e.target.value.toUpperCase())}
                 placeholder="NÚMERO DE DOCUMENTO"
                 style={{ flex:1,padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                  fontSize:13,outline:'none',color:C.text,textTransform:'uppercase' }} />
+                  fontSize:13,outline:'none',color:C.text,textTransform:'uppercase',background:C.surface }} />
             </div>
           </div>
           <InputUp label="Cargo"             value={form.cargo||''} onChange={v=>sf('cargo',v)} />
           <InputUp label="Teléfono"          value={form.tel||''} onChange={v=>sf('tel',v)} type="tel" />
           <InputUp label="Email"             value={form.email||''} onChange={v=>sf('email',v)} style={{ gridColumn:'1/-1' }} />
-          <InputUp label="Dirección"         value={form.dir||''} onChange={v=>sf('dir',v)} style={{ gridColumn:'1/-1' }} />
+          <InputUp label="Dirección"         value={form.dir||''} onChange={v=>sf('dir',v)} />
+          <InputUp label="Ciudad"            value={form.ciudad||''} onChange={v=>sf('ciudad',v)} />
         </div>
 
         <Seccion title="Empresa y contrato" />
@@ -540,13 +684,19 @@ export default function Afiliados() {
         <Seccion title="Afiliaciones SS" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
           <Sel label="EPS"        value={form.eps||''} onChange={v=>sf('eps',v)} options={[''].concat(listas.eps||[])} />
-          <Sel label="ARL"        value={form.arl||''} onChange={v=>sf('arl',v)} options={[''].concat(listas.arl||[])} />
           <Sel label="CCF (caja)" value={form.ccf||''} onChange={v=>sf('ccf',v)} options={[''].concat(listas.ccf||[])} />
           <Sel label="AFP"        value={form.afp||''} onChange={v=>sf('afp',v)} options={[''].concat(listas.afp||[])} />
         </div>
 
         <div style={{ marginBottom:14 }}>
-          <label style={{ ...lbl, marginBottom:8, display:'block' }}>Servicios contratados</label>
+          <label style={{ ...lbl, marginBottom:8, display:'block' }}>
+            Servicios contratados
+            {form.arl && form.arl !== '' && form.arl !== 'N/A' && (
+              <span style={{ marginLeft:8,color:C.blue,fontWeight:600,fontSize:11 }}>
+                · ARL nivel {form.arl} activo
+              </span>
+            )}
+          </label>
           <div style={{ display:'flex',flexWrap:'wrap',gap:8,padding:'12px 14px',
             background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8 }}>
             {SERVICIOS.map(s=>{
@@ -601,6 +751,30 @@ export default function Afiliados() {
             style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
               fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
               resize:'vertical' }} />
+        </div>
+
+        <Seccion title="Adjuntar documentos (opcional)" />
+        <div style={{ marginBottom:12 }}>
+          <label style={{ display:'block',padding:'10px 14px',border:`2px dashed ${C.border}`,
+            borderRadius:8,textAlign:'center',cursor:'pointer',color:C.text2,fontSize:12,
+            background:C.surface2 }}>
+            📎 Haz clic o arrastra archivos aquí (PDF, Word, Excel, imágenes)
+            <input type="file" multiple style={{ display:'none' }}
+              accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+              onChange={e => setPendingFiles(prev => [...prev, ...Array.from(e.target.files)])} />
+          </label>
+          {pendingFiles.length > 0 && (
+            <div style={{ marginTop:8,display:'flex',flexWrap:'wrap',gap:6 }}>
+              {pendingFiles.map((f,i) => (
+                <div key={i} style={{ display:'flex',alignItems:'center',gap:6,padding:'4px 10px',
+                  background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:6,fontSize:12 }}>
+                  <span style={{ color:C.blue }}>📄 {f.name}</span>
+                  <button onClick={()=>setPendingFiles(prev=>prev.filter((_,j)=>j!==i))}
+                    style={{ border:'none',background:'none',cursor:'pointer',color:C.red,fontWeight:700,padding:0 }}>×</button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div style={{ display:'flex',justifyContent:'flex-end',gap:10,marginTop:8,
@@ -658,3 +832,177 @@ const btnPag = {
   padding:'6px 12px', border:`1px solid ${C.border}`, borderRadius:6,
   background:C.surface, cursor:'pointer', fontSize:13, color:C.text,
 };
+
+// ─── TAB DOCUMENTOS ─────────────────────────────────────────────────────────
+function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, setDocDocSel, uploading, setUploading }) {
+  const sugerencias = docBusqDoc.length >= 2 && !docDocSel
+    ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(docBusqDoc.toLowerCase())).slice(0,8)
+    : [];
+
+  const { data: docs=[], isLoading } = useQuery({
+    queryKey: ['documentos', docDocSel],
+    queryFn: () => api.get('/documentos', { params: { afiliado_doc: docDocSel } }).then(r=>r.data),
+    enabled: !!docDocSel,
+  });
+  const afilSel = todos.find(a=>a.doc===docDocSel);
+
+  const handleUpload = async (files) => {
+    if (!docDocSel || !files.length) return;
+    setUploading(true);
+    try {
+      for (const file of files) {
+        const fd = new FormData();
+        fd.append('file', file);
+        fd.append('afiliado_doc', docDocSel);
+        fd.append('contexto', 'afiliado');
+        await api.post('/documentos', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      }
+      qc.invalidateQueries({ queryKey: ['documentos', docDocSel] });
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Error subiendo archivo');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Eliminar este documento?')) return;
+    try {
+      await api.delete(`/documentos/${id}`);
+      qc.invalidateQueries({ queryKey: ['documentos', docDocSel] });
+    } catch (e) {
+      alert(e.response?.data?.detail || 'Error eliminando');
+    }
+  };
+
+  const handleDownload = async (doc) => {
+    try {
+      const res = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(res.data);
+      a.download = doc.nombre;
+      a.click();
+    } catch (e) {
+      alert('Error descargando archivo');
+    }
+  };
+
+  const fmtSize = (bytes) => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1048576) return `${(bytes/1024).toFixed(1)} KB`;
+    return `${(bytes/1048576).toFixed(1)} MB`;
+  };
+
+  const iconByType = (tipo) => {
+    if (['jpg','jpeg','png','gif'].includes(tipo)) return '🖼️';
+    if (tipo === 'pdf') return '📕';
+    if (['doc','docx'].includes(tipo)) return '📝';
+    if (['xls','xlsx'].includes(tipo)) return '📊';
+    return '📄';
+  };
+
+  return (
+    <div>
+      <div style={{ display:'flex',alignItems:'flex-start',gap:12,marginBottom:16,flexWrap:'wrap' }}>
+        <div style={{ position:'relative',flex:'0 0 340px' }}>
+          <input placeholder="🔍 Buscar afiliado por nombre o documento..."
+            value={docBusqDoc}
+            onChange={e=>{ setDocBusqDoc(e.target.value); if(!e.target.value) setDocDocSel(''); }}
+            style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
+              fontSize:14,outline:'none',boxSizing:'border-box',background:C.surface,color:C.text }} />
+          {sugerencias.length > 0 && (
+            <div style={{ position:'absolute',top:'100%',left:0,right:0,background:C.surface,
+              border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 12px rgba(0,0,0,.1)',
+              zIndex:100,maxHeight:200,overflowY:'auto' }}>
+              {sugerencias.map(a => (
+                <div key={a.id} onClick={()=>{ setDocDocSel(a.doc); setDocBusqDoc(a.nombre); }}
+                  style={{ padding:'9px 14px',cursor:'pointer',fontSize:13,borderBottom:`1px solid ${C.border}` }}
+                  onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                  onMouseLeave={e=>e.currentTarget.style.background=''}>
+                  <strong>{a.nombre}</strong>
+                  <span style={{ marginLeft:8,color:C.text2,fontSize:11 }}>{a.doc} · {a.empresa||''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        {docDocSel && (
+          <Btn size="sm" variant="secondary" onClick={()=>{ setDocDocSel(''); setDocBusqDoc(''); }}>✕ Limpiar</Btn>
+        )}
+      </div>
+
+      {!docDocSel && (
+        <div style={{ padding:'40px 20px',textAlign:'center',color:C.text2,fontSize:13 }}>
+          📎 Busca un afiliado para ver y gestionar sus documentos
+        </div>
+      )}
+
+      {docDocSel && afilSel && (
+        <>
+          <div style={{ background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:8,
+            padding:'10px 16px',marginBottom:14,display:'flex',gap:24,flexWrap:'wrap',fontSize:13 }}>
+            <div><strong style={{ color:C.blue }}>{afilSel.nombre}</strong></div>
+            <div style={{ color:C.text2 }}>Doc: <strong>{afilSel.doc}</strong></div>
+            <div style={{ color:C.text2 }}>Empresa: <strong>{afilSel.empresa||'—'}</strong></div>
+          </div>
+
+          {/* Zona de upload */}
+          <div style={{ border:`2px dashed ${C.border}`,borderRadius:10,padding:'20px',
+            textAlign:'center',marginBottom:14,background:C.surface2,cursor:'pointer',position:'relative' }}
+            onClick={()=>document.getElementById('doc-file-input')?.click()}
+            onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor=C.blue;}}
+            onDragLeave={e=>{e.currentTarget.style.borderColor=C.border;}}
+            onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor=C.border;handleUpload(Array.from(e.dataTransfer.files));}}>
+            <input id="doc-file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
+              style={{ display:'none' }}
+              onChange={e=>{ if(e.target.files.length) handleUpload(Array.from(e.target.files)); e.target.value=''; }} />
+            <div style={{ fontSize:28,marginBottom:6 }}>📂</div>
+            <div style={{ fontSize:13,color:C.text2 }}>
+              {uploading ? 'Subiendo...' : 'Click o arrastra archivos aquí (PDF, imágenes, Word, Excel — máx 10 MB)'}
+            </div>
+          </div>
+
+          {/* Lista de documentos */}
+          {isLoading && <div style={{ textAlign:'center',color:C.text2,padding:20 }}>Cargando...</div>}
+          {!isLoading && docs.length === 0 && (
+            <div style={{ textAlign:'center',color:C.text2,padding:20,fontSize:13 }}>
+              Sin documentos. Sube el primer archivo arriba.
+            </div>
+          )}
+          {docs.length > 0 && (
+            <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
+              <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
+                <thead>
+                  <tr style={{ background:C.surface2 }}>
+                    {['','Nombre','Tipo','Tamaño','Subido por','Fecha','Acciones'].map(h=>(
+                      <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
+                        color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {docs.map(d=>(
+                    <tr key={d.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                      <td style={{ ...tdc,fontSize:20,width:30,textAlign:'center' }}>{iconByType(d.tipo)}</td>
+                      <td style={{ ...tdc,fontWeight:500 }}>{d.nombre}</td>
+                      <td style={{ ...tdc,fontSize:11,textTransform:'uppercase' }}>{d.tipo}</td>
+                      <td style={{ ...tdc,fontSize:12,color:C.text2 }}>{fmtSize(d.tamano)}</td>
+                      <td style={{ ...tdc,fontSize:12,color:C.text2 }}>{d.subido_por||'—'}</td>
+                      <td style={{ ...tdc,fontSize:12,color:C.text2 }}>{d.creado ? new Date(d.creado).toLocaleDateString('es-CO') : '—'}</td>
+                      <td style={tdc}>
+                        <div style={{ display:'flex',gap:5 }}>
+                          <Btn size="sm" variant="secondary" onClick={()=>handleDownload(d)}>⬇ Descargar</Btn>
+                          <Btn size="sm" variant="danger" onClick={()=>handleDelete(d.id)}>×</Btn>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

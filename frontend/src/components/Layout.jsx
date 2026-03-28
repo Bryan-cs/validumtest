@@ -4,8 +4,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../hooks/useAuth';
 import api from '../utils/api';
 
-const C_PRIMARY = '#0D3B6E';
-const C_ACCENT  = '#E89B2A';
+const C_PRIMARY = '#4F46E5';
+const C_ACCENT  = '#F59E0B';
 const SIDEBAR_MIN = 48;
 const SIDEBAR_MAX = 380;
 const SIDEBAR_DEFAULT = 220;
@@ -169,35 +169,53 @@ export default function Layout() {
 
           {showNotifs && (
             <div style={{
-              position: 'absolute', bottom: 44, left: 8,
-              width: 300, background: 'var(--c-surface)', borderRadius: 10,
-              boxShadow: '0 8px 30px rgba(0,0,0,.25)', zIndex: 300,
-              maxHeight: 360, overflowY: 'auto',
+              position: 'fixed', bottom: 70, left: Math.min(width + 8, 16),
+              width: 'clamp(300px, 35vw, 440px)',
+              background: 'var(--c-surface)', borderRadius: 12,
+              boxShadow: '0 12px 40px rgba(0,0,0,.3)', zIndex: 9999,
+              maxHeight: 'min(480px, 70vh)', display: 'flex', flexDirection: 'column',
+              border: '1px solid var(--c-border)',
             }}>
-              <div style={{ padding: '10px 14px', fontWeight: 600, fontSize: 13, borderBottom: '1px solid var(--c-border)', color: 'var(--c-text)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <span>Notificaciones</span>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              {/* Header */}
+              <div style={{ padding: '12px 16px', fontWeight: 700, fontSize: 14, borderBottom: '1px solid var(--c-border)', color: 'var(--c-text)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
+                <span>🔔 Notificaciones {notifs.length > 0 && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--c-text2)' }}>({notifs.length})</span>}</span>
+                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                   {notifs.length > 0 && (
                     <button onClick={() => {
                       api.delete('/tareas/notificaciones').then(() =>
                         qc.invalidateQueries({ queryKey: ['notificaciones'] })
                       );
-                    }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#E53E3E', fontSize: 11, fontWeight: 600, padding: '2px 6px' }}>
-                      Limpiar
+                    }} style={{ background: 'var(--c-red-bg)', border: 'none', cursor: 'pointer', color: 'var(--c-red)', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6 }}>
+                      Limpiar todo
                     </button>
                   )}
-                  <button onClick={() => setShowNotifs(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#888', fontSize: 16 }}>×</button>
+                  <button onClick={() => setShowNotifs(false)} style={{
+                    background: 'var(--c-surface2)', border: '1px solid var(--c-border)',
+                    cursor: 'pointer', color: 'var(--c-text)', fontSize: 18, fontWeight: 700,
+                    width: 30, height: 30, borderRadius: 6, display: 'flex', alignItems: 'center', justifyContent: 'center', lineHeight: 1,
+                  }}>×</button>
                 </div>
               </div>
-              {notifs.length === 0
-                ? <p style={{ padding: 14, color: 'var(--c-text2)', fontSize: 13, margin: 0 }}>Sin notificaciones</p>
-                : notifs.map(n => (
-                  <div key={n.id} style={{ padding: '10px 14px', borderBottom: '1px solid var(--c-border)', fontSize: 12, background: n.leida ? 'var(--c-surface)' : 'var(--c-blue-bg)' }}>
-                    <div style={{ color: 'var(--c-text)' }}>{n.mensaje}</div>
-                    <div style={{ color: 'var(--c-text2)', fontSize: 11, marginTop: 2 }}>{new Date(n.creado).toLocaleString('es-CO')}</div>
-                  </div>
-                ))
-              }
+              {/* Lista */}
+              <div style={{ overflowY: 'auto', flex: 1 }}>
+                {notifs.length === 0
+                  ? <p style={{ padding: '24px 16px', color: 'var(--c-text2)', fontSize: 13, margin: 0, textAlign: 'center' }}>Sin notificaciones nuevas</p>
+                  : notifs.map(n => (
+                    <div key={n.id} style={{
+                      padding: '12px 16px', borderBottom: '1px solid var(--c-border)',
+                      background: n.leida ? 'transparent' : 'var(--c-blue-bg)',
+                      display: 'flex', gap: 10, alignItems: 'flex-start',
+                    }}>
+                      <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{n.leida ? '📭' : '📬'}</span>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ color: 'var(--c-text)', fontSize: 13, lineHeight: 1.45, wordBreak: 'break-word' }}>{n.mensaje}</div>
+                        <div style={{ color: 'var(--c-text2)', fontSize: 11, marginTop: 4 }}>{new Date(n.creado).toLocaleString('es-CO')}</div>
+                      </div>
+                      {!n.leida && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-blue)', flexShrink: 0, marginTop: 5 }} />}
+                    </div>
+                  ))
+                }
+              </div>
             </div>
           )}
         </div>

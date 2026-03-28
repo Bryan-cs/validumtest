@@ -87,7 +87,6 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   const [mes, setMes] = useState(() => MESES[_nextMonth().getMonth()]);
   const [anio, setAnio] = useState(() => String(_nextMonth().getFullYear()));
   const [estado, setEstado] = useState('pendiente');
-  const [banco, setBanco] = useState('');
   const [ingreso, setIngreso] = useState(0);
   const [novedades, setNovedades] = useState('');
   const [marcados, setMarcados] = useState({});
@@ -100,7 +99,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       setCedula(''); setAfiliado(null); setErrorBusq(''); setDias(30);
       const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
       setMes(MESES[nm.getMonth()]); setAnio(String(nm.getFullYear())); setEstado('pendiente');
-      setBanco(''); setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
+      setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
       setCargoAdicional(config?.cargo_adicional ?? 2200);
     }
   }, [open]);
@@ -150,7 +149,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       return api.post('/facturas', {
         nombre_afiliado: afiliado.nombre, doc: afiliado.doc,
         cliente: afiliado.cliente_txt || afiliado.empresa || '',
-        anio, mes, periodo: String(dias), estado, banco,
+        anio, mes, periodo: String(dias), estado,
         ingresos: ingreso, costos: costoPlanilla,
         conceptos_extra: extra, utilidad, novedades,
         servicios_detalle: planilla.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
@@ -204,6 +203,14 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         <input style={{ ...inp, textTransform:'uppercase' }} value={novedades}
           onChange={e => setNovedades(UP(e.target.value))} placeholder="OBSERVACIONES DE ESTA FACTURA..." />
       </div>
+
+      {afiliado?.detalle && (
+        <div style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:7,
+          padding:'8px 12px',marginBottom:10,fontSize:12,color:C.text2 }}>
+          <span style={{ fontWeight:600,color:C.text }}>ℹ️ Detalle del afiliado:</span>{' '}
+          {afiliado.detalle}
+        </div>
+      )}
 
       <SrvTable planilla={planilla} marcados={marcados} setMarcados={setMarcados} dias={dias}
         sinAfiliado={!afiliado} cargoAdicional={cargoAdicional} setCargoAdicional={setCargoAdicional} />
@@ -449,6 +456,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [modalNueva,  setModalNueva]  = useState(false);
   const [modalEditar, setModalEditar] = useState(null);
   const [prefill, setPrefill] = useState(null);
+  const [expandedRow, setExpandedRow] = useState(null);
 
   useEffect(() => {
     if (prefillAfiliado) { setPrefill(prefillAfiliado); setModalNueva(true); }
@@ -548,7 +556,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       <input placeholder="🔍 Buscar código, afiliado, documento, cliente..."
         value={busqueda} onChange={e=>setBusqueda(e.target.value)}
         style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
-          fontSize:13,outline:'none',marginBottom:12,boxSizing:'border-box' }} />
+          fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
       <BarraFiltros
         filtros={[
           { key:'anio',    label:'Año',     icon:'📅', options: aniosUnicos },
@@ -575,11 +583,14 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
             {isLoading && <tr><td colSpan={10} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
             {rowsFiltradas.map(f => {
               const isHuerfana = f.afiliado_eliminado && f.estado==='pendiente';
-              return (
-                <tr key={f.id} style={{ borderBottom:`1px solid ${C.border}`,background:isHuerfana?C.redBg:C.surface }}>
+              const isExpanded = expandedRow === f.id;
+              const ai = f.afil_info || {};
+              return (<React.Fragment key={f.id}>
+                <tr style={{ borderBottom: isExpanded ? 'none' : `1px solid ${C.border}`,background:isHuerfana?C.redBg:C.surface,cursor:'pointer' }}
+                  onClick={()=>setExpandedRow(isExpanded ? null : f.id)}>
                   <td style={tdc}><span style={{ fontFamily:'monospace',fontSize:12 }}>{f.codigo}</span></td>
-                  <td style={{ ...tdc,color:isHuerfana?C.red:C.text }}>
-                    {f.nombre_afiliado}
+                  <td style={{ ...tdc,color:isHuerfana?C.red:C.blue }}>
+                    <span style={{ textDecoration:'underline',cursor:'pointer' }}>{f.nombre_afiliado}</span>
                     {isHuerfana && <span style={{ fontSize:10,marginLeft:4 }}>⚠️ eliminado</span>}
                   </td>
                   <td style={tdc}>{f.cliente||'—'}</td>
@@ -600,9 +611,10 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   </td>
                   <td style={tdc}>
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
-                      <Btn size="sm" variant="secondary" onClick={()=>setModalEditar(f)}>✏️ Editar</Btn>
-                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={()=>{ setBancoPago(''); setModalPagar(f); }}>✓ Pagada</Btn>}
-                      <Btn size="sm" variant="secondary" onClick={()=>{
+                      <Btn size="sm" variant="secondary" onClick={(e)=>{e.stopPropagation();setModalEditar(f);}}>✏️ Editar</Btn>
+                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
+                      <Btn size="sm" variant="secondary" onClick={(e)=>{
+                        e.stopPropagation();
                         const tel = (f.tel||'').replace(/\D/g,'');
                         if (!tel) { alert('El afiliado no tiene teléfono registrado'); return; }
                         const phone = tel.startsWith('57') ? tel : `57${tel}`;
@@ -625,13 +637,34 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                         window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
                       }}>💬 WhatsApp</Btn>
                       <Btn size="sm" variant="secondary"
-                        onClick={()=>dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.codigo}.pdf`)}>📄 PDF</Btn>
+                        onClick={(e)=>{e.stopPropagation();dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.codigo}.pdf`);}}>📄 PDF</Btn>
                       <Btn size="sm" variant="danger"
-                        onClick={()=>{ if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
+                        onClick={(e)=>{ e.stopPropagation(); if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
                     </div>
                   </td>
                 </tr>
-              );
+                {isExpanded && Object.keys(ai).length > 0 && (
+                  <tr style={{ borderBottom:`1px solid ${C.border}`,background:C.blueBg }}>
+                    <td colSpan={11} style={{ padding:'10px 16px' }}>
+                      <div style={{ display:'flex',gap:24,flexWrap:'wrap',fontSize:12,color:C.text }}>
+                        <div><strong style={{ color:C.blue }}>Doc:</strong> {f.doc}</div>
+                        <div><strong style={{ color:C.blue }}>Tel:</strong> {ai.tel||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>Email:</strong> {ai.email||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>Ciudad:</strong> {ai.ciudad||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>Dirección:</strong> {ai.dir||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>Empresa:</strong> {ai.empresa||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>EPS:</strong> {ai.eps||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>AFP:</strong> {ai.afp||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>ARL:</strong> {ai.arl||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>CCF:</strong> {ai.ccf||'—'}</div>
+                        <div><strong style={{ color:C.blue }}>IBC:</strong> {fmt(ai.ibc)}</div>
+                        <div><strong style={{ color:C.blue }}>Estado:</strong> {ai.estado_afil||'—'}</div>
+                        {ai.detalle && <div><strong style={{ color:C.blue }}>Detalle:</strong> {ai.detalle}</div>}
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </React.Fragment>);
             })}
             {!isLoading && rowsFiltradas.length===0 && (
               <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas</td></tr>

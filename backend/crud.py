@@ -1,21 +1,20 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 import models, schemas, json, math
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
+from models import COL_TZ
 from typing import Optional
-from passlib.context import CryptContext
-
-_pwd_ctx = CryptContext(schemes=["bcrypt"], deprecated="auto")
+import bcrypt
 
 def hash_password(plain: str) -> str:
-    return _pwd_ctx.hash(plain)
+    return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 def verify_password(plain: str, hashed: str) -> bool:
     import secrets
     # Soporta contraseñas antiguas en texto plano durante migración
     if not hashed.startswith("$2"):
         return secrets.compare_digest(plain, hashed)
-    return _pwd_ctx.verify(plain, hashed)
+    return bcrypt.checkpw(plain.encode(), hashed.encode())
 
 MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
          "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
@@ -87,7 +86,7 @@ def _afiliado_to_dict(a: models.Afiliado) -> dict:
         "ccf": a.ccf, "afp": a.afp, "subtipo": a.subtipo,
         "estado": a.estado, "estado_srv": a.estado_srv,
         "servicios": json.loads(a.servicios or "[]"),
-        "tel": a.tel, "email": a.email, "dir": a.dir, "obs": a.obs, "novedades": a.novedades, "detalle": a.detalle or "",
+        "tel": a.tel, "email": a.email, "dir": a.dir, "ciudad": a.ciudad or "", "obs": a.obs, "novedades": a.novedades, "detalle": a.detalle or "",
         "ibc": a.ibc, "fecha_ingreso": a.fecha_ingreso,
         "fecha_afiliacion": a.fecha_afiliacion,
         "registrado_por": a.registrado_por, "activo": a.activo,
@@ -164,14 +163,14 @@ def get_afiliado_by_doc(db, doc): return db.query(models.Afiliado).filter_by(doc
 
 def create_afiliado(db, data: schemas.AfiliadoCreate):
     from sqlalchemy.exc import IntegrityError
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     a = models.Afiliado(**{
         "nombre":data.nombre,"tipo_doc":data.tipo_doc,"doc":data.doc,"empresa":data.empresa,
         "cargo":data.cargo,"cliente_txt":data.cliente_txt,
         "eps":data.eps,"arl":data.arl,"ccf":data.ccf,"afp":data.afp,
         "subtipo":data.subtipo,"estado":data.estado,"estado_srv":data.estado_srv,
         "servicios":json.dumps(data.servicios),"tel":data.tel,
-        "email":data.email,"dir":data.dir,"obs":data.obs,"novedades":data.novedades,"detalle":data.detalle,
+        "email":data.email,"dir":data.dir,"ciudad":data.ciudad,"obs":data.obs,"novedades":data.novedades,"detalle":data.detalle,
         "ibc":data.ibc,"fecha_ingreso":data.fecha_ingreso,
         "fecha_afiliacion":data.fecha_afiliacion,"registrado_por":data.registrado_por,
     })
@@ -186,18 +185,19 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
 
 def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     from sqlalchemy.exc import IntegrityError
-    cache_invalidar("cobro:")
-    a = db.query(models.Afiliado).filter_by(id=id, activo=True).first()
+    from fastapi import HTTPException
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
+    # Lock de fila para evitar edición concurrente con eliminación
+    a = db.query(models.Afiliado).filter_by(id=id, activo=True).with_for_update().first()
     if not a:
-        from fastapi import HTTPException
-        raise HTTPException(404, "Afiliado no encontrado o eliminado")
+        raise HTTPException(404, "Afiliado no encontrado o fue eliminado por otro usuario")
     for field, val in [
         ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
         ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
         ("eps",data.eps),("arl",data.arl),("ccf",data.ccf),("afp",data.afp),
         ("subtipo",data.subtipo),("estado",data.estado),("estado_srv",data.estado_srv),
         ("servicios",json.dumps(data.servicios)),("tel",data.tel),
-        ("email",data.email),("dir",data.dir),("obs",data.obs),("novedades",data.novedades),("detalle",data.detalle),
+        ("email",data.email),("dir",data.dir),("ciudad",data.ciudad),("obs",data.obs),("novedades",data.novedades),("detalle",data.detalle),
         ("ibc",data.ibc),("fecha_ingreso",data.fecha_ingreso),
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
@@ -212,15 +212,15 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     db.refresh(a); return _afiliado_to_dict(a)
 
 def delete_afiliado(db, id, deleted_by=""):
-    cache_invalidar("cobro:")  # eliminar afiliado afecta cobro
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # eliminar afiliado afecta cobro
     a = db.query(models.Afiliado).filter_by(id=id).first()
     if not a: return
     # Guardar en eliminados
     elim = models.Eliminado(
         nombre=a.nombre, doc=a.doc, empresa=a.empresa,
         datos_completos=json.dumps(_afiliado_to_dict(a)),
-        fecha_eliminacion=datetime.now().strftime("%Y-%m-%d"),
-        mes=MESES[datetime.now().month-1], eliminado_por=deleted_by,
+        fecha_eliminacion=datetime.now(COL_TZ).strftime("%Y-%m-%d"),
+        mes=MESES[datetime.now(COL_TZ).month-1], eliminado_por=deleted_by,
     )
     db.add(elim)
     # Marcar TODAS las facturas del afiliado como huérfanas (no solo pendientes)
@@ -256,23 +256,32 @@ def get_facturas(db, anio="", mes="", cliente="", estado="", banco="", doc="",
     if limit > 0:
         q = q.offset(skip).limit(limit)
     items = q.all()
-    # Obtener teléfonos y fecha_afiliacion de afiliados en una sola consulta
+    # Obtener datos del afiliado en una sola consulta
     docs = list({f.doc for f in items if f.doc})
-    tels = {}
-    fechas_afiliacion = {}
+    afil_map = {}
     if docs:
         for a in db.query(
-            models.Afiliado.doc,
-            models.Afiliado.tel,
-            models.Afiliado.fecha_afiliacion
+            models.Afiliado.doc, models.Afiliado.tel, models.Afiliado.fecha_afiliacion,
+            models.Afiliado.eps, models.Afiliado.afp, models.Afiliado.arl,
+            models.Afiliado.ccf, models.Afiliado.ibc, models.Afiliado.email,
+            models.Afiliado.dir, models.Afiliado.ciudad, models.Afiliado.empresa,
+            models.Afiliado.estado, models.Afiliado.detalle,
         ).filter(models.Afiliado.doc.in_(docs)).all():
-            tels[a.doc] = a.tel or ""
-            fechas_afiliacion[a.doc] = a.fecha_afiliacion or ""
+            afil_map[a.doc] = {
+                "tel": a.tel or "", "fecha_afiliacion": a.fecha_afiliacion or "",
+                "eps": a.eps or "", "afp": a.afp or "", "arl": a.arl or "",
+                "ccf": a.ccf or "", "ibc": a.ibc or 0, "email": a.email or "",
+                "dir": a.dir or "", "ciudad": a.ciudad or "",
+                "empresa": a.empresa or "", "estado_afil": a.estado or "",
+                "detalle": a.detalle or "",
+            }
     result = []
     for f in items:
         d = _factura_to_dict(f)
-        d["tel"] = tels.get(f.doc, "")
-        d["fecha_afiliacion"] = fechas_afiliacion.get(f.doc, "")
+        info = afil_map.get(f.doc, {})
+        d["tel"] = info.get("tel", "")
+        d["fecha_afiliacion"] = info.get("fecha_afiliacion", "")
+        d["afil_info"] = info
         result.append(d)
     return {"total": total, "items": result}
 
@@ -291,21 +300,21 @@ def create_factura(db, data: schemas.FacturaCreate):
     if not data.mes or not data.mes.strip():
         raise HTTPException(400, "El mes es requerido")
 
-    anio_fact = data.anio or str(datetime.now().year)
+    anio_fact = data.anio or str(datetime.now(COL_TZ).year)
     duplicada = db.query(models.Factura).filter_by(
         doc=data.doc, mes=data.mes, anio=anio_fact
     ).first()
     if duplicada:
         raise HTTPException(400, f"Ya existe una factura del mes")
 
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     # Retry para manejar race condition en código FVE concurrente
     max_retries = 3
     for attempt in range(max_retries):
         codigo = data.codigo or _next_codigo(db)
         f = models.Factura(
             codigo=codigo, nombre_afiliado=data.nombre_afiliado, doc=data.doc,
-            cliente=data.cliente, anio=data.anio or str(datetime.now().year),
+            cliente=data.cliente, anio=data.anio or str(datetime.now(COL_TZ).year),
             mes=data.mes, periodo=data.periodo, estado=data.estado, banco=data.banco,
             ingresos=data.ingresos, costos=data.costos, costo_adm=data.costo_adm,
             conceptos_extra=data.conceptos_extra, utilidad=data.utilidad,
@@ -326,7 +335,7 @@ def create_factura(db, data: schemas.FacturaCreate):
             data.codigo = ""  # forzar regeneración de código
 
 def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
-    cache_invalidar("cobro:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     f = db.query(models.Factura).filter_by(id=id).first()
     if not f: return None
     for k, v in data.model_dump(exclude_none=True).items():
@@ -336,13 +345,13 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
 def pagar_factura(db, id, banco="", user=""):
-    cache_invalidar("cobro:")
-    f = db.query(models.Factura).filter_by(id=id).first()
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
+    f = db.query(models.Factura).filter_by(id=id).with_for_update().first()
     if not f: return None
     if f.estado == "pagado":
         return _factura_to_dict(f)  # idempotente: ya está pagado
     f.estado = "pagado"
-    f.pagado_en = datetime.utcnow()
+    f.pagado_en = datetime.now(timezone.utc)
     if banco:
         f.banco = banco
     _log(db, user, "marcó factura como pagada", "Facturación", f.codigo)
@@ -355,7 +364,7 @@ def delete_factura(db, id, user=""):
     db.delete(f)
     _log(db, user, "eliminó una factura", "Facturación", codigo)
     db.commit()
-    cache_invalidar("cobro:")  # invalidar caché al eliminar factura
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # invalidar caché al eliminar factura
 
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
 def get_retiros(db, anio="", mes=""):
@@ -368,29 +377,35 @@ def get_retiros(db, anio="", mes=""):
              "anio":r.anio,"registrado_por":r.registrado_por} for r in rows]
 
 def create_retiro(db, data: schemas.RetiroCreate):
-    cache_invalidar("cobro:")  # retiro cambia estado_srv → afecta cobro
+    from sqlalchemy.exc import IntegrityError
+    from fastapi import HTTPException
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     afil = get_afiliado_by_doc(db, data.doc)
     if not afil: return None
     # Verificar si ya tiene un retiro registrado
     retiro_existente = db.query(models.Retiro).filter_by(doc=data.doc).first()
     if retiro_existente:
-        from fastapi import HTTPException
         raise HTTPException(400,
             f"El afiliado ya tiene un retiro registrado del {retiro_existente.fecha}")
     afil.estado = "RETIRADO"; afil.estado_srv = "RETIRADO"
-    anio_actual = str(datetime.now().year)
-    mes_actual  = MESES[datetime.now().month-1]
+    anio_actual = str(datetime.now(COL_TZ).year)
+    mes_actual  = MESES[datetime.now(COL_TZ).month-1]
     r = models.Retiro(
         nombre=afil.nombre, doc=data.doc, empresa=afil.empresa,
         fecha=data.fecha, motivo=data.motivo, obs=data.obs,
         mes=mes_actual, anio=anio_actual, registrado_por=data.registrado_por,
     )
     db.add(r); _log(db, data.registrado_por, "aplicó un retiro", "Retiros", afil.nombre)
-    db.commit(); db.refresh(r)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, "Otro empleado ya registró este retiro. Recargue la página.")
+    db.refresh(r)
     return {"id":r.id,"nombre":r.nombre,"doc":r.doc,"fecha":r.fecha,"motivo":r.motivo}
 
 def delete_retiro(db, id, user=""):
-    cache_invalidar("cobro:")  # reactivación afecta cobro
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # reactivación afecta cobro
     r = db.query(models.Retiro).filter_by(id=id).first()
     if r:
         _log(db, user, "eliminó un retiro", "Retiros", r.nombre)
@@ -465,14 +480,19 @@ def delete_gasto(db, id, user=""):
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 def get_config(db):
+    cached = _cache_get("config:global")
+    if cached is not None:
+        return cached
     c = db.query(models.Config).first()
     if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200}
-    return {
+    result = {
         "ibc_global": c.ibc_global,
         "porcentajes": json.loads(c.porcentajes or "{}"),
         "plantilla_whatsapp": c.plantilla_whatsapp or "",
         "cargo_adicional": c.cargo_adicional if c.cargo_adicional is not None else 2200,
     }
+    _cache_set("config:global", result)
+    return result
 
 def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
     c = db.query(models.Config).first()
@@ -484,22 +504,30 @@ def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
     if data.plantilla_whatsapp is not None: c.plantilla_whatsapp = data.plantilla_whatsapp
     if data.cargo_adicional is not None: c.cargo_adicional = data.cargo_adicional
     _log(db, user, "actualizó configuración global", "Config", "")
+    cache_invalidar("config:")
     db.commit(); return get_config(db)
 
 # ─── LISTAS ───────────────────────────────────────────────────────────────────
 def get_listas(db):
-    return {l.nombre: json.loads(l.items or "[]") for l in db.query(models.Lista).all()}
+    cached = _cache_get("listas:all")
+    if cached is not None:
+        return cached
+    result = {l.nombre: json.loads(l.items or "[]") for l in db.query(models.Lista).all()}
+    _cache_set("listas:all", result)
+    return result
 
 def update_lista(db, nombre, items, user="sistema"):
     l = db.query(models.Lista).filter_by(nombre=nombre).first()
     if not l: l = models.Lista(nombre=nombre); db.add(l)
     l.items = json.dumps(items)
     _log(db, user, "actualizó lista", "Listas", nombre)
+    cache_invalidar("listas:")
     db.commit()
     return {"nombre":nombre,"items":items}
 
 # ─── ACTIVIDAD ────────────────────────────────────────────────────────────────
-def get_actividad(db, modulo="", usuario="", desde="", hasta=""):
+def get_actividad(db, modulo="", usuario="", desde="", hasta="",
+                  skip: int = 0, limit: int = 200):
     from datetime import datetime as _dt
     q = db.query(models.Actividad)
     if modulo:  q = q.filter_by(modulo=modulo)
@@ -511,15 +539,20 @@ def get_actividad(db, modulo="", usuario="", desde="", hasta=""):
             pass
     if hasta:
         try:
-            # incluir todo el día "hasta"
             hasta_fin = _dt.fromisoformat(hasta).replace(hour=23, minute=59, second=59)
             q = q.filter(models.Actividad.fecha <= hasta_fin)
         except ValueError:
             pass
-    rows = q.order_by(models.Actividad.id.desc()).limit(1000).all()
-    return [{"id":r.id,"usuario":r.usuario,"accion":r.accion,"modulo":r.modulo,
-             "detalle":r.detalle,"fecha":r.fecha.strftime("%d/%m/%Y %H:%M:%S") if r.fecha else ""}
-            for r in rows]
+    total = q.count()
+    q = q.order_by(models.Actividad.id.desc())
+    if limit > 0:
+        q = q.offset(skip).limit(limit)
+    rows = q.all()
+    return {"total": total, "items": [
+        {"id":r.id,"usuario":r.usuario,"accion":r.accion,"modulo":r.modulo,
+         "detalle":r.detalle,"fecha":r.fecha.replace(tzinfo=timezone.utc).astimezone(COL_TZ).strftime("%d/%m/%Y %H:%M:%S") if r.fecha else ""}
+        for r in rows
+    ]}
 
 def clear_actividad(db, user=""):
     db.query(models.Actividad).delete()
@@ -529,6 +562,10 @@ def clear_actividad(db, user=""):
 
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
 def get_dashboard(db, anio="", mes=""):
+    cache_key = f"dashboard:{anio}:{mes}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
     from sqlalchemy import func, case
     # Contar afiliados por estado con una sola query SQL
     stats = db.query(
@@ -563,7 +600,7 @@ def get_dashboard(db, anio="", mes=""):
 
     util_neta = float(facts.utilidad) - (float(nominas) + float(gastos)) * meses_factor
 
-    return {
+    result = {
         "activos": int(stats.activos or 0), "retirados": int(stats.retirados or 0),
         "suspendidos": int(stats.suspendidos or 0), "total_afiliados": int(stats.total or 0),
         "facturas": int(facts.n or 0), "ingresos": float(facts.ingresos),
@@ -572,13 +609,14 @@ def get_dashboard(db, anio="", mes=""):
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "meses_factor": meses_factor,
     }
+    _cache_set(cache_key, result)
+    return result
 
 # ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
 def get_dashboard_meses(db):
     """Retorna lista de {mes, anio, ingresos, facturas} de los últimos 6 meses."""
-    from datetime import datetime
     result = []
-    now = datetime.now()
+    now = datetime.now(COL_TZ)
     for i in range(5, -1, -1):
         month = (now.month - 1 - i) % 12 + 1
         year  = now.year + ((now.month - 1 - i) // 12)
@@ -593,37 +631,84 @@ def get_dashboard_meses(db):
         })
     return result
 
-# ─── CACHÉ EN MEMORIA (thread-safe) ──────────────────────────────────────────
+# ─── CACHÉ (Redis en producción, dict en memoria para dev) ───────────────────
 import time as _time
+import os as _os
+
+CACHE_TTL = 120  # segundos
+
+# Intentar conectar a Redis si REDIS_URL está disponible
+_redis_client = None
+try:
+    _redis_url = _os.getenv("REDIS_URL")
+    if _redis_url:
+        import redis as _redis_mod
+        _redis_client = _redis_mod.from_url(_redis_url, decode_responses=True)
+        _redis_client.ping()  # verificar conexión
+except Exception:
+    _redis_client = None  # fallback a cache en memoria
+
+# Fallback: cache en memoria (para desarrollo local sin Redis)
 import threading as _threading
-_cache: dict = {}
+_mem_cache: dict = {}
 _cache_lock = _threading.Lock()
-CACHE_TTL = 120  # segundos que vive el caché (2 minutos)
+
 
 def _cache_get(key: str):
-    """Obtiene un valor del caché si no ha expirado."""
+    """Obtiene un valor del caché (Redis o memoria)."""
+    if _redis_client:
+        try:
+            raw = _redis_client.get(key)
+            if raw:
+                return json.loads(raw)
+        except Exception:
+            pass
+        return None
+    # Fallback memoria
     with _cache_lock:
-        entry = _cache.get(key)
+        entry = _mem_cache.get(key)
         if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
             return entry["data"]
         return None
 
+
 def _cache_set(key: str, data):
-    """Guarda un valor en el caché con timestamp actual. Evicta expiradas si crece."""
+    """Guarda un valor en el caché con TTL automático."""
+    if _redis_client:
+        try:
+            _redis_client.setex(key, CACHE_TTL, json.dumps(data, default=str))
+        except Exception:
+            pass
+        return
+    # Fallback memoria
     with _cache_lock:
-        _cache[key] = {"data": data, "ts": _time.time()}
-        if len(_cache) > 500:
+        _mem_cache[key] = {"data": data, "ts": _time.time()}
+        if len(_mem_cache) > 500:
             now = _time.time()
-            expired = [k for k, v in list(_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
+            expired = [k for k, v in list(_mem_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
             for k in expired:
-                _cache.pop(k, None)
+                _mem_cache.pop(k, None)
+
 
 def cache_invalidar(prefijo: str = ""):
     """Invalida entradas del caché que empiecen con el prefijo dado."""
+    if _redis_client:
+        try:
+            cursor = 0
+            while True:
+                cursor, keys = _redis_client.scan(cursor, match=f"{prefijo}*", count=100)
+                if keys:
+                    _redis_client.delete(*keys)
+                if cursor == 0:
+                    break
+        except Exception:
+            pass
+        return
+    # Fallback memoria
     with _cache_lock:
-        keys = [k for k in _cache if k.startswith(prefijo)]
+        keys = [k for k in _mem_cache if k.startswith(prefijo)]
         for k in keys:
-            del _cache[k]
+            del _mem_cache[k]
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
 def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
@@ -636,7 +721,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     if cached is not None:
         return cached
 
-    hoy = datetime.now()
+    hoy = datetime.now(COL_TZ)
     dia_hoy = hoy.day
 
     # Generar los últimos 6 meses (mes-5 ... mes actual) como lista (año, mes_idx 1-12)
@@ -688,9 +773,16 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
         planilla = sum(_ceil100(ibc * pcts.get(s, pcts.get(s.upper(), 0.0))) for s in srvs)
         cliente_afil = a.cliente_txt or ""
 
+        # Primer cobro = mes siguiente a la afiliación
+        primer_cobro_m = afil_month + 1
+        primer_cobro_y = afil_year
+        if primer_cobro_m > 12:
+            primer_cobro_m = 1
+            primer_cobro_y += 1
+
         for (y, m) in meses_ventana:
-            # No mostrar meses anteriores a la fecha de afiliación
-            if (y, m) < (afil_year, afil_month): continue
+            # No mostrar meses anteriores al primer cobro (mes siguiente a afiliación)
+            if (y, m) < (primer_cobro_y, primer_cobro_m): continue
 
             mes_nombre = MESES[m - 1]
             anio_str   = str(y)
@@ -756,6 +848,7 @@ def _tarea_to_dict(db, t):
         "asignado_a": t.asignado_a, "creado_por": t.creado_por,
         "estado": t.estado,
         "fecha_limite": t.fecha_limite or "",
+        "privada": bool(t.privada),
         "creado": t.creado.isoformat(),
         "completado_en": t.completado_en.isoformat() if t.completado_en else None,
         "finalizado_en": t.finalizado_en.isoformat() if t.finalizado_en else None,
@@ -767,18 +860,23 @@ def _tarea_to_dict(db, t):
 def create_tarea(db, data: schemas.TareaCreate):
     t = models.Tarea(**data.model_dump())
     db.add(t); db.commit(); db.refresh(t)
-    db.add(models.Notificacion(
-        usuario=data.asignado_a,
-        mensaje=f"Nueva tarea asignada: {data.titulo}",
-        tarea_id=t.id
-    ))
-    db.commit()
+    # No notificar en tareas privadas (el creador es el asignado)
+    if not data.privada:
+        db.add(models.Notificacion(
+            usuario=data.asignado_a,
+            mensaje=f"Nueva tarea asignada: {data.titulo}",
+            tarea_id=t.id
+        ))
+        db.commit()
     return _tarea_to_dict(db, t)
 
 def get_tareas(db, username: str, rol: str):
+    from sqlalchemy import or_
     q = db.query(models.Tarea)
     if rol != "admin":
         q = q.filter_by(asignado_a=username)
+    # Hide private tasks from users who didn't create them
+    q = q.filter(or_(models.Tarea.privada == False, models.Tarea.creado_por == username))
     return [_tarea_to_dict(db, t) for t in q.order_by(models.Tarea.creado.desc()).all()]
 
 def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, nota: str = "", rol: str = ""):
@@ -786,7 +884,7 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
     estados_validos = ["pendiente", "en_proceso", "completada"]
     if nuevo_estado not in estados_validos:
         return None
-    t = db.query(models.Tarea).filter_by(id=tarea_id).first()
+    t = db.query(models.Tarea).filter_by(id=tarea_id).with_for_update().first()
     if not t: return None
     # Solo admin o el asignado pueden cambiar el estado
     if rol != "admin" and t.asignado_a != usuario:
@@ -794,7 +892,7 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
     estado_anterior = t.estado
     t.estado = nuevo_estado
     if nuevo_estado == "completada":
-        t.completado_en = datetime.utcnow()
+        t.completado_en = datetime.now(timezone.utc)
     if nota:
         db.add(models.TareaComentario(tarea_id=tarea_id, usuario=usuario, texto=nota))
     label_nuevo = _ESTADO_LABEL.get(nuevo_estado, nuevo_estado)
@@ -808,12 +906,12 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
 
 def finalizar_tarea(db, tarea_id: int, admin_username: str):
     """Admin finaliza una tarea completada. Queda en historial como finalizada."""
-    t = db.query(models.Tarea).filter_by(id=tarea_id).first()
+    t = db.query(models.Tarea).filter_by(id=tarea_id).with_for_update().first()
     if not t: return None
     if t.estado != "completada":
         return {"error": "Solo se pueden finalizar tareas en estado 'completada'"}
     t.estado = "finalizada"
-    t.finalizado_en = datetime.utcnow()
+    t.finalizado_en = datetime.now(timezone.utc)
     t.finalizado_por = admin_username
     db.add(models.Notificacion(
         usuario=t.asignado_a,
