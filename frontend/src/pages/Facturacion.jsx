@@ -491,8 +491,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const rows      = respF.items || [];
   const totalFact = respF.total || 0;
   const totalPagsF = Math.ceil(totalFact / POR_PAG_F);
-  const { data: config={} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
-  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
+  const { data: config={} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data), staleTime: 300_000 });
+  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
 
   const clientesUnicos = [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
   const aniosUnicos    = [...new Set(rows.map(r=>r.anio).filter(Boolean))].sort();

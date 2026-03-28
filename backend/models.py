@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, timezone, timedelta
@@ -55,7 +55,7 @@ class Afiliado(Base):
     creado          = Column(DateTime, default=_utcnow)
     actualizado     = Column(DateTime, default=_utcnow, onupdate=_utcnow)
 
-from sqlalchemy import UniqueConstraint, Index
+from sqlalchemy import UniqueConstraint
 
 class Factura(Base):
     __tablename__ = "facturas"
@@ -73,7 +73,7 @@ class Factura(Base):
     mes              = Column(String(20), index=True)
     periodo          = Column(String(5))
     estado           = Column(String(20), default="pendiente", index=True)  # índice para filtros
-    banco            = Column(String(60))
+    banco            = Column(String(60), index=True)
     ingresos         = Column(Float, default=0)
     costos           = Column(Float, default=0)
     costo_adm        = Column(Float, default=0)
@@ -90,6 +90,9 @@ class Factura(Base):
 
 class Retiro(Base):
     __tablename__ = "retiros"
+    __table_args__ = (
+        Index('ix_retiro_anio_mes', 'anio', 'mes'),
+    )
     id              = Column(Integer, primary_key=True, index=True)
     nombre          = Column(String(150))
     doc             = Column(String(20), unique=True, index=True)
@@ -106,7 +109,7 @@ class Eliminado(Base):
     __tablename__ = "eliminados"
     id                  = Column(Integer, primary_key=True, index=True)
     nombre              = Column(String(150))
-    doc                 = Column(String(20))
+    doc                 = Column(String(20), index=True)
     empresa             = Column(String(80))
     datos_completos     = Column(Text)    # JSON snapshot del afiliado
     fecha_eliminacion   = Column(String(10))
@@ -159,7 +162,7 @@ class SolicitudNovedad(Base):
     afiliado_nombre  = Column(String(150))
     tipo             = Column(String(80))
     descripcion      = Column(Text)
-    estado           = Column(String(20), default="pendiente")  # pendiente | atendido
+    estado           = Column(String(20), default="pendiente", index=True)  # pendiente | atendido
     respuesta        = Column(Text, nullable=True)
     creado           = Column(DateTime, default=_utcnow)
 
@@ -174,7 +177,7 @@ class NovedadPago(Base):
     afiliados_docs   = Column(Text)    # JSON list de docs
     afiliados_nombres= Column(Text)    # JSON list de nombres
     obs              = Column(Text, default="")
-    estado           = Column(String(20), default="pendiente")  # pendiente | procesado
+    estado           = Column(String(20), default="pendiente", index=True)  # pendiente | procesado
     respuesta        = Column(Text, nullable=True)
     creado           = Column(DateTime, default=_utcnow)
 
@@ -188,13 +191,17 @@ class SolicitudRetiro(Base):
     afiliado_nombre  = Column(String(150))
     motivo           = Column(String(200))
     obs              = Column(Text, default="")
-    estado           = Column(String(20), default="pendiente")  # pendiente | ejecutado | rechazado
+    estado           = Column(String(20), default="pendiente", index=True)  # pendiente | ejecutado | rechazado
     respuesta        = Column(Text, nullable=True)
     creado           = Column(DateTime, default=_utcnow)
 
 
 class Actividad(Base):
     __tablename__ = "actividad"
+    __table_args__ = (
+        Index('ix_actividad_usuario_modulo', 'usuario', 'modulo'),
+        Index('ix_actividad_fecha', 'fecha'),
+    )
     id      = Column(Integer, primary_key=True, index=True)
     usuario = Column(String(60))
     accion  = Column(String(200))
@@ -208,7 +215,7 @@ class Tarea(Base):
     titulo        = Column(String(200))
     descripcion   = Column(Text, default="")
     asignado_a    = Column(String(60), index=True)
-    creado_por    = Column(String(60))
+    creado_por    = Column(String(60), index=True)
     estado        = Column(String(20), default="pendiente", index=True)  # pendiente|en_proceso|completada|finalizada
     fecha_limite  = Column(String(10), nullable=True)
     privada       = Column(Boolean, default=False)
@@ -237,12 +244,15 @@ class Notificacion(Base):
     id       = Column(Integer, primary_key=True)
     usuario  = Column(String(60), index=True)
     mensaje  = Column(String(300))
-    leida    = Column(Boolean, default=False)
+    leida    = Column(Boolean, default=False, index=True)
     tarea_id = Column(Integer, nullable=True)
     creado   = Column(DateTime, default=_utcnow)
 
 class Documento(Base):
     __tablename__ = "documentos"
+    __table_args__ = (
+        Index('ix_documento_contexto_id', 'contexto', 'contexto_id'),
+    )
     id           = Column(Integer, primary_key=True, index=True)
     afiliado_doc = Column(String(20), index=True)       # doc del afiliado dueño
     nombre       = Column(String(200))                   # nombre original del archivo

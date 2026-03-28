@@ -49,7 +49,7 @@ export default function Layout() {
   const { data: notifs = [] } = useQuery({
     queryKey: ['notificaciones'],
     queryFn: () => api.get('/tareas/notificaciones').then(r => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
   const noLeidas = notifs.filter(n => !n.leida).length;
 

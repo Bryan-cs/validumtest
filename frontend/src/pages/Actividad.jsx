@@ -65,8 +65,8 @@ export default function Actividad() {
 
   const { data: actRaw = { total: 0, items: [] }, isLoading } = useQuery({
     queryKey: ['actividad', desde, hasta, modulo, usuario],
-    queryFn: () => api.get('/actividad', { params: { desde, hasta, modulo, usuario, limit: 0 } }).then(r => r.data),
-    refetchInterval: 60_000,
+    queryFn: () => api.get('/actividad', { params: { desde, hasta, modulo, usuario, limit: 500 } }).then(r => r.data),
+    refetchInterval: 120_000,
   });
   const act = actRaw.items || actRaw;
 

@@ -84,6 +84,32 @@ def _ensure_columns():
                 except Exception as e:
                     import logging
                     logging.getLogger("bbcfile").warning(f"_ensure_columns: no se pudo agregar {table}.{col}: {e}")
+    # Crear índices nuevos si no existen
+    _ensure_indexes()
+
+
+def _ensure_indexes():
+    """Crea índices definidos en models.py que no existan aún en la DB."""
+    from sqlalchemy import text
+    indexes = [
+        ("ix_retiro_anio_mes", "retiros", "anio, mes"),
+        ("ix_actividad_usuario_modulo", "actividad", "usuario, modulo"),
+        ("ix_actividad_fecha", "actividad", "fecha"),
+        ("ix_documento_contexto_id", "documentos", "contexto, contexto_id"),
+        ("ix_eliminados_doc", "eliminados", "doc"),
+        ("ix_facturas_banco", "facturas", "banco"),
+        ("ix_solicitudes_novedad_estado", "solicitudes_novedad", "estado"),
+        ("ix_novedades_pago_estado", "novedades_pago", "estado"),
+        ("ix_solicitudes_retiro_estado", "solicitudes_retiro", "estado"),
+        ("ix_tareas_creado_por", "tareas", "creado_por"),
+        ("ix_notificaciones_leida", "notificaciones", "leida"),
+    ]
+    with engine.begin() as conn:
+        for idx_name, table, cols in indexes:
+            try:
+                conn.execute(text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{table}" ({cols})'))
+            except Exception:
+                pass  # índice ya existe o DB no soporta IF NOT EXISTS
 
 
 def _seed(db):

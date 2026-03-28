@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -7,24 +7,26 @@ import useAuthStore from './hooks/useAuth';
 import { ErrorBoundary, OfflineBanner } from './components/UI';
 import Login          from './pages/Login';
 import Layout         from './components/Layout';
-import Dashboard      from './pages/Dashboard';
-import Afiliados      from './pages/Afiliados';
-import Retiros        from './pages/Retiros';
-import Facturacion    from './pages/Facturacion';
-import Cobro          from './pages/Cobro';
-import Empleados      from './pages/Empleados';
-import Usuarios       from './pages/Usuarios';
-import Listas         from './pages/Listas';
-import Calculadora    from './pages/Calculadora';
-import Tareas         from './pages/Tareas';
-import Actividad      from './pages/Actividad';
-import PortalCliente       from './pages/PortalCliente';
-import NovedadesClientes   from './pages/NovedadesClientes';
-import Backups             from './pages/Backups';
+
+// Lazy loading — cada página se descarga solo cuando se necesita
+const Dashboard      = lazy(() => import('./pages/Dashboard'));
+const Afiliados      = lazy(() => import('./pages/Afiliados'));
+const Retiros        = lazy(() => import('./pages/Retiros'));
+const Facturacion    = lazy(() => import('./pages/Facturacion'));
+const Cobro          = lazy(() => import('./pages/Cobro'));
+const Empleados      = lazy(() => import('./pages/Empleados'));
+const Usuarios       = lazy(() => import('./pages/Usuarios'));
+const Listas         = lazy(() => import('./pages/Listas'));
+const Calculadora    = lazy(() => import('./pages/Calculadora'));
+const Tareas         = lazy(() => import('./pages/Tareas'));
+const Actividad      = lazy(() => import('./pages/Actividad'));
+const PortalCliente       = lazy(() => import('./pages/PortalCliente'));
+const NovedadesClientes   = lazy(() => import('./pages/NovedadesClientes'));
+const Backups             = lazy(() => import('./pages/Backups'));
 
 const qc = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: true },
+    queries: { retry: 1, staleTime: 60_000, refetchOnWindowFocus: 'always' },
     mutations: {
       onError: (err) => {
         const msg = err?.response?.data?.detail || err?.message || 'Error inesperado';
@@ -63,6 +65,7 @@ export default function App() {
         <OfflineBanner />
         <Toaster position="bottom-center" toastOptions={{ duration: 3000 }} />
         <ErrorBoundary>
+        <Suspense fallback={<div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh',color:'#888'}}>Cargando...</div>}>
         <Routes>
           <Route path="/login" element={<Login />} />
 
@@ -87,6 +90,7 @@ export default function App() {
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         </ErrorBoundary>
       </BrowserRouter>
     </QueryClientProvider>

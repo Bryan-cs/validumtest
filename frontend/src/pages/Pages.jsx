@@ -32,7 +32,7 @@ export function Cobro() {
   const [empresa, setEmp] = useState('');
   const [cliente, setCli] = useState('');
   const [tipo,    setTipo]= useState('');
-  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
+  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   const { data: rows=[], isLoading } = useQuery({
     queryKey:['cobro',empresa,cliente,tipo],
     queryFn:()=>api.get('/cobro',{params:{empresa,cliente,tipo}}).then(r=>r.data),
@@ -123,7 +123,7 @@ export function Retiros() {
     queryKey:['retiros',anio,mes],
     queryFn:()=>api.get('/retiros',{params:{anio,mes}}).then(r=>r.data),
   });
-  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
+  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
 
   const aplicar = useMutation({
     mutationFn: ()=>api.post('/retiros',{doc,fecha,motivo,obs}),
@@ -613,7 +613,7 @@ export function Usuarios() {
 // ─── LISTAS ───────────────────────────────────────────────────────────────────
 export function Listas() {
   const qc = useQueryClient();
-  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
+  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   const [sel, setSel] = useState('empresas');
   const [newItem, setNewItem] = useState('');
 

@@ -1,5 +1,6 @@
 """Dependencias compartidas para los routers."""
 import os
+import time
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
@@ -18,6 +19,37 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 security = HTTPBearer()
 
+# Cache en memoria para verificación de usuario activo (TTL 5 min)
+_user_active_cache = {}  # {username: (is_active, timestamp)}
+_USER_CACHE_TTL = 300  # 5 minutos
+
+
+def _is_user_active(username: str) -> bool:
+    """Verifica si el usuario está activo, usando cache en memoria."""
+    now = time.time()
+    cached = _user_active_cache.get(username)
+    if cached and (now - cached[1]) < _USER_CACHE_TTL:
+        return cached[0]
+    # Cache miss o expirado — consultar DB
+    from database import SessionLocal
+    import models
+    db = SessionLocal()
+    try:
+        user = db.query(models.Usuario.activo).filter_by(username=username).first()
+        active = bool(user and user.activo)
+    finally:
+        db.close()
+    _user_active_cache[username] = (active, now)
+    return active
+
+
+def invalidate_user_cache(username: str = None):
+    """Invalida el cache de usuario (llamar al desactivar/eliminar un usuario)."""
+    if username:
+        _user_active_cache.pop(username, None)
+    else:
+        _user_active_cache.clear()
+
 
 def create_token(data: dict, expires: timedelta = None):
     payload = data.copy()
@@ -32,16 +64,9 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") == "refresh":
             raise HTTPException(status_code=401, detail="Token de refresco no válido como token de acceso")
-        # Verificar que el usuario siga activo en DB
-        from database import SessionLocal
-        import models
-        db = SessionLocal()
-        try:
-            user = db.query(models.Usuario).filter_by(username=payload.get("sub"), activo=True).first()
-            if not user:
-                raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")
-        finally:
-            db.close()
+        # Verificar que el usuario siga activo (con cache de 5 min)
+        if not _is_user_active(payload.get("sub", "")):
+            raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token expirado")
