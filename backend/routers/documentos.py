@@ -16,15 +16,15 @@ MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # ─── Cloudflare R2 ───────────────────────────────────────────────────────────
 _s3 = None
-_R2_BUCKET = os.getenv("R2_BUCKET", "")
+_R2_BUCKET = os.getenv("STORAGE_BUCKET", "")
 
 def _get_s3():
     global _s3
     if _s3 is not None:
         return _s3
-    account_id = os.getenv("R2_ACCOUNT_ID", "")
-    access_key = os.getenv("R2_ACCESS_KEY", "")
-    secret_key = os.getenv("R2_SECRET_KEY", "")
+    account_id = os.getenv("STORAGE_ACCOUNT", "")
+    access_key = os.getenv("STORAGE_KEY", "")
+    secret_key = os.getenv("STORAGE_SECRET", "")
     if account_id and access_key and secret_key and _R2_BUCKET:
         try:
             import boto3
