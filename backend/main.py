@@ -476,11 +476,24 @@ def health_check(db: Session = Depends(get_db)):
             redis_ok = _redis_client.ping()
     except Exception:
         redis_ok = False
+    # Check R2 storage
+    storage_ok = None
+    try:
+        from routers.documentos import _get_s3, _R2_BUCKET
+        s3 = _get_s3()
+        if s3:
+            s3.head_bucket(Bucket=_R2_BUCKET)
+            storage_ok = True
+        else:
+            storage_ok = False
+    except Exception:
+        storage_ok = False
     status = "ok" if db_ok else "degraded"
     code = 200 if db_ok else 503
     result = {"status": status, "version": APP_VERSION, "db": "ok" if db_ok else "error"}
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"
+    result["storage"] = "r2" if storage_ok else "local"
     if _start_time:
         uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
         result["uptime_seconds"] = int(uptime)
