@@ -478,6 +478,7 @@ def health_check(db: Session = Depends(get_db)):
         redis_ok = False
     # Check R2 storage
     storage_ok = None
+    storage_err = None
     try:
         from routers.documentos import _get_s3, _R2_BUCKET
         s3 = _get_s3()
@@ -486,14 +487,18 @@ def health_check(db: Session = Depends(get_db)):
             storage_ok = True
         else:
             storage_ok = False
-    except Exception:
+            storage_err = "s3 client is False/None"
+    except Exception as e:
         storage_ok = False
+        storage_err = str(e)
     status = "ok" if db_ok else "degraded"
     code = 200 if db_ok else 503
     result = {"status": status, "version": APP_VERSION, "db": "ok" if db_ok else "error"}
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"
     result["storage"] = "r2" if storage_ok else "local"
+    if storage_err:
+        result["_storage_err"] = storage_err
     # Debug temporal: verificar si las variables R2 existen (solo muestra si están o no)
     result["_storage_vars"] = {
         "account": bool(os.getenv("STORAGE_ACCOUNT")),
