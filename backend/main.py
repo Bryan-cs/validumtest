@@ -670,6 +670,9 @@ async def restaurar_backup(
         # Primero crear backup de seguridad antes de restaurar
         _backup_db_to_r2()
 
+        # Desactivar foreign keys temporalmente para poder truncar en cualquier orden
+        db.execute(text("SET session_replication_role = 'replica'"))
+
         for table_name, table_data in backup_data.items():
             if table_name not in existing_tables:
                 errors.append(f"Tabla '{table_name}' no existe, saltada")
@@ -680,7 +683,7 @@ async def restaurar_backup(
                 continue
             try:
                 # Limpiar tabla
-                db.execute(text(f'DELETE FROM "{table_name}"'))
+                db.execute(text(f'TRUNCATE TABLE "{table_name}" CASCADE'))
                 # Insertar filas
                 count = 0
                 for row in rows:
@@ -691,13 +694,21 @@ async def restaurar_backup(
                     count += 1
                 restored.append({"tabla": table_name, "filas": count})
             except Exception as e:
-                errors.append(f"Error en '{table_name}': {str(e)[:100]}")
+                errors.append(f"Error en '{table_name}': {str(e)[:200]}")
                 db.rollback()
-                db = SessionLocal()  # Nueva sesión después de rollback
+                db.execute(text("SET session_replication_role = 'replica'"))
                 continue
+
+        # Reactivar foreign keys
+        db.execute(text("SET session_replication_role = 'origin'"))
         db.commit()
     except Exception as e:
         db.rollback()
+        try:
+            db.execute(text("SET session_replication_role = 'origin'"))
+            db.commit()
+        except Exception:
+            pass
         raise HTTPException(500, f"Error restaurando: {e}")
     finally:
         db.close()
