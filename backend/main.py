@@ -559,6 +559,76 @@ def health_check(db: Session = Depends(get_db)):
     return result
 
 
+# ─── BACKUPS (solo admin) ─────────────────────────────────────────────────────
+@app.get("/backups")
+def listar_backups(token=Depends(require_admin)):
+    """Lista los backups disponibles en R2."""
+    try:
+        from routers.documentos import _get_s3, _R2_BUCKET
+        s3 = _get_s3()
+        if not s3:
+            raise HTTPException(503, "R2 no disponible")
+        resp = s3.list_objects_v2(Bucket=_R2_BUCKET, Prefix="backups/")
+        backups = []
+        for obj in sorted(resp.get("Contents", []), key=lambda o: o["LastModified"], reverse=True):
+            backups.append({
+                "archivo": obj["Key"].replace("backups/", ""),
+                "fecha": obj["LastModified"].isoformat(),
+                "tamano_mb": round(obj["Size"] / (1024 * 1024), 2),
+            })
+        return {"total": len(backups), "backups": backups}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Error listando backups: {e}")
+
+
+@app.get("/backups/{nombre}/descargar")
+def descargar_backup(nombre: str, token=Depends(require_admin)):
+    """Descarga un backup específico desde R2."""
+    import io
+    from fastapi.responses import StreamingResponse
+    if "/" in nombre or "\\" in nombre:
+        raise HTTPException(400, "Nombre inválido")
+    try:
+        from routers.documentos import _get_s3, _R2_BUCKET
+        s3 = _get_s3()
+        if not s3:
+            raise HTTPException(503, "R2 no disponible")
+        key = f"backups/{nombre}"
+        resp = s3.get_object(Bucket=_R2_BUCKET, Key=key)
+        content = resp["Body"].read()
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="application/sql",
+            headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
+        )
+    except s3.exceptions.NoSuchKey:
+        raise HTTPException(404, "Backup no encontrado")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Error descargando backup: {e}")
+
+
+@app.post("/backups/crear")
+def crear_backup_manual(token=Depends(require_admin)):
+    """Crea un backup manual inmediato."""
+    _backup_db_to_r2()
+    # Verificar que se creó
+    try:
+        from routers.documentos import _get_s3, _R2_BUCKET
+        s3 = _get_s3()
+        if s3:
+            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
+            key = f"backups/{ts}.sql"
+            s3.head_object(Bucket=_R2_BUCKET, Key=key)
+            return {"ok": True, "archivo": f"{ts}.sql"}
+    except Exception:
+        pass
+    return {"ok": True, "mensaje": "Backup ejecutado, revisa la lista de backups"}
+
+
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────
 @app.get("/actividad")
 def actividad(modulo: str = "", usuario: str = "",
