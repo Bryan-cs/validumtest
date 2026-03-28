@@ -164,6 +164,49 @@ def _backup_db_to_r2():
                 db2.close()
         except Exception as e:
             _log.warning(f"Backup: error limpiando actividad antigua: {e}")
+        # Limpiar planillas del mes anterior (cliente ya las descargó)
+        try:
+            from database import SessionLocal as _SL3
+            db3 = _SL3()
+            try:
+                from sqlalchemy import text as _t3
+                # Obtener mes/año anterior
+                hoy = datetime.now(timezone.utc)
+                if hoy.month == 1:
+                    mes_ant_idx, anio_ant = 12, hoy.year - 1
+                else:
+                    mes_ant_idx, anio_ant = hoy.month - 1, hoy.year
+                _MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                          "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+                mes_ant = _MESES[mes_ant_idx - 1]
+                # Solo limpiar si ya estamos en día 2+ del mes nuevo (dar margen)
+                if hoy.day >= 2:
+                    # Buscar planillas antiguas (anteriores al mes pasado)
+                    old_planillas = db3.execute(_t3(
+                        "SELECT id FROM planillas_pago WHERE NOT (mes = :mes AND anio = :anio) AND NOT (mes = :mes_act AND anio = :anio_act)"
+                    ), {"mes": mes_ant, "anio": str(anio_ant), "mes_act": _MESES[hoy.month - 1], "anio_act": str(hoy.year)}).fetchall()
+                    if old_planillas:
+                        ids = [r[0] for r in old_planillas]
+                        # Borrar archivos de R2/disco
+                        docs = db3.execute(_t3(
+                            f"SELECT id, ruta FROM documentos WHERE contexto = 'planilla_pago' AND contexto_id IN ({','.join(str(i) for i in ids)})"
+                        )).fetchall()
+                        for doc_id, ruta in docs:
+                            if s3 and ruta and not ruta.startswith("uploads/"):
+                                try: s3.delete_object(Bucket=_R2_BUCKET, Key=ruta)
+                                except Exception: pass
+                            db3.execute(_t3("DELETE FROM documentos WHERE id = :did"), {"did": doc_id})
+                        db3.execute(_t3(
+                            f"DELETE FROM planillas_pago WHERE id IN ({','.join(str(i) for i in ids)})"
+                        ))
+                        db3.commit()
+                        _log.info(f"Backup: eliminadas {len(ids)} planillas antiguas y {len(docs)} archivos de R2")
+                    else:
+                        db3.rollback()
+            finally:
+                db3.close()
+        except Exception as e:
+            _log.warning(f"Backup: error limpiando planillas antiguas: {e}")
     except Exception as e:
         _log.error(f"Backup: error general: {e}")
 
