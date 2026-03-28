@@ -701,6 +701,13 @@ async def restaurar_backup(
 
         # Reactivar foreign keys
         db.execute(text("SET session_replication_role = 'origin'"))
+
+        # Limpiar duplicados: si un doc existe en afiliados Y en eliminados, quitarlo de eliminados
+        db.execute(text("""
+            DELETE FROM eliminados
+            WHERE doc IN (SELECT doc FROM afiliados)
+        """))
+
         db.commit()
     except Exception as e:
         db.rollback()
