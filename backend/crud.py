@@ -131,6 +131,8 @@ def delete_usuario(db, id, user=""):
     u = db.query(models.Usuario).filter_by(id=id).first()
     if u:
         _log(db, user, "eliminó un usuario", "Usuarios", u.username)
+        from routers.deps import invalidate_user_cache
+        invalidate_user_cache(u.username)
     db.query(models.Usuario).filter_by(id=id).delete()
     db.commit()
 
@@ -615,21 +617,31 @@ def get_dashboard(db, anio="", mes=""):
 # ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
 def get_dashboard_meses(db):
     """Retorna lista de {mes, anio, ingresos, facturas} de los últimos 6 meses."""
-    result = []
+    from sqlalchemy import func
     now = datetime.now(COL_TZ)
+    # Calcular los 6 meses a consultar
+    periodos = []
     for i in range(5, -1, -1):
         month = (now.month - 1 - i) % 12 + 1
         year  = now.year + ((now.month - 1 - i) // 12)
-        mes_nombre = MESES[month - 1]
-        rows = db.query(models.Factura).filter_by(mes=mes_nombre, anio=str(year)).all()
-        ingresos = sum(f.ingresos or 0 for f in rows)
-        result.append({
-            "mes": mes_nombre[:3],
-            "anio": year,
-            "ingresos": ingresos,
-            "facturas": len(rows),
-        })
-    return result
+        periodos.append((MESES[month - 1], str(year)))
+    # Una sola query con GROUP BY en vez de 6 queries separadas
+    mes_list = [p[0] for p in periodos]
+    anio_list = list(set(p[1] for p in periodos))
+    rows = db.query(
+        models.Factura.mes, models.Factura.anio,
+        func.sum(models.Factura.ingresos).label("total_ingresos"),
+        func.count(models.Factura.id).label("total_facturas"),
+    ).filter(
+        models.Factura.mes.in_(mes_list),
+        models.Factura.anio.in_(anio_list),
+    ).group_by(models.Factura.mes, models.Factura.anio).all()
+    # Mapear resultados
+    data_map = {(r.mes, r.anio): (r.total_ingresos or 0, r.total_facturas) for r in rows}
+    return [
+        {"mes": mes[:3], "anio": int(anio), "ingresos": data_map.get((mes, anio), (0, 0))[0], "facturas": data_map.get((mes, anio), (0, 0))[1]}
+        for mes, anio in periodos
+    ]
 
 # ─── CACHÉ (Redis en producción, dict en memoria para dev) ───────────────────
 import time as _time
@@ -842,9 +854,8 @@ _ESTADO_LABEL = {
     "finalizada":  "Finalizada",
 }
 
-def _tarea_to_dict(db, t):
-    comentarios = db.query(models.TareaComentario).filter_by(tarea_id=t.id)\
-                    .order_by(models.TareaComentario.creado).all()
+def _tarea_to_dict(t, comentarios_map=None):
+    coms = comentarios_map.get(t.id, []) if comentarios_map else []
     return {
         "id": t.id, "titulo": t.titulo, "descripcion": t.descripcion,
         "asignado_a": t.asignado_a, "creado_por": t.creado_por,
@@ -856,8 +867,20 @@ def _tarea_to_dict(db, t):
         "finalizado_en": t.finalizado_en.isoformat() if t.finalizado_en else None,
         "finalizado_por": t.finalizado_por or "",
         "comentarios": [{"id": c.id, "usuario": c.usuario, "texto": c.texto,
-                         "creado": c.creado.isoformat()} for c in comentarios]
+                         "creado": c.creado.isoformat()} for c in coms]
     }
+
+def _load_comments_map(db, task_ids):
+    """Carga todos los comentarios para una lista de tareas en una sola query."""
+    if not task_ids:
+        return {}
+    comments = db.query(models.TareaComentario)\
+        .filter(models.TareaComentario.tarea_id.in_(task_ids))\
+        .order_by(models.TareaComentario.creado).all()
+    m = {}
+    for c in comments:
+        m.setdefault(c.tarea_id, []).append(c)
+    return m
 
 def create_tarea(db, data: schemas.TareaCreate):
     t = models.Tarea(**data.model_dump())
@@ -870,16 +893,18 @@ def create_tarea(db, data: schemas.TareaCreate):
             tarea_id=t.id
         ))
         db.commit()
-    return _tarea_to_dict(db, t)
+    return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
 
 def get_tareas(db, username: str, rol: str):
     from sqlalchemy import or_
     q = db.query(models.Tarea)
     if rol != "admin":
         q = q.filter_by(asignado_a=username)
-    # Hide private tasks from users who didn't create them
     q = q.filter(or_(models.Tarea.privada == False, models.Tarea.creado_por == username))
-    return [_tarea_to_dict(db, t) for t in q.order_by(models.Tarea.creado.desc()).all()]
+    tareas = q.order_by(models.Tarea.creado.desc()).all()
+    # Batch load comments: 1 query instead of N
+    cmap = _load_comments_map(db, [t.id for t in tareas])
+    return [_tarea_to_dict(t, cmap) for t in tareas]
 
 def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, nota: str = "", rol: str = ""):
     """Empleado cambia estado (pendiente→en_proceso→completada). Notifica al admin."""
@@ -905,7 +930,7 @@ def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, not
         tarea_id=tarea_id
     ))
     db.commit()
-    return _tarea_to_dict(db, t)
+    return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
 
 def finalizar_tarea(db, tarea_id: int, admin_username: str):
     """Admin finaliza una tarea completada. Queda en historial como finalizada."""
@@ -922,7 +947,7 @@ def finalizar_tarea(db, tarea_id: int, admin_username: str):
         tarea_id=tarea_id
     ))
     db.commit()
-    return _tarea_to_dict(db, t)
+    return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
 
 def add_comentario(db, tarea_id: int, data: schemas.TareaComentarioCreate):
     t = db.query(models.Tarea).filter_by(id=tarea_id).first()

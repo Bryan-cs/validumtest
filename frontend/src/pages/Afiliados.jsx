@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -80,7 +80,7 @@ export default function Afiliados() {
   const [pagina, setPagina] = useState(1);
   const POR_PAG = 50;
 
-  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
+  const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   // Sin paginación: para filtros y exportaciones (no necesita polling cada 10s)
   const { data: todos=[] } = useQuery({
     queryKey:['afiliados_all'],
@@ -113,28 +113,34 @@ export default function Afiliados() {
     refetchInterval: false,
   });
 
-  const clientesUnicos = [...new Set(todos.map(a=>a.cliente_txt).filter(Boolean))].sort();
-  const subtiposUnicos = [...new Set(todos.map(a=>a.subtipo).filter(Boolean))].sort();
-  const estadosOpts    = [...new Set(todos.map(a=>a.estado_srv||a.estado).filter(Boolean))].sort();
+  // Debounce búsqueda: evita recalcular en cada keystroke
+  const [busquedaDefer, setBusquedaDefer] = useState('');
+  const timerRef = useRef(null);
+  useEffect(() => {
+    timerRef.current = setTimeout(() => setBusquedaDefer(busqueda), 300);
+    return () => clearTimeout(timerRef.current);
+  }, [busqueda]);
 
-  // Filtrar sobre TODOS los registros (no solo la página actual) cuando hay filtros o búsqueda activos
-  const hayFiltrosActivos = busqueda || Object.values(filtros).some(v => v.length > 0);
+  const clientesUnicos = useMemo(() => [...new Set(todos.map(a=>a.cliente_txt).filter(Boolean))].sort(), [todos]);
+  const subtiposUnicos = useMemo(() => [...new Set(todos.map(a=>a.subtipo).filter(Boolean))].sort(), [todos]);
+  const estadosOpts    = useMemo(() => [...new Set(todos.map(a=>a.estado_srv||a.estado).filter(Boolean))].sort(), [todos]);
+
+  const hayFiltrosActivos = busquedaDefer || Object.values(filtros).some(v => v.length > 0);
   const fuenteDatos = hayFiltrosActivos ? todos : data;
-  const dataFiltrada = fuenteDatos.filter(a => {
-    const q = busqueda.toLowerCase();
-    if (busqueda && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
+  const dataFiltrada = useMemo(() => fuenteDatos.filter(a => {
+    const q = busquedaDefer.toLowerCase();
+    if (busquedaDefer && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
     if (filtros.empresa.length && !filtros.empresa.includes(a.empresa))               return false;
     if (filtros.cliente.length && !filtros.cliente.includes(a.cliente_txt))           return false;
     if (filtros.estado.length  && !filtros.estado.includes(a.estado_srv||a.estado))   return false;
     if (filtros.subtipo.length   && !filtros.subtipo.includes(a.subtipo))               return false;
     if (filtros.tipo_doc.length  && !filtros.tipo_doc.includes(a.tipo_doc||'CC'))       return false;
     return true;
-  });
+  }), [fuenteDatos, busquedaDefer, filtros]);
 
-  // Sugerencias de búsqueda en tab pagos
-  const sugerenciasPagos = busquedaPagos.length >= 2
+  const sugerenciasPagos = useMemo(() => busquedaPagos.length >= 2
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
-    : [];
+    : [], [todos, busquedaPagos]);
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setPendingFiles([]); setModal('nuevo'); };

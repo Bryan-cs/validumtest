@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
 import { C, Btn, PageHeader, StatCard, fmt } from '../components/UI';
@@ -43,7 +43,7 @@ export default function Cobro() {
   const setFiltro = (key, vals) => { setFiltros(f => ({ ...f, [key]: vals })); setPagina(1); };
   const limpiar   = () => { setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] }); setDocBuscar(''); setDocFiltro(''); setPagina(1); };
 
-  const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data) });
+  const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   const { data: config = {} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['cobro', mesFiltro, anioFiltro, docFiltro],
@@ -51,28 +51,31 @@ export default function Cobro() {
     refetchInterval: 60_000,
   });
 
-  // Opciones dinámicas — derivadas directamente de los datos de cobro
-  const clientesUnicos = [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
-  const subtiposUnicos = [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort();
+  const clientesUnicos = useMemo(() => [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort(), [rows]);
+  const subtiposUnicos = useMemo(() => [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort(), [rows]);
   const estadosOpts    = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
 
-  // Filtrado local con multiselección
-  const rowsFiltrados = rows.filter(r => {
+  const rowsFiltrados = useMemo(() => rows.filter(r => {
     const labelEstado = ESTADO_CONFIG[r.estado]?.label || r.estado;
     if (filtros.empresa.length  && !filtros.empresa.includes(r.empresa))    return false;
     if (filtros.cliente.length  && !filtros.cliente.includes(r.cliente))    return false;
     if (filtros.estado.length   && !filtros.estado.includes(labelEstado))   return false;
     if (filtros.subtipo.length  && !filtros.subtipo.includes(r.subtipo))    return false;
     return true;
-  });
+  }), [rows, filtros]);
 
   const totalPags   = Math.max(1, Math.ceil(rowsFiltrados.length / POR_PAG));
   const rowsPagina  = rowsFiltrados.slice((pagina - 1) * POR_PAG, pagina * POR_PAG);
 
-  const nHoy     = rowsFiltrados.filter(r=>r.estado==='HOY').length;
-  const nVenc    = rowsFiltrados.filter(r=>r.estado==='VENCIDO').length;
-  const nCobr    = rowsFiltrados.filter(r=>r.estado==='COBRADO').length;
-  const planPend = rowsFiltrados.filter(r=>r.estado==='HOY'||r.estado==='VENCIDO').reduce((s,r)=>s+r.planilla,0);
+  const { nHoy, nVenc, nCobr, planPend } = useMemo(() => {
+    let nHoy=0, nVenc=0, nCobr=0, planPend=0;
+    for (const r of rowsFiltrados) {
+      if (r.estado==='HOY') { nHoy++; planPend+=r.planilla; }
+      else if (r.estado==='VENCIDO') { nVenc++; planPend+=r.planilla; }
+      else if (r.estado==='COBRADO') nCobr++;
+    }
+    return { nHoy, nVenc, nCobr, planPend };
+  }, [rowsFiltrados]);
 
 
   return (
@@ -268,7 +271,7 @@ export default function Cobro() {
 function PlanillaDetalle({ afiliado, cobroRow, config }) {
   const { data: facturas=[] } = useQuery({
     queryKey: ['facturas_cobro', afiliado?.doc],
-    queryFn: () => api.get('/facturas', { params:{ limit:0 } }).then(r=>(r.data.items||[]).filter(f=>f.doc===afiliado.doc)),
+    queryFn: () => api.get('/facturas', { params:{ doc: afiliado.doc, limit:0 } }).then(r=>r.data.items||[]),
     enabled: !!afiliado?.doc,
     staleTime: 30_000,
   });
