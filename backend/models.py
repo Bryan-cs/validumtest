@@ -248,6 +248,16 @@ class Notificacion(Base):
     tarea_id = Column(Integer, nullable=True)
     creado   = Column(DateTime, default=_utcnow)
 
+class PlanillaPago(Base):
+    __tablename__ = "planillas_pago"
+    id           = Column(Integer, primary_key=True, index=True)
+    cliente_ref  = Column(String(150), index=True)     # cliente_txt del afiliado
+    mes          = Column(String(20))                   # "Enero", "Febrero"...
+    anio         = Column(String(4))                    # "2026"
+    observaciones= Column(Text, default="")
+    subido_por   = Column(String(60))
+    creado       = Column(DateTime, default=_utcnow)
+
 class Documento(Base):
     __tablename__ = "documentos"
     __table_args__ = (

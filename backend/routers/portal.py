@@ -568,3 +568,33 @@ def portal_estado_cuenta(doc: str, db: Session = Depends(get_db), token=Depends(
         raise HTTPException(403, "Sin acceso a este afiliado")
 
     return _gen_pdf(afil.id, db, token)
+
+
+# ─── PLANILLAS PAGADAS (para portal cliente) ─────────────────────────────────
+
+@router.get("/planillas")
+def portal_planillas(mes: str = "", anio: str = "",
+                     db: Session = Depends(get_db), token=Depends(_require_portal)):
+    """Lista las planillas de pago SS del cliente autenticado."""
+    rol = token.get("rol", "")
+    cliente_ref = (token.get("cliente_ref") or "").strip()
+
+    q = db.query(models.PlanillaPago).order_by(models.PlanillaPago.id.desc())
+    if rol != "admin":
+        if not cliente_ref:
+            raise HTTPException(400, "Usuario sin cliente asociado")
+        q = q.filter(models.PlanillaPago.cliente_ref == cliente_ref)
+    if mes:  q = q.filter(models.PlanillaPago.mes == mes)
+    if anio: q = q.filter(models.PlanillaPago.anio == anio)
+
+    rows = q.all()
+    result = []
+    for p in rows:
+        docs = db.query(models.Documento).filter_by(contexto="planilla_pago", contexto_id=p.id).all()
+        result.append({
+            "id": p.id, "cliente_ref": p.cliente_ref, "mes": p.mes, "anio": p.anio,
+            "observaciones": p.observaciones,
+            "creado": p.creado.isoformat() if p.creado else None,
+            "archivos": [{"id": d.id, "nombre": d.nombre, "tamano": d.tamano} for d in docs],
+        })
+    return result
