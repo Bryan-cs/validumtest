@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -7,6 +7,8 @@ import { C, Btn, PageHeader } from '../components/UI';
 export default function Backups() {
   const qc = useQueryClient();
   const [creando, setCreando] = useState(false);
+  const [restaurando, setRestaurando] = useState(false);
+  const fileRef = useRef(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ['backups'],
@@ -44,13 +46,53 @@ export default function Backups() {
     }
   };
 
+  const restaurar = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.name.endsWith('.json')) {
+      toast.error('Solo se aceptan archivos .json');
+      return;
+    }
+    const confirmar = window.confirm(
+      'ADVERTENCIA: Esto reemplazará TODOS los datos actuales con los del backup.\n\n' +
+      'Se creará un backup de seguridad antes de restaurar.\n\n' +
+      '¿Estás seguro de continuar?'
+    );
+    if (!confirmar) {
+      e.target.value = '';
+      return;
+    }
+    setRestaurando(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await api.post('/backups/restaurar', fd);
+      const data = res.data;
+      const tablas = data.restaurado?.length || 0;
+      const errores = data.errores?.length || 0;
+      toast.success(`Backup restaurado: ${tablas} tablas${errores ? `, ${errores} errores` : ''}`);
+      qc.invalidateQueries({ queryKey: ['backups'] });
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Error restaurando backup');
+    } finally {
+      setRestaurando(false);
+      e.target.value = '';
+    }
+  };
+
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
       <PageHeader title="Backups" subtitle="Respaldos automáticos de la base de datos en Cloudflare R2"
         action={
-          <Btn variant="accent" onClick={() => crearBackup.mutate()} disabled={creando}>
-            {creando ? 'Creando...' : '+ Crear backup manual'}
-          </Btn>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Btn variant="accent" onClick={() => crearBackup.mutate()} disabled={creando}>
+              {creando ? 'Creando...' : '+ Crear backup'}
+            </Btn>
+            <Btn variant="secondary" onClick={() => fileRef.current?.click()} disabled={restaurando}>
+              {restaurando ? 'Restaurando...' : 'Restaurar backup'}
+            </Btn>
+            <input ref={fileRef} type="file" accept=".json" onChange={restaurar} style={{ display: 'none' }} />
+          </div>
         }
       />
 

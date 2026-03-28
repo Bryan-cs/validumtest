@@ -6,7 +6,7 @@ APP_VERSION = "1.2.0"
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
@@ -636,6 +636,78 @@ def crear_backup_manual(token=Depends(require_admin)):
     except Exception:
         pass
     return {"ok": True, "mensaje": "Backup ejecutado, revisa la lista de backups"}
+
+
+@app.post("/backups/restaurar")
+async def restaurar_backup(
+    file: UploadFile = File(...),
+    token=Depends(require_admin),
+):
+    """Restaura la base de datos desde un archivo JSON de backup."""
+    import json
+    from database import SessionLocal
+    from sqlalchemy import text, inspect
+
+    if not file.filename.endswith(".json"):
+        raise HTTPException(400, "Solo se aceptan archivos .json")
+
+    content = await file.read()
+    try:
+        backup_data = json.loads(content)
+    except json.JSONDecodeError:
+        raise HTTPException(400, "Archivo JSON inválido")
+
+    if not isinstance(backup_data, dict):
+        raise HTTPException(400, "Formato de backup no reconocido")
+
+    db = SessionLocal()
+    restored = []
+    errors = []
+    try:
+        inspector = inspect(db.bind)
+        existing_tables = set(inspector.get_table_names())
+
+        # Primero crear backup de seguridad antes de restaurar
+        _backup_db_to_r2()
+
+        for table_name, table_data in backup_data.items():
+            if table_name not in existing_tables:
+                errors.append(f"Tabla '{table_name}' no existe, saltada")
+                continue
+            rows = table_data.get("rows", [])
+            columns = table_data.get("columns", [])
+            if not rows or not columns:
+                continue
+            try:
+                # Limpiar tabla
+                db.execute(text(f'DELETE FROM "{table_name}"'))
+                # Insertar filas
+                count = 0
+                for row in rows:
+                    cols = ", ".join(f'"{c}"' for c in columns)
+                    placeholders = ", ".join(f":v{i}" for i in range(len(columns)))
+                    params = {f"v{i}": row.get(c) for i, c in enumerate(columns)}
+                    db.execute(text(f'INSERT INTO "{table_name}" ({cols}) VALUES ({placeholders})'), params)
+                    count += 1
+                restored.append({"tabla": table_name, "filas": count})
+            except Exception as e:
+                errors.append(f"Error en '{table_name}': {str(e)[:100]}")
+                db.rollback()
+                db = SessionLocal()  # Nueva sesión después de rollback
+                continue
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Error restaurando: {e}")
+    finally:
+        db.close()
+
+    return {
+        "ok": True,
+        "restaurado": restored,
+        "errores": errors,
+        "mensaje": "Se creó un backup de seguridad antes de restaurar",
+    }
 
 
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────
