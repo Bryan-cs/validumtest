@@ -148,6 +148,22 @@ def _backup_db_to_r2():
                     _log.info(f"Backup: eliminado backup antiguo {obj['Key']}")
         except Exception as e:
             _log.warning(f"Backup: error limpiando backups antiguos: {e}")
+        # Limpiar registros de actividad > 90 días
+        try:
+            from database import SessionLocal as _SL2
+            db2 = _SL2()
+            try:
+                from sqlalchemy import text as _t2
+                result = db2.execute(_t2("DELETE FROM actividad WHERE fecha < NOW() - INTERVAL '90 days'"))
+                if result.rowcount > 0:
+                    db2.commit()
+                    _log.info(f"Backup: limpiados {result.rowcount} registros de actividad > 90 días")
+                else:
+                    db2.rollback()
+            finally:
+                db2.close()
+        except Exception as e:
+            _log.warning(f"Backup: error limpiando actividad antigua: {e}")
     except Exception as e:
         _log.error(f"Backup: error general: {e}")
 
