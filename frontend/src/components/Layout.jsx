@@ -4,11 +4,17 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../hooks/useAuth';
 import api from '../utils/api';
 
-const C_PRIMARY = '#4F46E5';
-const C_ACCENT  = '#F59E0B';
 const SIDEBAR_MIN = 48;
 const SIDEBAR_MAX = 380;
 const SIDEBAR_DEFAULT = 220;
+
+const PALETTES = [
+  { id: 'indigo',   label: 'Índigo',    dot: '#4F46E5' },
+  { id: 'ocean',    label: 'Oceánico',   dot: '#0891B2' },
+  { id: 'emerald',  label: 'Esmeralda',  dot: '#059669' },
+  { id: 'lavender', label: 'Lavanda',    dot: '#7C3AED' },
+  { id: 'slate',    label: 'Slate',      dot: '#475569' },
+];
 
 const navItems = (rol) => [
   { to: '/',            label: '🏠 Dashboard',           section: 'PRINCIPAL' },
@@ -35,16 +41,24 @@ export default function Layout() {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT);
   const [showNotifs, setShowNotifs] = useState(false);
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
+  const [palette, setPalette] = useState(() => localStorage.getItem('palette') || 'indigo');
+  const [showPalette, setShowPalette] = useState(false);
   const dragging = useRef(false);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('theme', dark ? 'dark' : 'light');
   }, [dark]);
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-palette', palette);
+    localStorage.setItem('palette', palette);
+  }, [palette]);
+
   const startX = useRef(0);
   const startW = useRef(0);
 
-  const collapsed = width <= SIDEBAR_MIN + 10; // considera "colapsado" si está muy angosto
+  const collapsed = width <= SIDEBAR_MIN + 10;
 
   const { data: notifs = [] } = useQuery({
     queryKey: ['notificaciones'],
@@ -83,7 +97,6 @@ export default function Layout() {
       dragging.current = false;
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
-      // Snap: si quedó muy angosto, colapsar a mínimo
       setWidth(w => w < 80 ? SIDEBAR_MIN : w);
     };
     window.addEventListener('mousemove', onMouseMove);
@@ -103,20 +116,20 @@ export default function Layout() {
       {/* Sidebar */}
       <aside style={{
         width, minWidth: width, maxWidth: width,
-        background: C_PRIMARY, display: 'flex', flexDirection: 'column',
+        background: 'var(--c-sidebar)', display: 'flex', flexDirection: 'column',
         position: 'relative', flexShrink: 0, overflow: 'hidden',
       }}>
         {/* Logo */}
         {!collapsed && (
           <div style={{ padding: '18px 16px 8px', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', overflow: 'hidden' }}>
             <span style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
-              BBC <span style={{ color: C_ACCENT }}>File</span>
+              BBC <span style={{ color: 'var(--c-sidebar-active)' }}>File</span>
             </span>
           </div>
         )}
         {collapsed && (
           <div style={{ padding: '18px 0 8px', textAlign: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: C_ACCENT }}>B</span>
+            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-sidebar-active)' }}>B</span>
           </div>
         )}
 
@@ -136,7 +149,7 @@ export default function Layout() {
                   padding: collapsed ? '10px 0' : '9px 14px',
                   margin: '1px 7px', borderRadius: 7, textDecoration: 'none', fontSize: 13,
                   color: isActive ? '#fff' : 'rgba(255,255,255,.72)',
-                  background: isActive ? C_ACCENT : 'transparent',
+                  background: isActive ? 'var(--c-sidebar-active)' : 'transparent',
                   fontWeight: isActive ? 600 : 400,
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   whiteSpace: 'nowrap', overflow: 'hidden',
@@ -221,7 +234,7 @@ export default function Layout() {
           )}
         </div>
 
-        {/* Usuario */}
+        {/* Usuario + controles */}
         <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,.1)' }}>
           {!collapsed && (
             <div style={{ color: 'rgba(255,255,255,.8)', fontSize: 12, marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
@@ -239,6 +252,42 @@ export default function Layout() {
             }}>
               {dark ? '☀️' : '🌙'}{!collapsed && <span style={{ fontSize: 11, marginLeft: 4 }}>{dark ? 'Claro' : 'Oscuro'}</span>}
             </button>
+            {/* Selector de paleta */}
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowPalette(v => !v)} title="Cambiar paleta de colores" style={{
+                padding: '5px 8px', background: 'rgba(255,255,255,.1)',
+                border: '1px solid rgba(255,255,255,.2)', borderRadius: 6,
+                color: '#fff', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+              }}>
+                🎨{!collapsed && <span style={{ fontSize: 11 }}>Tema</span>}
+              </button>
+              {showPalette && (
+                <div style={{
+                  position: 'absolute', bottom: '100%', left: 0, marginBottom: 6,
+                  background: 'var(--c-surface)', borderRadius: 10, padding: 8,
+                  boxShadow: '0 8px 30px rgba(0,0,0,.3)', zIndex: 9999,
+                  border: '1px solid var(--c-border)', minWidth: 160,
+                }}>
+                  {PALETTES.map(p => (
+                    <button key={p.id} onClick={() => { setPalette(p.id); setShowPalette(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                        padding: '7px 10px', border: 'none', borderRadius: 6, cursor: 'pointer',
+                        background: palette === p.id ? 'var(--c-surface2)' : 'transparent',
+                        fontSize: 12, color: 'var(--c-text)', fontWeight: palette === p.id ? 700 : 400,
+                      }}>
+                      <span style={{
+                        width: 14, height: 14, borderRadius: '50%', background: p.dot,
+                        border: palette === p.id ? '2px solid var(--c-text)' : '2px solid transparent',
+                        flexShrink: 0,
+                      }} />
+                      {p.label}
+                      {palette === p.id && <span style={{ marginLeft: 'auto', fontSize: 11 }}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
           <button onClick={handleLogout} title="Cerrar sesión" style={{
             width: '100%', padding: '7px 10px', background: 'rgba(255,255,255,.1)',

@@ -8,7 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
-    :root {
+    /* ── Paleta por defecto: Índigo ───────────────────────────── */
+    :root, [data-palette="indigo"] {
       --c-primary: #4F46E5; --c-accent: #F59E0B;
       --c-green: #16A34A;   --c-green-bg: #DCFCE7;
       --c-red: #DC2626;     --c-red-bg: #FEE2E2;
@@ -17,8 +18,9 @@
       --c-text: #1E293B;    --c-text2: #64748B;
       --c-border: #E2E8F0;
       --c-surface: #FFFFFF; --c-surface2: #F8F9FF; --c-bg: #F0F2FF;
+      --c-sidebar: #4F46E5; --c-sidebar-active: #F59E0B;
     }
-    .dark {
+    .dark, .dark[data-palette="indigo"] {
       --c-primary: #818CF8; --c-accent: #FBBF24;
       --c-green: #4ADE80;   --c-green-bg: #052E16;
       --c-red: #FC8585;     --c-red-bg: #3B0D0D;
@@ -27,7 +29,105 @@
       --c-text: #E0E8F5;    --c-text2: #8FA3BF;
       --c-border: #2D2B55;
       --c-surface: #1C1938; --c-surface2: #13112A; --c-bg: #0D0B1E;
+      --c-sidebar: #1E1B4B; --c-sidebar-active: #FBBF24;
     }
+
+    /* ── Oceánico ─────────────────────────────────────────────── */
+    [data-palette="ocean"] {
+      --c-primary: #0891B2; --c-accent: #06B6D4;
+      --c-green: #059669;   --c-green-bg: #D1FAE5;
+      --c-red: #E11D48;     --c-red-bg: #FFE4E6;
+      --c-amber: #D97706;   --c-amber-bg: #FEF3C7;
+      --c-blue: #0284C7;    --c-blue-bg: #E0F2FE;
+      --c-text: #164E63;    --c-text2: #6B8A99;
+      --c-border: #D1E5EE;
+      --c-surface: #FFFFFF; --c-surface2: #F0FAFB; --c-bg: #ECFEFF;
+      --c-sidebar: #0E7490; --c-sidebar-active: #06B6D4;
+    }
+    .dark[data-palette="ocean"] {
+      --c-primary: #22D3EE; --c-accent: #67E8F9;
+      --c-green: #34D399;   --c-green-bg: #022C22;
+      --c-red: #FB7185;     --c-red-bg: #350B15;
+      --c-amber: #FBBF24;   --c-amber-bg: #2D1800;
+      --c-blue: #38BDF8;    --c-blue-bg: #0C2D48;
+      --c-text: #CFFAFE;    --c-text2: #7DD3E8;
+      --c-border: #1E3A4A;
+      --c-surface: #0C2A36; --c-surface2: #071D27; --c-bg: #041520;
+      --c-sidebar: #083344; --c-sidebar-active: #22D3EE;
+    }
+
+    /* ── Esmeralda ────────────────────────────────────────────── */
+    [data-palette="emerald"] {
+      --c-primary: #059669; --c-accent: #10B981;
+      --c-green: #16A34A;   --c-green-bg: #DCFCE7;
+      --c-red: #DC2626;     --c-red-bg: #FEE2E2;
+      --c-amber: #D97706;   --c-amber-bg: #FEF3C7;
+      --c-blue: #3B82F6;    --c-blue-bg: #EFF6FF;
+      --c-text: #1B3A2D;    --c-text2: #5F8A72;
+      --c-border: #D1E7DD;
+      --c-surface: #FFFFFF; --c-surface2: #F0FDF4; --c-bg: #ECFDF5;
+      --c-sidebar: #065F46; --c-sidebar-active: #34D399;
+    }
+    .dark[data-palette="emerald"] {
+      --c-primary: #34D399; --c-accent: #6EE7B7;
+      --c-green: #4ADE80;   --c-green-bg: #052E16;
+      --c-red: #FC8585;     --c-red-bg: #3B0D0D;
+      --c-amber: #FBBF24;   --c-amber-bg: #2D1800;
+      --c-blue: #60A5FA;    --c-blue-bg: #0D2045;
+      --c-text: #D1FAE5;    --c-text2: #6EE7B7;
+      --c-border: #1A3A2A;
+      --c-surface: #0C2418; --c-surface2: #071A10; --c-bg: #041209;
+      --c-sidebar: #064E3B; --c-sidebar-active: #34D399;
+    }
+
+    /* ── Lavanda ──────────────────────────────────────────────── */
+    [data-palette="lavender"] {
+      --c-primary: #7C3AED; --c-accent: #A78BFA;
+      --c-green: #16A34A;   --c-green-bg: #DCFCE7;
+      --c-red: #E11D48;     --c-red-bg: #FFE4E6;
+      --c-amber: #D97706;   --c-amber-bg: #FEF3C7;
+      --c-blue: #6366F1;    --c-blue-bg: #EEF2FF;
+      --c-text: #2E1065;    --c-text2: #7C6FA0;
+      --c-border: #E0D8EF;
+      --c-surface: #FFFFFF; --c-surface2: #F9F5FF; --c-bg: #F5F3FF;
+      --c-sidebar: #6D28D9; --c-sidebar-active: #A78BFA;
+    }
+    .dark[data-palette="lavender"] {
+      --c-primary: #A78BFA; --c-accent: #C4B5FD;
+      --c-green: #4ADE80;   --c-green-bg: #052E16;
+      --c-red: #FB7185;     --c-red-bg: #350B15;
+      --c-amber: #FBBF24;   --c-amber-bg: #2D1800;
+      --c-blue: #818CF8;    --c-blue-bg: #1E1B4B;
+      --c-text: #EDE9FE;    --c-text2: #A5A0C8;
+      --c-border: #2E2456;
+      --c-surface: #1C1540; --c-surface2: #130E30; --c-bg: #0C0820;
+      --c-sidebar: #3B1C8C; --c-sidebar-active: #A78BFA;
+    }
+
+    /* ── Slate (Neutro frío) ──────────────────────────────────── */
+    [data-palette="slate"] {
+      --c-primary: #475569; --c-accent: #38BDF8;
+      --c-green: #16A34A;   --c-green-bg: #DCFCE7;
+      --c-red: #DC2626;     --c-red-bg: #FEE2E2;
+      --c-amber: #D97706;   --c-amber-bg: #FEF3C7;
+      --c-blue: #3B82F6;    --c-blue-bg: #EFF6FF;
+      --c-text: #1E293B;    --c-text2: #64748B;
+      --c-border: #E2E8F0;
+      --c-surface: #FFFFFF; --c-surface2: #F8FAFC; --c-bg: #F1F5F9;
+      --c-sidebar: #334155; --c-sidebar-active: #38BDF8;
+    }
+    .dark[data-palette="slate"] {
+      --c-primary: #94A3B8; --c-accent: #38BDF8;
+      --c-green: #4ADE80;   --c-green-bg: #052E16;
+      --c-red: #FC8585;     --c-red-bg: #3B0D0D;
+      --c-amber: #FBBF24;   --c-amber-bg: #2D1800;
+      --c-blue: #60A5FA;    --c-blue-bg: #0D2045;
+      --c-text: #E2E8F0;    --c-text2: #94A3B8;
+      --c-border: #334155;
+      --c-surface: #1E293B; --c-surface2: #0F172A; --c-bg: #0B1120;
+      --c-sidebar: #1E293B; --c-sidebar-active: #38BDF8;
+    }
+
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', system-ui, sans-serif; font-size: 14px; background: var(--c-bg); color: var(--c-text); transition: background .2s, color .2s; }
     input, select, textarea, button { color: var(--c-text); font-size: 14px; }
@@ -35,6 +135,13 @@
     ::-webkit-scrollbar-track { background: var(--c-surface2); }
     ::-webkit-scrollbar-thumb { background: var(--c-border); border-radius: 3px; }
   </style>
+  <script>
+    // Aplicar paleta guardada antes del render para evitar flash
+    (function() {
+      var p = localStorage.getItem('palette') || 'indigo';
+      document.documentElement.setAttribute('data-palette', p);
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

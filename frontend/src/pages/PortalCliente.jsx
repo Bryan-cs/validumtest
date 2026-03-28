@@ -755,7 +755,7 @@ export default function PortalCliente() {
   return (
     <div style={{ minHeight:'100vh', background:'var(--c-bg)', fontFamily:'Inter, system-ui, sans-serif' }}>
       {/* Header único */}
-      <div style={{ background:C.primary, padding:'0 24px' }}>
+      <div style={{ background:'var(--c-sidebar)', padding:'0 24px' }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           {/* Barra top */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 0 10px' }}>
