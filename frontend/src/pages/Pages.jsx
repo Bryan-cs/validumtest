@@ -839,6 +839,22 @@ export function NovedadesClientes() {
     onError:()=>toast.error('Error al actualizar'),
   });
 
+  const delNovedad = useMutation({
+    mutationFn:(id)=>api.delete(`/portal/novedades-pago/${id}`),
+    onSuccess:()=>{ toast.success('Novedad eliminada'); qc.invalidateQueries({queryKey:['admin-novedades-pago']}); },
+    onError:()=>toast.error('Error al eliminar'),
+  });
+  const delSolicitud = useMutation({
+    mutationFn:(id)=>api.delete(`/portal/solicitudes-retiro/${id}`),
+    onSuccess:()=>{ toast.success('Solicitud eliminada'); qc.invalidateQueries({queryKey:['admin-solicitudes-retiro']}); },
+    onError:()=>toast.error('Error al eliminar'),
+  });
+  const delNovedadAfil = useMutation({
+    mutationFn:(id)=>api.delete(`/portal/solicitudes-novedad/${id}`),
+    onSuccess:()=>{ toast.success('Solicitud eliminada'); qc.invalidateQueries({queryKey:['admin-novedades-afil']}); },
+    onError:()=>toast.error('Error al eliminar'),
+  });
+
   const confirmarRespuesta = async () => {
     if(!modalResp) return;
     const payload = { id: modalResp.id, estado: modalResp.estado, respuesta: respTexto };
@@ -987,6 +1003,7 @@ export function NovedadesClientes() {
                       ? <Btn size="sm" variant="success" onClick={()=>{ setModalResp({tipo:'novedad',id:n.id,estado:'procesado',label:`Novedad de pago ${n.mes} ${n.anio}`}); setRespTexto(n.respuesta||''); }}>Marcar procesado</Btn>
                       : <Btn size="sm" variant="secondary" onClick={()=>updNovedad.mutate({id:n.id,estado:'pendiente',respuesta:n.respuesta})} disabled={updNovedad.isPending}>Reabrir</Btn>
                     }
+                    <Btn size="sm" variant="danger" style={{marginLeft:4}} onClick={()=>{ if(window.confirm('¿Eliminar esta novedad y sus adjuntos?')) delNovedad.mutate(n.id); }} disabled={delNovedad.isPending}>×</Btn>
                   </td>
                 </tr>
               ))}
@@ -1025,6 +1042,7 @@ export function NovedadesClientes() {
                       </div>
                     )}
                     {s.estado!=='pendiente'&&<Btn size="sm" variant="secondary" onClick={()=>updSolicitud.mutate({id:s.id,estado:'pendiente',respuesta:s.respuesta})} disabled={updSolicitud.isPending}>Reabrir</Btn>}
+                    <Btn size="sm" variant="danger" style={{marginLeft:4}} onClick={()=>{ if(window.confirm('¿Eliminar esta solicitud y sus adjuntos?')) delSolicitud.mutate(s.id); }} disabled={delSolicitud.isPending}>×</Btn>
                   </td>
                 </tr>
               ))}
@@ -1061,6 +1079,7 @@ export function NovedadesClientes() {
                       ? <Btn size="sm" variant="success" onClick={()=>{ setModalResp({tipo:'novedad-afil',id:n.id,estado:'atendido',label:`Novedad ${n.tipo} — ${n.afiliado_nombre}`}); setRespTexto(n.respuesta||''); }}>Marcar atendido</Btn>
                       : <Btn size="sm" variant="secondary" onClick={()=>updNovedadAfil.mutate({id:n.id,estado:'pendiente',respuesta:n.respuesta})} disabled={updNovedadAfil.isPending}>Reabrir</Btn>
                     }
+                    <Btn size="sm" variant="danger" style={{marginLeft:4}} onClick={()=>{ if(window.confirm('¿Eliminar esta novedad y sus adjuntos?')) delNovedadAfil.mutate(n.id); }} disabled={delNovedadAfil.isPending}>×</Btn>
                   </td>
                 </tr>
               ))}

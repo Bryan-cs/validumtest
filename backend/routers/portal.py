@@ -10,6 +10,22 @@ from database import get_db
 import models, schemas
 from .deps import verify_token
 
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads')
+
+
+def _borrar_docs_asociados(db: Session, contextos: list[str], contexto_id: int):
+    """Borra documentos de disco y DB asociados a una solicitud."""
+    docs = db.query(models.Documento).filter(
+        models.Documento.contexto.in_(contextos),
+        models.Documento.contexto_id == contexto_id,
+    ).all()
+    for d in docs:
+        filepath = os.path.realpath(os.path.join(UPLOAD_DIR, d.ruta))
+        if filepath.startswith(os.path.realpath(UPLOAD_DIR)) and os.path.exists(filepath):
+            os.remove(filepath)
+        db.delete(d)
+    return len(docs)
+
 router = APIRouter(prefix="/portal", tags=["portal"])
 
 
@@ -267,6 +283,19 @@ def portal_update_novedad_estado(
     return {"ok": True}
 
 
+@router.delete("/novedades-pago/{id}")
+def portal_delete_novedad(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    if token.get("rol") != "admin":
+        raise HTTPException(403, "Solo administradores pueden eliminar novedades")
+    nov = db.query(models.NovedadPago).filter_by(id=id).first()
+    if not nov:
+        raise HTTPException(404, "Novedad no encontrada")
+    _borrar_docs_asociados(db, ['novedad_pago', 'resp_pago'], id)
+    db.delete(nov)
+    db.commit()
+    return {"ok": True}
+
+
 # ─── SOLICITUDES DE RETIRO ────────────────────────────────────────────────────
 
 @router.post("/solicitar-retiro", status_code=201)
@@ -343,6 +372,19 @@ def portal_update_solicitud_estado(
         if sol.respuesta:
             msg += f". Nota del administrador: {sol.respuesta}"
         db.add(models.Notificacion(usuario=sol.username_cliente, mensaje=msg))
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/solicitudes-retiro/{id}")
+def portal_delete_solicitud_retiro(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    if token.get("rol") != "admin":
+        raise HTTPException(403, "Solo administradores pueden eliminar solicitudes")
+    sol = db.query(models.SolicitudRetiro).filter_by(id=id).first()
+    if not sol:
+        raise HTTPException(404, "Solicitud no encontrada")
+    _borrar_docs_asociados(db, ['novedad_retiro', 'resp_retiro'], id)
+    db.delete(sol)
     db.commit()
     return {"ok": True}
 
@@ -496,6 +538,19 @@ def portal_update_novedad_afil_estado(
         if s.respuesta:
             msg += f". Nota del administrador: {s.respuesta}"
         db.add(models.Notificacion(usuario=s.username_cliente, mensaje=msg))
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/solicitudes-novedad/{id}")
+def portal_delete_novedad_afil(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    if token.get("rol") != "admin":
+        raise HTTPException(403, "Solo administradores pueden eliminar solicitudes")
+    s = db.query(models.SolicitudNovedad).filter_by(id=id).first()
+    if not s:
+        raise HTTPException(404, "Solicitud no encontrada")
+    _borrar_docs_asociados(db, ['novedad_afil', 'resp_afil'], id)
+    db.delete(s)
     db.commit()
     return {"ok": True}
 

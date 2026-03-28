@@ -60,6 +60,45 @@ def _limpiar_actividad_antigua():
         db.close()
 
 
+def _limpiar_novedades_antiguas():
+    """Elimina novedades/solicitudes de portal con más de 30 días y sus documentos."""
+    from database import SessionLocal
+    from datetime import timedelta
+    from logger import logger as _log
+    db = SessionLocal()
+    try:
+        limite = datetime.now(timezone.utc) - timedelta(days=30)
+        total = 0
+        for Model, ctx in [
+            (models.NovedadPago, ['novedad_pago', 'resp_pago']),
+            (models.SolicitudRetiro, ['novedad_retiro', 'resp_retiro']),
+            (models.SolicitudNovedad, ['novedad_afil', 'resp_afil']),
+        ]:
+            viejos = db.query(Model).filter(Model.creado < limite).all()
+            for item in viejos:
+                # Borrar documentos asociados del disco y DB
+                docs = db.query(models.Documento).filter(
+                    models.Documento.contexto.in_(ctx),
+                    models.Documento.contexto_id == item.id,
+                ).all()
+                for d in docs:
+                    import os as _os
+                    upload_dir = _os.path.join(_os.path.dirname(__file__), 'uploads')
+                    fp = _os.path.realpath(_os.path.join(upload_dir, d.ruta))
+                    if fp.startswith(_os.path.realpath(upload_dir)) and _os.path.exists(fp):
+                        _os.remove(fp)
+                    db.delete(d)
+                db.delete(item)
+                total += 1
+        db.commit()
+        if total: _log.info(f"Limpieza: {total} novedades/solicitudes antiguas eliminadas (+docs)")
+    except Exception as e:
+        db.rollback()
+        _log.error(f"Error limpieza novedades: {e}")
+    finally:
+        db.close()
+
+
 def _limpiar_tareas_mensuales():
     """Elimina tareas finalizadas con más de 30 días para liberar espacio."""
     from database import SessionLocal
@@ -120,6 +159,7 @@ async def lifespan(app: FastAPI):
             _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
             _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
             _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
+            _scheduler.add_job(_limpiar_novedades_antiguas, "cron", day=1, hour=5, minute=0)
             _scheduler.start()
         except Exception as e:
             from logger import logger as _log
