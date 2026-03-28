@@ -180,7 +180,7 @@ def descargar_documento(
     if token.get("rol") == "cliente":
         cliente_ref = token.get("cliente_ref", "")
         _ctx_cliente = ('novedad_pago', 'novedad_afil', 'novedad_retiro',
-                        'resp_pago', 'resp_afil', 'resp_retiro')
+                        'resp_pago', 'resp_afil', 'resp_retiro', 'planilla_pago')
         if doc.contexto in _ctx_cliente or doc.subido_por == token["sub"]:
             pass  # Permitido: novedades del portal o archivos propios
         elif doc.afiliado_doc:
