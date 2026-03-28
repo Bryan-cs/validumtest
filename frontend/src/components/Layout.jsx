@@ -24,6 +24,7 @@ const navItems = (rol) => [
     { to: '/calculadora',        label: '🧮 Calculadora aportes', section: null },
     { to: '/actividad',          label: '📜 Registro actividad',  section: null },
     { to: '/novedades-clientes', label: '📬 Novedades clientes',  section: null },
+    { to: '/backups',            label: '💾 Backups',              section: null },
   ] : []),
 ];
 
