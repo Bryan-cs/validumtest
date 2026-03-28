@@ -18,7 +18,7 @@ engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False} if _is_sqlite else {},
     pool_pre_ping=True,
-    **({} if _is_sqlite else {"pool_size": 10, "max_overflow": 5, "pool_timeout": 30}),
+    **({} if _is_sqlite else {"pool_size": 15, "max_overflow": 10, "pool_timeout": 30, "pool_recycle": 1800}),
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -103,6 +103,10 @@ def _ensure_indexes():
         ("ix_solicitudes_retiro_estado", "solicitudes_retiro", "estado"),
         ("ix_tareas_creado_por", "tareas", "creado_por"),
         ("ix_notificaciones_leida", "notificaciones", "leida"),
+        # Compuestos para consultas pesadas
+        ("ix_factura_doc_mes_anio", "facturas", "doc, mes, anio"),
+        ("ix_afiliado_cliente_activo", "afiliados", "cliente_txt, activo"),
+        ("ix_planilla_cliente_mes", "planillas_pago", "cliente_ref, mes, anio"),
     ]
     with engine.begin() as conn:
         for idx_name, table, cols in indexes:
