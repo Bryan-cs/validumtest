@@ -797,10 +797,11 @@ export function NovedadesClientes() {
   const [respTexto, setRespTexto] = useState('');
   const [respFiles, setRespFiles] = useState([]);
 
-  // Docs del cliente para la novedad abierta
+  // Docs del cliente para la novedad abierta — contexto distinto por tipo
+  const _ctxCliente = modalResp?.tipo === 'novedad' ? 'novedad_pago' : modalResp?.tipo === 'novedad-afil' ? 'novedad_afil' : 'novedad_retiro';
   const { data: docsNovedad=[] } = useQuery({
     queryKey: ['docs-novedad', modalResp?.id, modalResp?.tipo],
-    queryFn: () => api.get('/documentos', { params: { contexto: 'novedad_portal', contexto_id: modalResp.id } }).then(r => r.data),
+    queryFn: () => api.get('/documentos', { params: { contexto: _ctxCliente, contexto_id: modalResp.id } }).then(r => r.data),
     enabled: !!modalResp,
   });
 
@@ -847,7 +848,8 @@ export function NovedadesClientes() {
         const fd = new FormData();
         fd.append('file', file);
         fd.append('afiliado_doc', '');
-        fd.append('contexto', 'novedad_resp');
+        const _ctxResp = modalResp.tipo === 'novedad' ? 'resp_pago' : modalResp.tipo === 'novedad-afil' ? 'resp_afil' : 'resp_retiro';
+        fd.append('contexto', _ctxResp);
         fd.append('contexto_id', String(modalResp.id));
         try {
           await api.post('/documentos', fd);

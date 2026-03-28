@@ -191,7 +191,7 @@ function ModalNovedadPago({ seleccionados, afiliados, onClose, onSuccess }) {
           const fd = new FormData();
           fd.append('file', file);
           fd.append('afiliado_doc', seleccionados[0] || '');
-          fd.append('contexto', 'novedad_portal');
+          fd.append('contexto', 'novedad_pago');
           fd.append('contexto_id', String(novId));
           await api.post('/documentos', fd);
         }
@@ -300,7 +300,7 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
           const fd = new FormData();
           fd.append('file', file);
           fd.append('afiliado_doc', afiliado.doc);
-          fd.append('contexto', 'novedad_portal');
+          fd.append('contexto', 'novedad_afil');
           fd.append('contexto_id', String(novId));
           await api.post('/documentos', fd);
         }
@@ -430,11 +430,11 @@ function ModalRetiro({ afiliado, onClose, onSuccess }) {
 }
 
 // ─── ADJUNTOS POR NOVEDAD ────────────────────────────────────────────────────
-function DocsNovedad({ novedadId }) {
+function DocsNovedad({ novedadId, contexto = 'novedad_resp' }) {
   const [open, setOpen] = useState(false);
   const { data: docs=[], isLoading } = useQuery({
-    queryKey: ['docs-novedad-portal', novedadId],
-    queryFn: () => api.get('/documentos', { params: { contexto: 'novedad_resp', contexto_id: novedadId } }).then(r => r.data),
+    queryKey: ['docs-novedad-portal', contexto, novedadId],
+    queryFn: () => api.get('/documentos', { params: { contexto, contexto_id: novedadId } }).then(r => r.data),
     enabled: open,
   });
   if (!open) return (
@@ -580,7 +580,7 @@ function TabHistorial() {
                     <strong>✅ Respuesta:</strong> {item.respuesta}
                   </div>
                 )}
-                <DocsNovedad novedadId={item.id} />
+                <DocsNovedad novedadId={item.id} contexto={subtab === 'novedades' ? 'resp_pago' : subtab === 'retiros' ? 'resp_retiro' : 'resp_afil'} />
                 <div style={{ fontSize:11, color:C.text2, marginTop:6 }}>{new Date(item.creado).toLocaleString('es-CO')}</div>
               </div>
             );
