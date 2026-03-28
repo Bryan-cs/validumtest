@@ -16,10 +16,11 @@ MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
 # ─── Cloudflare R2 ───────────────────────────────────────────────────────────
 _s3 = None
+_s3_error = None  # Guarda el error de inicialización para diagnóstico
 _R2_BUCKET = os.getenv("STORAGE_BUCKET", "")
 
 def _get_s3():
-    global _s3
+    global _s3, _s3_error
     if _s3 is not None:
         return _s3
     account_id = os.getenv("STORAGE_ACCOUNT", "")
@@ -39,12 +40,15 @@ def _get_s3():
             _s3.head_bucket(Bucket=_R2_BUCKET)
             from logger import logger
             logger.info(f"R2 conectado: bucket '{_R2_BUCKET}'")
+            _s3_error = None
         except Exception as e:
             from logger import logger
             logger.warning(f"R2 no disponible, usando disco local: {e}")
+            _s3_error = f"{type(e).__name__}: {e}"
             _s3 = False  # False = intentó pero falló, no reintentar
     else:
         _s3 = False
+        _s3_error = f"Missing vars: account={bool(account_id)}, key={bool(access_key)}, secret={bool(secret_key)}, bucket={bool(_R2_BUCKET)}"
     return _s3
 
 
