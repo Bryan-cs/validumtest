@@ -23,6 +23,7 @@ const Empleados   = lazy(() => import('./pages/Empleados'));
 const Listas      = lazy(() => import('./pages/Listas'));
 const Usuarios    = lazy(() => import('./pages/Usuarios'));
 const Calculadora = lazy(() => import('./pages/Calculadora'));
+const Backups     = lazy(() => import('./pages/Backups'));
 
 // ─── QUERY CLIENT — configurado para rendimiento óptimo ──────────────────────
 const queryClient = new QueryClient({
@@ -87,6 +88,7 @@ function Layout({ children }) {
       { to:'/empleados', icon:'👔', label:'Empleados' },
       { to:'/listas',    icon:'📋', label:'Listas' },
       { to:'/usuarios',  icon:'👤', label:'Usuarios' },
+      { to:'/backups',   icon:'💾', label:'Backups' },
     ] : []),
   ];
 
@@ -166,6 +168,7 @@ export default function App() {
                   <Route path="empleados"  element={<AdminRoute><Empleados /></AdminRoute>} />
                   <Route path="listas"     element={<AdminRoute><Listas /></AdminRoute>} />
                   <Route path="usuarios"   element={<AdminRoute><Usuarios /></AdminRoute>} />
+                  <Route path="backups"    element={<AdminRoute><Backups /></AdminRoute>} />
                   <Route path="*"          element={<Navigate to="/" replace />} />
                 </Routes>
               </Layout>
