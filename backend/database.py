@@ -43,12 +43,34 @@ def init_db():
         command.upgrade(alembic_cfg, "head")
     except Exception:
         pass  # Si Alembic falla, las tablas ya están creadas por create_all
+    # Safety net: agregar columnas nuevas si Alembic no las creó
+    _ensure_columns()
     # Seed data inicial si la DB está vacía
     db = SessionLocal()
     try:
         _seed(db)
     finally:
         db.close()
+
+def _ensure_columns():
+    """Agrega columnas nuevas si no existen (safety net para cuando Alembic falla)."""
+    from sqlalchemy import text, inspect
+    insp = inspect(engine)
+    _missing = []
+    def _check(table, column, ddl):
+        cols = [c["name"] for c in insp.get_columns(table)] if insp.has_table(table) else []
+        if column not in cols:
+            _missing.append((table, column, ddl))
+    _check("afiliados", "ciudad", "ALTER TABLE afiliados ADD COLUMN ciudad VARCHAR(100)")
+    _check("tareas", "privada", "ALTER TABLE tareas ADD COLUMN privada BOOLEAN DEFAULT FALSE")
+    if _missing:
+        with engine.begin() as conn:
+            for table, col, ddl in _missing:
+                try:
+                    conn.execute(text(ddl))
+                except Exception:
+                    pass
+
 
 def _seed(db):
     import models
