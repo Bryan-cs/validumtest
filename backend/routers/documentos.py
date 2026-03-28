@@ -117,7 +117,10 @@ async def subir_documento(
     if len(content) > MAX_SIZE:
         raise HTTPException(400, "Archivo demasiado grande (máx 10 MB)")
 
-    unique_name = f"{uuid.uuid4().hex}.{ext}"
+    # Sanitizar nombre: solo alfanuméricos, guiones, puntos y guiones bajos
+    import re
+    safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'archivo')
+    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
     _upload_file(unique_name, content)
 
     doc = models.Documento(
