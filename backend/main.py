@@ -96,34 +96,43 @@ def _limpiar_novedades_antiguas():
 
 
 def _backup_db_to_r2():
-    """Genera pg_dump de la DB y lo sube a Cloudflare R2."""
+    """Exporta todas las tablas como JSON y lo sube a Cloudflare R2."""
     from logger import logger as _log
-    import subprocess, io
-    db_url = os.getenv("DATABASE_URL", "")
-    if not db_url:
-        _log.warning("Backup: DATABASE_URL no configurada, saltando backup")
-        return
+    import json
     try:
         from routers.documentos import _get_s3, _R2_BUCKET
         s3 = _get_s3()
         if not s3:
             _log.warning("Backup: R2 no disponible, saltando backup")
             return
-        # Ejecutar pg_dump
-        result = subprocess.run(
-            ["pg_dump", "--no-owner", "--no-acl", db_url],
-            capture_output=True, timeout=120,
-        )
-        if result.returncode != 0:
-            _log.error(f"Backup: pg_dump falló: {result.stderr.decode()[:500]}")
-            return
-        dump = result.stdout
-        if not dump:
-            _log.warning("Backup: pg_dump retornó vacío")
-            return
-        # Nombre: backups/2026-03-28_14-00.sql
+        from database import SessionLocal
+        from sqlalchemy import inspect, text
+        db = SessionLocal()
+        try:
+            inspector = inspect(db.bind)
+            tables = inspector.get_table_names()
+            backup_data = {}
+            for table in tables:
+                if table in ('alembic_version',):
+                    continue
+                rows = db.execute(text(f'SELECT * FROM "{table}"')).fetchall()
+                keys = db.execute(text(f'SELECT * FROM "{table}" LIMIT 0')).keys()
+                col_names = list(keys)
+                backup_data[table] = {
+                    "columns": col_names,
+                    "rows": [
+                        {col: (str(val) if val is not None and not isinstance(val, (int, float, bool)) else val)
+                         for col, val in zip(col_names, row)}
+                        for row in rows
+                    ],
+                    "count": len(rows),
+                }
+            dump = json.dumps(backup_data, ensure_ascii=False, indent=1).encode("utf-8")
+        finally:
+            db.close()
+        # Nombre: backups/2026-03-28_14-00.json
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
-        key = f"backups/{ts}.sql"
+        key = f"backups/{ts}.json"
         s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=dump)
         size_mb = len(dump) / (1024 * 1024)
         _log.info(f"Backup: {key} ({size_mb:.1f} MB) subido a R2")
@@ -600,7 +609,7 @@ def descargar_backup(nombre: str, token=Depends(require_admin)):
         content = resp["Body"].read()
         return StreamingResponse(
             io.BytesIO(content),
-            media_type="application/sql",
+            media_type="application/json" if nombre.endswith(".json") else "application/sql",
             headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
         )
     except s3.exceptions.NoSuchKey:
@@ -621,9 +630,9 @@ def crear_backup_manual(token=Depends(require_admin)):
         s3 = _get_s3()
         if s3:
             ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
-            key = f"backups/{ts}.sql"
+            key = f"backups/{ts}.json"
             s3.head_object(Bucket=_R2_BUCKET, Key=key)
-            return {"ok": True, "archivo": f"{ts}.sql"}
+            return {"ok": True, "archivo": f"{ts}.json"}
     except Exception:
         pass
     return {"ok": True, "mensaje": "Backup ejecutado, revisa la lista de backups"}
