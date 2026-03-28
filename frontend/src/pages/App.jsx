@@ -87,8 +87,8 @@ function Layout({ children }) {
     ...(isAdmin ? [
       { to:'/empleados', icon:'👔', label:'Empleados' },
       { to:'/listas',    icon:'📋', label:'Listas' },
-      { to:'/usuarios',  icon:'👤', label:'Usuarios' },
       { to:'/backups',   icon:'💾', label:'Backups' },
+      { to:'/usuarios',  icon:'👤', label:'Usuarios' },
     ] : []),
   ];
 
