@@ -20,6 +20,7 @@ import Tareas         from './pages/Tareas';
 import Actividad      from './pages/Actividad';
 import PortalCliente       from './pages/PortalCliente';
 import NovedadesClientes   from './pages/NovedadesClientes';
+import Backups             from './pages/Backups';
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -82,6 +83,7 @@ export default function App() {
             <Route path="calculadora" element={<PrivateRoute adminOnly><Calculadora /></PrivateRoute>} />
             <Route path="actividad"        element={<PrivateRoute adminOnly><Actividad /></PrivateRoute>} />
             <Route path="novedades-clientes" element={<PrivateRoute adminOnly><NovedadesClientes /></PrivateRoute>} />
+            <Route path="backups"            element={<PrivateRoute adminOnly><Backups /></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
