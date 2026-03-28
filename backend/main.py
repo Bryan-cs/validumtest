@@ -499,13 +499,6 @@ def health_check(db: Session = Depends(get_db)):
     result["storage"] = "r2" if storage_ok else "local"
     if storage_err:
         result["_storage_err"] = storage_err
-    # Debug temporal: verificar si las variables R2 existen (solo muestra si están o no)
-    result["_storage_vars"] = {
-        "account": bool(os.getenv("STORAGE_ACCOUNT")),
-        "key": bool(os.getenv("STORAGE_KEY")),
-        "secret": bool(os.getenv("STORAGE_SECRET")),
-        "bucket": bool(os.getenv("STORAGE_BUCKET")),
-    }
     if _start_time:
         uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
         result["uptime_seconds"] = int(uptime)
@@ -513,38 +506,6 @@ def health_check(db: Session = Depends(get_db)):
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=code, content=result)
     return result
-
-
-@app.get("/debug-r2")
-def debug_r2():
-    """Diagnóstico temporal R2 — eliminar después de resolver."""
-    import os
-    info = {
-        "account_len": len(os.getenv("STORAGE_ACCOUNT", "")),
-        "key_len": len(os.getenv("STORAGE_KEY", "")),
-        "secret_len": len(os.getenv("STORAGE_SECRET", "")),
-        "bucket": os.getenv("STORAGE_BUCKET", ""),
-    }
-    try:
-        import boto3
-        info["boto3"] = "imported ok"
-        account_id = os.getenv("STORAGE_ACCOUNT", "")
-        client = boto3.client(
-            "s3",
-            endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
-            aws_access_key_id=os.getenv("STORAGE_KEY", ""),
-            aws_secret_access_key=os.getenv("STORAGE_SECRET", ""),
-            region_name="auto",
-        )
-        info["client"] = "created ok"
-        client.head_bucket(Bucket=os.getenv("STORAGE_BUCKET", ""))
-        info["head_bucket"] = "ok"
-        # Try listing objects
-        resp = client.list_objects_v2(Bucket=os.getenv("STORAGE_BUCKET", ""), MaxKeys=5)
-        info["objects"] = resp.get("KeyCount", 0)
-    except Exception as e:
-        info["error"] = f"{type(e).__name__}: {e}"
-    return info
 
 
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────
