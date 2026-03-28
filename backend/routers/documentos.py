@@ -1,7 +1,8 @@
 import os
+import io
 import uuid
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
 from routers.deps import verify_token
@@ -12,6 +13,88 @@ router = APIRouter(prefix="/documentos", tags=["documentos"])
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads')
 ALLOWED_EXT = {'pdf','jpg','jpeg','png','gif','doc','docx','xls','xlsx'}
 MAX_SIZE = 10 * 1024 * 1024  # 10 MB
+
+# ─── Cloudflare R2 ───────────────────────────────────────────────────────────
+_s3 = None
+_R2_BUCKET = os.getenv("R2_BUCKET", "")
+
+def _get_s3():
+    global _s3
+    if _s3 is not None:
+        return _s3
+    account_id = os.getenv("R2_ACCOUNT_ID", "")
+    access_key = os.getenv("R2_ACCESS_KEY", "")
+    secret_key = os.getenv("R2_SECRET_KEY", "")
+    if account_id and access_key and secret_key and _R2_BUCKET:
+        try:
+            import boto3
+            _s3 = boto3.client(
+                "s3",
+                endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+                aws_access_key_id=access_key,
+                aws_secret_access_key=secret_key,
+                region_name="auto",
+            )
+            # Verificar conexión
+            _s3.head_bucket(Bucket=_R2_BUCKET)
+            from logger import logger
+            logger.info(f"R2 conectado: bucket '{_R2_BUCKET}'")
+        except Exception as e:
+            from logger import logger
+            logger.warning(f"R2 no disponible, usando disco local: {e}")
+            _s3 = False  # False = intentó pero falló, no reintentar
+    else:
+        _s3 = False
+    return _s3
+
+
+def _upload_file(unique_name: str, content: bytes):
+    """Sube archivo a R2 o disco local."""
+    s3 = _get_s3()
+    if s3:
+        s3.put_object(Bucket=_R2_BUCKET, Key=unique_name, Body=content)
+        return
+    # Fallback: disco local
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    with open(os.path.join(UPLOAD_DIR, unique_name), 'wb') as f:
+        f.write(content)
+
+
+def _download_file(unique_name: str):
+    """Descarga archivo de R2 o disco local. Retorna (bytes, found)."""
+    s3 = _get_s3()
+    if s3:
+        try:
+            resp = s3.get_object(Bucket=_R2_BUCKET, Key=unique_name)
+            return resp["Body"].read(), True
+        except Exception:
+            return None, False
+    # Fallback: disco local
+    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, unique_name))
+    if not filepath.startswith(os.path.realpath(UPLOAD_DIR)):
+        return None, False
+    if not os.path.exists(filepath):
+        return None, False
+    with open(filepath, 'rb') as f:
+        return f.read(), True
+
+
+def _delete_file(unique_name: str):
+    """Elimina archivo de R2 o disco local."""
+    s3 = _get_s3()
+    if s3:
+        try:
+            s3.delete_object(Bucket=_R2_BUCKET, Key=unique_name)
+        except Exception:
+            pass
+        return
+    # Fallback: disco local
+    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, unique_name))
+    if filepath.startswith(os.path.realpath(UPLOAD_DIR)) and os.path.exists(filepath):
+        os.remove(filepath)
+
+
+# ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.post("")
 async def subir_documento(
@@ -30,11 +113,8 @@ async def subir_documento(
     if len(content) > MAX_SIZE:
         raise HTTPException(400, "Archivo demasiado grande (máx 10 MB)")
 
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
     unique_name = f"{uuid.uuid4().hex}.{ext}"
-    filepath = os.path.join(UPLOAD_DIR, unique_name)
-    with open(filepath, 'wb') as f:
-        f.write(content)
+    _upload_file(unique_name, content)
 
     doc = models.Documento(
         afiliado_doc=afiliado_doc,
@@ -89,25 +169,28 @@ def descargar_documento(
     doc = db.query(models.Documento).filter_by(id=doc_id).first()
     if not doc:
         raise HTTPException(404, "Documento no encontrado")
-    # Clientes solo pueden descargar sus propios documentos
+    # Clientes solo pueden descargar documentos de sus afiliados o respuestas del admin
     if token.get("rol") == "cliente":
         cliente_ref = token.get("cliente_ref", "")
-        if doc.contexto not in ("novedad_portal", "novedad_resp") or doc.subido_por != token["sub"]:
-            # Verificar que el documento pertenezca a un afiliado del cliente
-            if doc.afiliado_doc:
-                afil = db.query(models.Afiliado).filter_by(doc=doc.afiliado_doc, cliente_txt=cliente_ref).first()
-                if not afil:
-                    raise HTTPException(403, "No tienes acceso a este documento")
-            elif doc.contexto == "novedad_resp":
-                pass  # Respuestas del admin son visibles para el cliente destinatario
-            else:
+        _ctx_cliente = ('novedad_pago', 'novedad_afil', 'novedad_retiro',
+                        'resp_pago', 'resp_afil', 'resp_retiro')
+        if doc.contexto in _ctx_cliente or doc.subido_por == token["sub"]:
+            pass  # Permitido: novedades del portal o archivos propios
+        elif doc.afiliado_doc:
+            afil = db.query(models.Afiliado).filter_by(doc=doc.afiliado_doc, cliente_txt=cliente_ref).first()
+            if not afil:
                 raise HTTPException(403, "No tienes acceso a este documento")
-    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, doc.ruta))
-    if not filepath.startswith(os.path.realpath(UPLOAD_DIR)):
-        raise HTTPException(403, "Ruta de archivo no permitida")
-    if not os.path.exists(filepath):
-        raise HTTPException(404, "Archivo no encontrado en disco")
-    return FileResponse(filepath, filename=doc.nombre, media_type="application/octet-stream")
+        else:
+            raise HTTPException(403, "No tienes acceso a este documento")
+
+    content, found = _download_file(doc.ruta)
+    if not found:
+        raise HTTPException(404, "Archivo no encontrado")
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/octet-stream",
+        headers={"Content-Disposition": f'attachment; filename="{doc.nombre}"'},
+    )
 
 
 @router.delete("/{doc_id}")
@@ -121,9 +204,7 @@ def eliminar_documento(
         raise HTTPException(404, "Documento no encontrado")
     if token.get("rol") != "admin" and doc.subido_por != token.get("sub"):
         raise HTTPException(403, "Solo puedes eliminar tus propios documentos")
-    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, doc.ruta))
-    if filepath.startswith(os.path.realpath(UPLOAD_DIR)) and os.path.exists(filepath):
-        os.remove(filepath)
+    _delete_file(doc.ruta)
     db.delete(doc)
     db.commit()
     return {"ok": True}

@@ -10,19 +10,15 @@ from database import get_db
 import models, schemas
 from .deps import verify_token
 
-UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads')
-
-
 def _borrar_docs_asociados(db: Session, contextos: list[str], contexto_id: int):
-    """Borra documentos de disco y DB asociados a una solicitud."""
+    """Borra documentos de R2/disco y DB asociados a una solicitud."""
+    from .documentos import _delete_file
     docs = db.query(models.Documento).filter(
         models.Documento.contexto.in_(contextos),
         models.Documento.contexto_id == contexto_id,
     ).all()
     for d in docs:
-        filepath = os.path.realpath(os.path.join(UPLOAD_DIR, d.ruta))
-        if filepath.startswith(os.path.realpath(UPLOAD_DIR)) and os.path.exists(filepath):
-            os.remove(filepath)
+        _delete_file(d.ruta)
         db.delete(d)
     return len(docs)
 

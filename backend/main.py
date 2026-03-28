@@ -76,17 +76,13 @@ def _limpiar_novedades_antiguas():
         ]:
             viejos = db.query(Model).filter(Model.creado < limite).all()
             for item in viejos:
-                # Borrar documentos asociados del disco y DB
+                from routers.documentos import _delete_file
                 docs = db.query(models.Documento).filter(
                     models.Documento.contexto.in_(ctx),
                     models.Documento.contexto_id == item.id,
                 ).all()
                 for d in docs:
-                    import os as _os
-                    upload_dir = _os.path.join(_os.path.dirname(__file__), 'uploads')
-                    fp = _os.path.realpath(_os.path.join(upload_dir, d.ruta))
-                    if fp.startswith(_os.path.realpath(upload_dir)) and _os.path.exists(fp):
-                        _os.remove(fp)
+                    _delete_file(d.ruta)
                     db.delete(d)
                 db.delete(item)
                 total += 1
