@@ -23,6 +23,7 @@ const navItems = (rol) => [
   { to: '/tareas',      label: '✅ Tareas',                section: null },
   { to: '/facturacion', label: '🧾 Facturación',           section: 'FINANCIERO' },
   { to: '/cobro',       label: '💰 Módulo de cobro',       section: null },
+  { to: '/planillas-ss', label: '📋 Planillas SS',          section: null },
   ...(rol === 'admin' ? [
     { to: '/empleados',          label: '👔 Empleados',           section: 'ADMINISTRACIÓN' },
     { to: '/usuarios',           label: '⚙️ Usuarios',             section: null },

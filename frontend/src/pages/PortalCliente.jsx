@@ -592,6 +592,95 @@ function TabHistorial() {
   );
 }
 
+// ─── TAB PLANILLAS PAGADAS ───────────────────────────────────────────────────
+function TabPlanillas() {
+  const [mesFiltro, setMesFiltro] = useState('');
+  const [anioFiltro, setAnioFiltro] = useState('');
+
+  const { data: planillas = [], isLoading } = useQuery({
+    queryKey: ['portal-planillas', mesFiltro, anioFiltro],
+    queryFn: () => api.get('/portal/planillas', { params: { mes: mesFiltro, anio: anioFiltro } }).then(r => r.data),
+    refetchInterval: 120_000,
+  });
+
+  const descargar = async (docId, nombre) => {
+    try {
+      const res = await api.get(`/documentos/${docId}/descargar`, { responseType: 'blob' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(res.data);
+      a.download = nombre;
+      a.click();
+    } catch { toast.error('Error al descargar'); }
+  };
+
+  const filtStyle = { padding: '6px 10px', border: `1px solid ${C.border}`, borderRadius: 6, fontSize: 12, outline: 'none', color: C.text, background: C.surface };
+
+  return (
+    <div>
+      {/* Filtros */}
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select value={mesFiltro} onChange={e => setMesFiltro(e.target.value)} style={filtStyle}>
+          <option value="">Todos los meses</option>
+          {MESES.map(m => <option key={m} value={m}>{m}</option>)}
+        </select>
+        <select value={anioFiltro} onChange={e => setAnioFiltro(e.target.value)} style={filtStyle}>
+          <option value="">Todos los años</option>
+          {ANIOS.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        {(mesFiltro || anioFiltro) && (
+          <button onClick={() => { setMesFiltro(''); setAnioFiltro(''); }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.text2, fontSize: 12 }}>
+            ✕ Limpiar
+          </button>
+        )}
+        <span style={{ fontSize: 12, color: C.text2, marginLeft: 'auto' }}>
+          {isLoading ? 'Cargando...' : `${planillas.length} planilla(s)`}
+        </span>
+      </div>
+
+      {/* Lista */}
+      {!isLoading && planillas.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: 40, color: C.text2 }}>
+          <div style={{ fontSize: 32, marginBottom: 8 }}>📋</div>
+          No hay planillas pagadas{mesFiltro || anioFiltro ? ' para el período seleccionado' : ''}
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 12 }}>
+          {planillas.map(p => (
+            <div key={p.id} style={{ background: C.surface, borderRadius: 10, border: `1px solid ${C.border}`, padding: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <span style={{ background: C.blueBg, color: C.blue, borderRadius: 6, padding: '3px 10px', fontSize: 12, fontWeight: 700 }}>
+                  {p.mes} {p.anio}
+                </span>
+              </div>
+              {p.observaciones && (
+                <div style={{ fontSize: 12, color: C.text2, marginBottom: 8 }}>{p.observaciones}</div>
+              )}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {(p.archivos || []).map(a => (
+                  <div key={a.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
+                    background: C.surface2, padding: '6px 10px', borderRadius: 6,
+                  }}>
+                    <span style={{ color: C.blue, cursor: 'pointer', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textDecoration: 'underline' }}
+                      onClick={() => descargar(a.id, a.nombre)}>
+                      📄 {a.nombre}
+                    </span>
+                    <span style={{ color: C.text2, fontSize: 10, flexShrink: 0 }}>{(a.tamano / 1024).toFixed(0)} KB</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ fontSize: 11, color: C.text2, marginTop: 8 }}>
+                {new Date(p.creado).toLocaleString('es-CO')}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CAMPANA DE NOTIFICACIONES ─────────────────────────────────────────────────
 function CampanaNotif() {
   const qc = useQueryClient();
@@ -794,7 +883,7 @@ export default function PortalCliente() {
     <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
-        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial']].map(([id, label]) => (
+        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding:'9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
             borderBottom: tab===id?`2px solid ${C.primary}`:'none',
@@ -917,6 +1006,8 @@ export default function PortalCliente() {
       )}
 
       {tab === 'historial' && <TabHistorial />}
+
+      {tab === 'planillas' && <TabPlanillas />}
 
       {/* Modales */}
       {resumenDoc && <ModalResumen doc={resumenDoc} onClose={() => setResumenDoc(null)} />}
