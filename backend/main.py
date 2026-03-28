@@ -6,7 +6,8 @@ APP_VERSION = "1.2.0"
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File
+from typing import List
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
@@ -546,7 +547,7 @@ async def crear_planilla(
     mes: str = Form(...),
     anio: str = Form(...),
     observaciones: str = Form(""),
-    files: list[UploadFile] = File(...),
+    files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
     token=Depends(require_admin),
 ):
