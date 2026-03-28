@@ -95,6 +95,53 @@ def _limpiar_novedades_antiguas():
         db.close()
 
 
+def _backup_db_to_r2():
+    """Genera pg_dump de la DB y lo sube a Cloudflare R2."""
+    from logger import logger as _log
+    import subprocess, io
+    db_url = os.getenv("DATABASE_URL", "")
+    if not db_url:
+        _log.warning("Backup: DATABASE_URL no configurada, saltando backup")
+        return
+    try:
+        from routers.documentos import _get_s3, _R2_BUCKET
+        s3 = _get_s3()
+        if not s3:
+            _log.warning("Backup: R2 no disponible, saltando backup")
+            return
+        # Ejecutar pg_dump
+        result = subprocess.run(
+            ["pg_dump", "--no-owner", "--no-acl", db_url],
+            capture_output=True, timeout=120,
+        )
+        if result.returncode != 0:
+            _log.error(f"Backup: pg_dump falló: {result.stderr.decode()[:500]}")
+            return
+        dump = result.stdout
+        if not dump:
+            _log.warning("Backup: pg_dump retornó vacío")
+            return
+        # Nombre: backups/2026-03-28_14-00.sql
+        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
+        key = f"backups/{ts}.sql"
+        s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=dump)
+        size_mb = len(dump) / (1024 * 1024)
+        _log.info(f"Backup: {key} ({size_mb:.1f} MB) subido a R2")
+        # Limpiar backups con más de 30 días
+        try:
+            from datetime import timedelta
+            cutoff = datetime.now(timezone.utc) - timedelta(days=30)
+            resp = s3.list_objects_v2(Bucket=_R2_BUCKET, Prefix="backups/")
+            for obj in resp.get("Contents", []):
+                if obj["LastModified"].replace(tzinfo=timezone.utc) < cutoff:
+                    s3.delete_object(Bucket=_R2_BUCKET, Key=obj["Key"])
+                    _log.info(f"Backup: eliminado backup antiguo {obj['Key']}")
+        except Exception as e:
+            _log.warning(f"Backup: error limpiando backups antiguos: {e}")
+    except Exception as e:
+        _log.error(f"Backup: error general: {e}")
+
+
 def _limpiar_tareas_mensuales():
     """Elimina tareas finalizadas con más de 30 días para liberar espacio."""
     from database import SessionLocal
@@ -156,6 +203,10 @@ async def lifespan(app: FastAPI):
             _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
             _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
             _scheduler.add_job(_limpiar_novedades_antiguas, "cron", day=1, hour=5, minute=0)
+            # Backups DB → R2: 2 AM, 12 PM, 9 PM hora Colombia (UTC-5 = 7, 17, 2 UTC)
+            _scheduler.add_job(_backup_db_to_r2, "cron", hour=7, minute=0, id="backup_2am")
+            _scheduler.add_job(_backup_db_to_r2, "cron", hour=17, minute=0, id="backup_12pm")
+            _scheduler.add_job(_backup_db_to_r2, "cron", hour=2, minute=0, id="backup_9pm")
             _scheduler.start()
         except Exception as e:
             from logger import logger as _log
