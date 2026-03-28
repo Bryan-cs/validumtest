@@ -2,7 +2,7 @@
 BBC File — Backend FastAPI
 Ejecutar: uvicorn main:app --reload
 """
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
