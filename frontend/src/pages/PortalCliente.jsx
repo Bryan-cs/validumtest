@@ -22,7 +22,8 @@ const C = {
   text:     'var(--c-text)',     text2:    'var(--c-text2)',
 };
 
-const money = (v) => new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 }).format(v || 0);
+const _moneyFmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
+const money = (v) => _moneyFmt.format(v || 0);
 
 const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, boxSizing:'border-box', outline:'none', color:C.text, background:C.surface };
 const lbl = { fontSize:12, fontWeight:600, color:C.text2, display:'block', marginBottom:4 };
@@ -187,14 +188,14 @@ function ModalNovedadPago({ seleccionados, afiliados, onClose, onSuccess }) {
       const novId = res.data?.id;
       if (archivos.length > 0 && novId) {
         setSubiendo(true);
-        for (const file of archivos) {
+        await Promise.all(archivos.map(file => {
           const fd = new FormData();
           fd.append('file', file);
           fd.append('afiliado_doc', seleccionados[0] || '');
           fd.append('contexto', 'novedad_pago');
           fd.append('contexto_id', String(novId));
-          await api.post('/documentos', fd);
-        }
+          return api.post('/documentos', fd);
+        }));
         setSubiendo(false);
       }
       return res;
@@ -296,14 +297,14 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
       const novId = res.data?.id;
       if (archivos.length > 0 && novId) {
         setSubiendo(true);
-        for (const file of archivos) {
+        await Promise.all(archivos.map(file => {
           const fd = new FormData();
           fd.append('file', file);
           fd.append('afiliado_doc', afiliado.doc);
           fd.append('contexto', 'novedad_afil');
           fd.append('contexto_id', String(novId));
-          await api.post('/documentos', fd);
-        }
+          return api.post('/documentos', fd);
+        }));
         setSubiendo(false);
       }
       return res;
@@ -606,7 +607,7 @@ function CampanaNotif() {
   const { data: notifs=[] } = useQuery({
     queryKey: ['portal-notifs'],
     queryFn: () => api.get('/tareas/notificaciones').then(r => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
 
   const leer = useMutation({
@@ -741,9 +742,15 @@ export default function PortalCliente() {
     color: est === 'ACTIVO' ? C.green : C.red,
   });
 
-  const activos    = afiliados.filter(a => a.estado === 'ACTIVO').length;
-  const retirados  = afiliados.filter(a => a.estado === 'RETIRADO').length;
-  const suspendidos= afiliados.filter(a => a.estado === 'SUSPENDIDO').length;
+  const { activos, retirados, suspendidos } = useMemo(() => {
+    let act = 0, ret = 0, sus = 0;
+    for (const a of afiliados) {
+      if (a.estado === 'ACTIVO') act++;
+      else if (a.estado === 'RETIRADO') ret++;
+      else if (a.estado === 'SUSPENDIDO') sus++;
+    }
+    return { activos: act, retirados: ret, suspendidos: sus };
+  }, [afiliados]);
 
   return (
     <div style={{ minHeight:'100vh', background:'var(--c-bg)', fontFamily:'Inter, system-ui, sans-serif' }}>
