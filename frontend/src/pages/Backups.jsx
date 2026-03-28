@@ -46,11 +46,13 @@ export default function Backups() {
 
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: '0 auto' }}>
-      <PageHeader title="Backups" subtitle="Respaldos automáticos de la base de datos en Cloudflare R2">
-        <Btn variant="accent" onClick={() => crearBackup.mutate()} disabled={creando}>
-          {creando ? 'Creando...' : '+ Crear backup manual'}
-        </Btn>
-      </PageHeader>
+      <PageHeader title="Backups" subtitle="Respaldos automáticos de la base de datos en Cloudflare R2"
+        action={
+          <Btn variant="accent" onClick={() => crearBackup.mutate()} disabled={creando}>
+            {creando ? 'Creando...' : '+ Crear backup manual'}
+          </Btn>
+        }
+      />
 
       <div style={{
         background: C.surface2, borderRadius: 10, padding: 16, marginBottom: 20,
