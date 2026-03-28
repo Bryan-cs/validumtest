@@ -494,6 +494,13 @@ def health_check(db: Session = Depends(get_db)):
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"
     result["storage"] = "r2" if storage_ok else "local"
+    # Debug temporal: verificar si las variables R2 existen (solo muestra si están o no)
+    result["_storage_vars"] = {
+        "account": bool(os.getenv("STORAGE_ACCOUNT")),
+        "key": bool(os.getenv("STORAGE_KEY")),
+        "secret": bool(os.getenv("STORAGE_SECRET")),
+        "bucket": bool(os.getenv("STORAGE_BUCKET")),
+    }
     if _start_time:
         uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
         result["uptime_seconds"] = int(uptime)
