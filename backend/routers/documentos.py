@@ -27,7 +27,7 @@ def _get_s3():
     secret_key = os.getenv("R2_SECRET_KEY", "")
     if account_id and access_key and secret_key and _R2_BUCKET:
         try:
-            import boto3
+            import boto3  # optional dependency; install boto3 to enable R2 storage
             _s3 = boto3.client(
                 "s3",
                 endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
