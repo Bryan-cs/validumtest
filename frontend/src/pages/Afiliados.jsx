@@ -186,17 +186,36 @@ export default function Afiliados() {
       }
       return res;
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado');
       if (pendingFiles.length > 0) toast.success(`${pendingFiles.length} documento(s) adjuntado(s)`);
-      qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['documentos']}); setModal(null);
+      if (modal === 'nuevo') {
+        qc.invalidateQueries({ queryKey: ['afiliados'] });
+        qc.setQueryData(['afiliados_all'], prev => [res.data, ...(prev || [])]);
+      } else {
+        qc.setQueriesData({ queryKey: ['afiliados'] }, prev =>
+          prev && prev.items ? { ...prev, items: prev.items.map(a => a.id === res.data.id ? res.data : a) } : prev
+        );
+        qc.setQueryData(['afiliados_all'], prev => prev?.map(a => a.id === res.data.id ? res.data : a));
+      }
+      qc.invalidateQueries({queryKey:['facturas']});
+      qc.invalidateQueries({queryKey:['documentos']});
+      setModal(null);
     },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/afiliados/${id}`),
-    onSuccess: res => { const n=res.data?.facturas_pendientes; toast.success(n?`Eliminado. ${n} factura(s) conservadas`:'Afiliado eliminado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); qc.invalidateQueries({queryKey:['eliminados']}); },
+    onSuccess: (res, id) => {
+      const n = res.data?.facturas_pendientes;
+      toast.success(n ? `Eliminado. ${n} factura(s) conservadas` : 'Afiliado eliminado');
+      qc.setQueriesData({ queryKey: ['afiliados'] }, prev =>
+        prev && prev.items ? { ...prev, items: prev.items.filter(a => a.id !== id), total: Math.max(0, (prev.total || 0) - 1) } : prev
+      );
+      qc.setQueryData(['afiliados_all'], prev => prev?.filter(a => a.id !== id));
+      qc.invalidateQueries({queryKey:['eliminados']});
+    },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
@@ -208,7 +227,7 @@ export default function Afiliados() {
 
   const borrarPermanente = useMutation({
     mutationFn: id => api.delete(`/eliminados/${id}`),
-    onSuccess: () => { toast.success('Eliminado permanentemente'); qc.invalidateQueries({queryKey:['eliminados']}); },
+    onSuccess: (_, id) => { toast.success('Eliminado permanentemente'); qc.setQueryData(['eliminados'], prev => prev?.filter(e => e.id !== id)); },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
@@ -218,7 +237,13 @@ export default function Afiliados() {
 
   const activarAfiliado = useMutation({
     mutationFn: (a) => api.put(`/afiliados/${a.id}`, { ...a, estado:'ACTIVO', estado_srv:'ACTIVO' }),
-    onSuccess: () => { toast.success('Afiliado activado'); qc.invalidateQueries({queryKey:['afiliados']}); qc.invalidateQueries({queryKey:['afiliados_all']}); },
+    onSuccess: (res) => {
+      toast.success('Afiliado activado');
+      qc.setQueriesData({ queryKey: ['afiliados'] }, prev =>
+        prev && prev.items ? { ...prev, items: prev.items.map(a => a.id === res.data.id ? res.data : a) } : prev
+      );
+      qc.setQueryData(['afiliados_all'], prev => prev?.map(a => a.id === res.data.id ? res.data : a));
+    },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
