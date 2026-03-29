@@ -294,7 +294,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       servicios_detalle: planillaFinal.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
       conceptos_detalle: conceptos,
     }),
-    onSuccess: () => { toast.success('Factura actualizada'); qc.invalidateQueries({queryKey:['facturas']}); onClose(); },
+    onSuccess: (res) => { toast.success('Factura actualizada'); qc.setQueriesData({ queryKey: ['facturas'] }, prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); onClose(); },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
@@ -518,12 +518,12 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
   const pagar = useMutation({
     mutationFn: ({ id, banco }) => api.patch(`/facturas/${id}/pagar`, null, { params: { banco } }),
-    onSuccess: () => { toast.success('Factura marcada como pagada'); qc.invalidateQueries({queryKey:['facturas']}); setModalPagar(null); setBancoPago(''); },
+    onSuccess: (res) => { toast.success('Factura marcada como pagada'); qc.setQueryData(['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros], prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); setModalPagar(null); setBancoPago(''); },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar como pagada'),
   });
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/facturas/${id}`),
-    onSuccess: () => { toast.success('Factura eliminada'); qc.invalidateQueries({queryKey:['facturas']}); },
+    onSuccess: (_, id) => { toast.success('Factura eliminada'); qc.setQueryData(['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros], prev => prev ? { ...prev, items: (prev.items || []).filter(f => f.id !== id), total: Math.max(0, (prev.total || 0) - 1) } : prev); },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al eliminar factura'),
   });
 
