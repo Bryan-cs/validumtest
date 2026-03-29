@@ -174,9 +174,9 @@ export default function Tareas() {
       }
       return res;
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success('Tarea creada');
-      qc.invalidateQueries({ queryKey: ['tareas'] });
+      qc.setQueryData(['tareas'], prev => [res.data, ...(prev || [])]);
       setModalNueva(false);
       setForm({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
       setNuevaFiles([]);
@@ -186,9 +186,9 @@ export default function Tareas() {
 
   const cambiarEstado = useMutation({
     mutationFn: ({ id, estado, nota }) => api.put(`/tareas/${id}/estado`, { estado, nota }),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success('Estado actualizado');
-      qc.invalidateQueries({ queryKey: ['tareas'] });
+      qc.setQueryData(['tareas'], prev => prev?.map(t => t.id === res.data.id ? res.data : t));
       qc.invalidateQueries({ queryKey: ['notificaciones'] });
     },
     onError: e => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
@@ -196,9 +196,9 @@ export default function Tareas() {
 
   const finalizar = useMutation({
     mutationFn: id => api.put(`/tareas/${id}/finalizar`),
-    onSuccess: () => {
+    onSuccess: (res) => {
       toast.success('Tarea finalizada y archivada');
-      qc.invalidateQueries({ queryKey: ['tareas'] });
+      qc.setQueryData(['tareas'], prev => prev?.map(t => t.id === res.data.id ? res.data : t));
       qc.invalidateQueries({ queryKey: ['notificaciones'] });
     },
     onError: e => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
@@ -206,9 +206,15 @@ export default function Tareas() {
 
   const finalizarLote = useMutation({
     mutationFn: ids => api.put('/tareas/finalizar-lote', { ids }),
-    onSuccess: data => {
-      toast.success(`${data.data.finalizadas} tarea${data.data.finalizadas !== 1 ? 's' : ''} finalizada${data.data.finalizadas !== 1 ? 's' : ''}`);
-      qc.invalidateQueries({ queryKey: ['tareas'] });
+    onSuccess: (res) => {
+      const { finalizadas, tareas: actualizadas } = res.data;
+      toast.success(`${finalizadas} tarea${finalizadas !== 1 ? 's' : ''} finalizada${finalizadas !== 1 ? 's' : ''}`);
+      qc.setQueryData(['tareas'], prev =>
+        prev?.map(t => {
+          const upd = actualizadas.find(u => u.id === t.id);
+          return upd ? upd : t;
+        })
+      );
       qc.invalidateQueries({ queryKey: ['notificaciones'] });
       setSeleccionadas(new Set());
     },
@@ -217,7 +223,7 @@ export default function Tareas() {
 
   const eliminarTarea = useMutation({
     mutationFn: id => api.delete(`/tareas/${id}`),
-    onSuccess: () => { toast.success('Tarea eliminada'); qc.invalidateQueries({ queryKey: ['tareas'] }); },
+    onSuccess: (_, id) => { toast.success('Tarea eliminada'); qc.setQueryData(['tareas'], prev => prev?.filter(t => t.id !== id)); },
     onError: e => { const d = e.response?.data?.detail; toast.error(d || 'Error al eliminar'); },
   });
 
