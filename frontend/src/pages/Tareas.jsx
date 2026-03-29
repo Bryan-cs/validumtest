@@ -141,7 +141,7 @@ export default function Tareas() {
   const { data: tareas = [], isLoading } = useQuery({
     queryKey: ['tareas'],
     queryFn: () => api.get('/tareas').then(r => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 60_000,
   });
 
   const { data: usuarios = [] } = useQuery({
