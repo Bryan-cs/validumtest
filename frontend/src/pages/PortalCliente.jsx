@@ -703,12 +703,12 @@ function CampanaNotif() {
 
   const leer = useMutation({
     mutationFn: () => api.put('/tareas/notificaciones/leer'),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-notifs'] }),
+    onSuccess: () => qc.setQueryData(['portal-notifs'], prev => prev?.map(n => ({ ...n, leida: true }))),
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error al marcar como leídas'),
   });
   const limpiar = useMutation({
     mutationFn: () => api.delete('/tareas/notificaciones'),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['portal-notifs'] }); setOpen(false); },
+    onSuccess: () => { qc.setQueryData(['portal-notifs'], []); setOpen(false); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error al limpiar notificaciones'),
   });
 
