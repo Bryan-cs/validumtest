@@ -18,7 +18,7 @@ export default function Dashboard() {
   const { data: d, isLoading } = useQuery({
     queryKey: ['dashboard', anio, mes],
     queryFn: () => api.get('/dashboard', { params }).then(r => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 120_000,
   });
 
   const sel = { padding:'7px 12px', border:`1px solid ${C.border}`, borderRadius:7,

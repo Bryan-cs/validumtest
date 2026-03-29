@@ -6,8 +6,7 @@ APP_VERSION = "1.2.0"
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
-from typing import List
-from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import os
@@ -97,118 +96,9 @@ def _limpiar_novedades_antiguas():
 
 
 def _backup_db_to_r2():
-    """Exporta todas las tablas como JSON y lo sube a Cloudflare R2."""
-    from logger import logger as _log
-    import json
-    try:
-        from routers.documentos import _get_s3, _R2_BUCKET
-        s3 = _get_s3()
-        if not s3:
-            _log.warning("Backup: R2 no disponible, saltando backup")
-            return
-        from database import SessionLocal
-        from sqlalchemy import inspect, text
-        db = SessionLocal()
-        try:
-            inspector = inspect(db.bind)
-            tables = inspector.get_table_names()
-            backup_data = {}
-            for table in tables:
-                if table in ('alembic_version',):
-                    continue
-                rows = db.execute(text(f'SELECT * FROM "{table}"')).fetchall()
-                keys = db.execute(text(f'SELECT * FROM "{table}" LIMIT 0')).keys()
-                col_names = list(keys)
-                backup_data[table] = {
-                    "columns": col_names,
-                    "rows": [
-                        {col: (str(val) if val is not None and not isinstance(val, (int, float, bool)) else val)
-                         for col, val in zip(col_names, row)}
-                        for row in rows
-                    ],
-                    "count": len(rows),
-                }
-            dump = json.dumps(backup_data, ensure_ascii=False, indent=1).encode("utf-8")
-        finally:
-            db.close()
-        # Nombre: backups/2026-03-28_14-00.json
-        ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
-        key = f"backups/{ts}.json"
-        s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=dump)
-        size_mb = len(dump) / (1024 * 1024)
-        _log.info(f"Backup: {key} ({size_mb:.1f} MB) subido a R2")
-        # Limpiar backups con más de 30 días
-        try:
-            from datetime import timedelta
-            cutoff = datetime.now(timezone.utc) - timedelta(days=30)
-            resp = s3.list_objects_v2(Bucket=_R2_BUCKET, Prefix="backups/")
-            for obj in resp.get("Contents", []):
-                if obj["LastModified"].replace(tzinfo=timezone.utc) < cutoff:
-                    s3.delete_object(Bucket=_R2_BUCKET, Key=obj["Key"])
-                    _log.info(f"Backup: eliminado backup antiguo {obj['Key']}")
-        except Exception as e:
-            _log.warning(f"Backup: error limpiando backups antiguos: {e}")
-        # Limpiar registros de actividad > 90 días
-        try:
-            from database import SessionLocal as _SL2
-            db2 = _SL2()
-            try:
-                from sqlalchemy import text as _t2
-                result = db2.execute(_t2("DELETE FROM actividad WHERE fecha < NOW() - INTERVAL '90 days'"))
-                if result.rowcount > 0:
-                    db2.commit()
-                    _log.info(f"Backup: limpiados {result.rowcount} registros de actividad > 90 días")
-                else:
-                    db2.rollback()
-            finally:
-                db2.close()
-        except Exception as e:
-            _log.warning(f"Backup: error limpiando actividad antigua: {e}")
-        # Limpiar planillas del mes anterior (cliente ya las descargó)
-        try:
-            from database import SessionLocal as _SL3
-            db3 = _SL3()
-            try:
-                from sqlalchemy import text as _t3
-                # Obtener mes/año anterior
-                hoy = datetime.now(timezone.utc)
-                if hoy.month == 1:
-                    mes_ant_idx, anio_ant = 12, hoy.year - 1
-                else:
-                    mes_ant_idx, anio_ant = hoy.month - 1, hoy.year
-                _MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                          "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
-                mes_ant = _MESES[mes_ant_idx - 1]
-                # Solo limpiar si ya estamos en día 2+ del mes nuevo (dar margen)
-                if hoy.day >= 2:
-                    # Buscar planillas antiguas (anteriores al mes pasado)
-                    old_planillas = db3.execute(_t3(
-                        "SELECT id FROM planillas_pago WHERE NOT (mes = :mes AND anio = :anio) AND NOT (mes = :mes_act AND anio = :anio_act)"
-                    ), {"mes": mes_ant, "anio": str(anio_ant), "mes_act": _MESES[hoy.month - 1], "anio_act": str(hoy.year)}).fetchall()
-                    if old_planillas:
-                        ids = [int(r[0]) for r in old_planillas]
-                        # Borrar archivos de R2/disco
-                        docs = db3.execute(_t3(
-                            "SELECT id, ruta FROM documentos WHERE contexto = 'planilla_pago' AND contexto_id = ANY(:ids)"
-                        ), {"ids": ids}).fetchall()
-                        for doc_id, ruta in docs:
-                            if s3 and ruta and not ruta.startswith("uploads/"):
-                                try: s3.delete_object(Bucket=_R2_BUCKET, Key=ruta)
-                                except Exception: pass
-                            db3.execute(_t3("DELETE FROM documentos WHERE id = :did"), {"did": doc_id})
-                        db3.execute(_t3(
-                            "DELETE FROM planillas_pago WHERE id = ANY(:ids)"
-                        ), {"ids": ids})
-                        db3.commit()
-                        _log.info(f"Backup: eliminadas {len(ids)} planillas antiguas y {len(docs)} archivos de R2")
-                    else:
-                        db3.rollback()
-            finally:
-                db3.close()
-        except Exception as e:
-            _log.warning(f"Backup: error limpiando planillas antiguas: {e}")
-    except Exception as e:
-        _log.error(f"Backup: error general: {e}")
+    """Wrapper para compatibilidad con scheduler."""
+    from routers.backups import backup_db_to_r2
+    backup_db_to_r2()
 
 
 def _limpiar_tareas_mensuales():
@@ -327,6 +217,8 @@ from routers import reportes as reportes_router
 from routers import tareas as tareas_router
 from routers import portal as portal_router
 from routers.documentos import router as documentos_router
+from routers import backups as backups_router
+from routers import planillas as planillas_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
@@ -335,6 +227,8 @@ app.include_router(reportes_router.router)
 app.include_router(tareas_router.router)
 app.include_router(portal_router.router)
 app.include_router(documentos_router)
+app.include_router(backups_router.router)
+app.include_router(planillas_router.router)
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
@@ -578,115 +472,6 @@ def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
                           mes=mes, anio=anio, doc=doc)
 
 
-# ─── PLANILLAS DE PAGO SS (admin) ─────────────────────────────────────────────
-
-@app.get("/planillas")
-def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
-                     db: Session = Depends(get_db), token=Depends(require_admin)):
-    q = db.query(models.PlanillaPago).order_by(models.PlanillaPago.id.desc())
-    if cliente: q = q.filter(models.PlanillaPago.cliente_ref == cliente)
-    if mes:     q = q.filter(models.PlanillaPago.mes == mes)
-    if anio:    q = q.filter(models.PlanillaPago.anio == anio)
-    rows = q.all()
-    if not rows:
-        return []
-    # Batch load all documents for these planillas (avoid N+1)
-    planilla_ids = [p.id for p in rows]
-    all_docs = db.query(models.Documento).filter(
-        models.Documento.contexto == "planilla_pago",
-        models.Documento.contexto_id.in_(planilla_ids),
-    ).all()
-    docs_by_planilla = {}
-    for d in all_docs:
-        docs_by_planilla.setdefault(d.contexto_id, []).append(d)
-    result = []
-    for p in rows:
-        docs = docs_by_planilla.get(p.id, [])
-        result.append({
-            "id": p.id, "cliente_ref": p.cliente_ref, "mes": p.mes, "anio": p.anio,
-            "observaciones": p.observaciones, "subido_por": p.subido_por,
-            "creado": p.creado.isoformat() if p.creado else None,
-            "archivos": [{"id": d.id, "nombre": d.nombre, "tamano": d.tamano} for d in docs],
-        })
-    return result
-
-
-@app.post("/planillas")
-async def crear_planilla(
-    cliente_ref: str = Form(...),
-    mes: str = Form(...),
-    anio: str = Form(...),
-    observaciones: str = Form(""),
-    files: List[UploadFile] = File(...),
-    db: Session = Depends(get_db),
-    token=Depends(require_admin),
-):
-    planilla = models.PlanillaPago(
-        cliente_ref=cliente_ref, mes=mes, anio=anio,
-        observaciones=observaciones, subido_por=token.get("sub", ""),
-    )
-    db.add(planilla)
-    db.commit()
-    db.refresh(planilla)
-
-    # Subir archivos usando el sistema de documentos existente
-    from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE
-    import uuid, os, re
-    s3 = _get_s3()
-    subidos = []
-    for file in files:
-        ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
-        if ext not in ALLOWED_EXT:
-            continue
-        content = await file.read()
-        if len(content) > MAX_SIZE:
-            continue
-        safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'archivo')
-        unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
-        if s3:
-            key = f"planillas/{unique_name}"
-            s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=content, ContentType=file.content_type or "application/octet-stream")
-            ruta = key
-        else:
-            os.makedirs("uploads/planillas", exist_ok=True)
-            ruta = f"uploads/planillas/{unique_name}"
-            with open(ruta, "wb") as f:
-                f.write(content)
-        doc = models.Documento(
-            afiliado_doc="", nombre=file.filename, tipo=ext, ruta=ruta,
-            tamano=len(content), subido_por=token.get("sub", ""),
-            contexto="planilla_pago", contexto_id=planilla.id,
-        )
-        db.add(doc)
-        subidos.append(file.filename)
-    db.commit()
-    crud._log(db, token.get("sub", ""), "Subió planilla SS", "Facturación",
-              f"{cliente_ref} - {mes} {anio} ({len(subidos)} archivos)")
-    return {"ok": True, "id": planilla.id, "archivos": subidos}
-
-
-@app.delete("/planillas/{planilla_id}")
-def eliminar_planilla(planilla_id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    planilla = db.query(models.PlanillaPago).filter_by(id=planilla_id).first()
-    if not planilla:
-        raise HTTPException(404, "Planilla no encontrada")
-    # Eliminar archivos asociados
-    docs = db.query(models.Documento).filter_by(contexto="planilla_pago", contexto_id=planilla.id).all()
-    from routers.documentos import _get_s3, _R2_BUCKET
-    s3 = _get_s3()
-    for d in docs:
-        if s3 and not d.ruta.startswith("uploads/"):
-            try: s3.delete_object(Bucket=_R2_BUCKET, Key=d.ruta)
-            except Exception: pass
-        db.delete(d)
-    cliente = planilla.cliente_ref
-    mes_anio = f"{planilla.mes} {planilla.anio}"
-    db.delete(planilla)
-    db.commit()
-    crud._log(db, token.get("sub", ""), "Eliminó planilla SS", "Facturación", f"{cliente} - {mes_anio}")
-    return {"ok": True}
-
-
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
 @app.get("/health")
 def health_check(db: Session = Depends(get_db)):
@@ -735,193 +520,6 @@ def health_check(db: Session = Depends(get_db)):
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=code, content=result)
     return result
-
-
-# ─── BACKUPS (solo admin) ─────────────────────────────────────────────────────
-@app.get("/backups")
-def listar_backups(token=Depends(require_admin)):
-    """Lista los backups disponibles en R2."""
-    try:
-        from routers.documentos import _get_s3, _R2_BUCKET
-        s3 = _get_s3()
-        if not s3:
-            raise HTTPException(503, "R2 no disponible")
-        resp = s3.list_objects_v2(Bucket=_R2_BUCKET, Prefix="backups/")
-        backups = []
-        for obj in sorted(resp.get("Contents", []), key=lambda o: o["LastModified"], reverse=True):
-            backups.append({
-                "archivo": obj["Key"].replace("backups/", ""),
-                "fecha": obj["LastModified"].isoformat(),
-                "tamano_mb": round(obj["Size"] / (1024 * 1024), 2),
-            })
-        return {"total": len(backups), "backups": backups}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Error listando backups: {e}")
-
-
-@app.get("/backups/{nombre}/descargar")
-def descargar_backup(nombre: str, token=Depends(require_admin)):
-    """Descarga un backup específico desde R2."""
-    import io
-    from fastapi.responses import StreamingResponse
-    if "/" in nombre or "\\" in nombre:
-        raise HTTPException(400, "Nombre inválido")
-    try:
-        from routers.documentos import _get_s3, _R2_BUCKET
-        s3 = _get_s3()
-        if not s3:
-            raise HTTPException(503, "R2 no disponible")
-        key = f"backups/{nombre}"
-        resp = s3.get_object(Bucket=_R2_BUCKET, Key=key)
-        content = resp["Body"].read()
-        return StreamingResponse(
-            io.BytesIO(content),
-            media_type="application/json" if nombre.endswith(".json") else "application/sql",
-            headers={"Content-Disposition": f'attachment; filename="{nombre}"'},
-        )
-    except s3.exceptions.NoSuchKey:
-        raise HTTPException(404, "Backup no encontrado")
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Error descargando backup: {e}")
-
-
-@app.post("/backups/crear")
-def crear_backup_manual(token=Depends(require_admin)):
-    """Crea un backup manual inmediato."""
-    _backup_db_to_r2()
-    # Verificar que se creó
-    try:
-        from routers.documentos import _get_s3, _R2_BUCKET
-        s3 = _get_s3()
-        if s3:
-            ts = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M")
-            key = f"backups/{ts}.json"
-            s3.head_object(Bucket=_R2_BUCKET, Key=key)
-            return {"ok": True, "archivo": f"{ts}.json"}
-    except Exception:
-        pass
-    return {"ok": True, "mensaje": "Backup ejecutado, revisa la lista de backups"}
-
-
-@app.delete("/backups/{nombre}")
-def eliminar_backup(nombre: str, token=Depends(require_admin)):
-    """Elimina un backup específico de R2."""
-    if "/" in nombre or "\\" in nombre:
-        raise HTTPException(400, "Nombre inválido")
-    try:
-        from routers.documentos import _get_s3, _R2_BUCKET
-        s3 = _get_s3()
-        if not s3:
-            raise HTTPException(503, "R2 no disponible")
-        key = f"backups/{nombre}"
-        s3.delete_object(Bucket=_R2_BUCKET, Key=key)
-        return {"ok": True}
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(500, f"Error eliminando backup: {e}")
-
-
-@app.post("/backups/restaurar")
-async def restaurar_backup(
-    file: UploadFile = File(...),
-    token=Depends(require_admin),
-):
-    """Restaura la base de datos desde un archivo JSON de backup."""
-    import json
-    from database import SessionLocal
-    from sqlalchemy import text, inspect
-
-    if not file.filename.endswith(".json"):
-        raise HTTPException(400, "Solo se aceptan archivos .json")
-
-    content = await file.read()
-    if len(content) > 50 * 1024 * 1024:  # 50 MB max
-        raise HTTPException(400, "Archivo de backup demasiado grande (máx 50 MB)")
-    try:
-        backup_data = json.loads(content)
-    except json.JSONDecodeError:
-        raise HTTPException(400, "Archivo JSON inválido")
-
-    if not isinstance(backup_data, dict):
-        raise HTTPException(400, "Formato de backup no reconocido")
-
-    db = SessionLocal()
-    restored = []
-    errors = []
-    try:
-        inspector = inspect(db.bind)
-        existing_tables = set(inspector.get_table_names())
-
-        # Primero crear backup de seguridad antes de restaurar
-        _backup_db_to_r2()
-
-        # Desactivar foreign keys temporalmente para poder truncar en cualquier orden
-        db.execute(text("SET session_replication_role = 'replica'"))
-
-        for table_name, table_data in backup_data.items():
-            if table_name not in existing_tables:
-                errors.append(f"Tabla '{table_name}' no existe, saltada")
-                continue
-            rows = table_data.get("rows", [])
-            columns = table_data.get("columns", [])
-            if not rows or not columns:
-                continue
-            try:
-                # Validar nombres de columnas (solo alfanuméricos y guion bajo)
-                import re
-                _col_re = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
-                for c in columns:
-                    if not _col_re.match(c):
-                        raise ValueError(f"Nombre de columna inválido: {c}")
-                # Limpiar tabla
-                db.execute(text(f'TRUNCATE TABLE "{table_name}" CASCADE'))
-                # Insertar filas
-                count = 0
-                for row in rows:
-                    cols = ", ".join(f'"{c}"' for c in columns)
-                    placeholders = ", ".join(f":v{i}" for i in range(len(columns)))
-                    params = {f"v{i}": row.get(c) for i, c in enumerate(columns)}
-                    db.execute(text(f'INSERT INTO "{table_name}" ({cols}) VALUES ({placeholders})'), params)
-                    count += 1
-                restored.append({"tabla": table_name, "filas": count})
-            except Exception as e:
-                errors.append(f"Error en '{table_name}': {str(e)[:200]}")
-                db.rollback()
-                db.execute(text("SET session_replication_role = 'replica'"))
-                continue
-
-        # Reactivar foreign keys
-        db.execute(text("SET session_replication_role = 'origin'"))
-
-        # Limpiar duplicados: si un doc existe en afiliados Y en eliminados, quitarlo de eliminados
-        db.execute(text("""
-            DELETE FROM eliminados
-            WHERE doc IN (SELECT doc FROM afiliados)
-        """))
-
-        db.commit()
-    except Exception as e:
-        db.rollback()
-        try:
-            db.execute(text("SET session_replication_role = 'origin'"))
-            db.commit()
-        except Exception:
-            pass
-        raise HTTPException(500, f"Error restaurando: {e}")
-    finally:
-        db.close()
-
-    return {
-        "ok": True,
-        "restaurado": restored,
-        "errores": errors,
-        "mensaje": "Se creó un backup de seguridad antes de restaurar",
-    }
 
 
 # ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────

@@ -810,17 +810,17 @@ export function NovedadesClientes() {
   const { data: novedades=[], isLoading: loadNov } = useQuery({
     queryKey:['admin-novedades-pago'],
     queryFn:()=>api.get('/portal/novedades-pago').then(r=>r.data),
-    refetchInterval:30_000,
+    refetchInterval:60_000,
   });
   const { data: solicitudes=[], isLoading: loadSol } = useQuery({
     queryKey:['admin-solicitudes-retiro'],
     queryFn:()=>api.get('/portal/solicitudes-retiro').then(r=>r.data),
-    refetchInterval:30_000,
+    refetchInterval:60_000,
   });
   const { data: novedadesAfil=[], isLoading: loadNovAfil } = useQuery({
     queryKey:['admin-novedades-afil'],
     queryFn:()=>api.get('/portal/solicitudes-novedad').then(r=>r.data),
-    refetchInterval:30_000,
+    refetchInterval:60_000,
   });
 
   const cerrarModalResp = () => { setModalResp(null); setRespTexto(''); setRespFiles([]); };
