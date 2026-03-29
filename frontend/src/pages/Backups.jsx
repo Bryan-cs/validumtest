@@ -175,7 +175,10 @@ export default function Backups() {
           try {
             await api.delete(`/backups/${confirmDel}`);
             toast.success('Backup eliminado');
-            qc.invalidateQueries({ queryKey: ['backups'] });
+            qc.setQueryData(['backups'], prev => {
+              const backups = (prev?.backups || []).filter(b => b.archivo !== confirmDel);
+              return { ...prev, backups, total: backups.length };
+            });
           } catch { toast.error('Error eliminando backup'); }
           setConfirmDel(null);
         }}
