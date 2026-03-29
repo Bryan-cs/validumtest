@@ -2,12 +2,13 @@ import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
-import { C, Btn, PageHeader } from '../components/UI';
+import { C, Btn, PageHeader, ConfirmModal } from '../components/UI';
 
 export default function Backups() {
   const qc = useQueryClient();
   const [creando, setCreando] = useState(false);
   const [restaurando, setRestaurando] = useState(false);
+  const [confirmDel, setConfirmDel] = useState(null);
   const fileRef = useRef(null);
 
   const { data, isLoading } = useQuery({
@@ -143,9 +144,14 @@ export default function Backups() {
                     <td style={td}>{fechaStr}</td>
                     <td style={td}>{b.tamano_mb} MB</td>
                     <td style={{ ...td, textAlign: 'center' }}>
-                      <Btn size="sm" variant="primary" onClick={() => descargar(b.archivo)}>
-                        Descargar
-                      </Btn>
+                      <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                        <Btn size="sm" variant="primary" onClick={() => descargar(b.archivo)}>
+                          Descargar
+                        </Btn>
+                        <Btn size="sm" variant="danger" onClick={() => setConfirmDel(b.archivo)}>
+                          Eliminar
+                        </Btn>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -158,6 +164,23 @@ export default function Backups() {
       <p style={{ fontSize: 12, color: C.text2, marginTop: 16, textAlign: 'center' }}>
         Total: {backups.length} backup{backups.length !== 1 ? 's' : ''} almacenado{backups.length !== 1 ? 's' : ''}
       </p>
+
+      <ConfirmModal
+        open={!!confirmDel}
+        title="Eliminar backup"
+        message={`Se eliminará el backup "${confirmDel}" de Cloudflare R2. Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={async () => {
+          try {
+            await api.delete(`/backups/${confirmDel}`);
+            toast.success('Backup eliminado');
+            qc.invalidateQueries({ queryKey: ['backups'] });
+          } catch { toast.error('Error eliminando backup'); }
+          setConfirmDel(null);
+        }}
+        onCancel={() => setConfirmDel(null)}
+      />
     </div>
   );
 }
