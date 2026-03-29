@@ -44,10 +44,12 @@ export default function PlanillasSS() {
   const descargarArchivo = async (docId, nombre) => {
     try {
       const res = await api.get(`/documentos/${docId}/descargar`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(res.data);
+      a.href = url;
       a.download = nombre;
       a.click();
+      URL.revokeObjectURL(url);
     } catch { toast.error('Error al descargar'); }
   };
 
