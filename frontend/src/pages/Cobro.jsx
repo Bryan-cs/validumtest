@@ -7,10 +7,12 @@ import { BarraFiltros } from '../components/FiltroCheck';
 async function dlExcel(url, filename) {
   try {
     const res = await api.get(url, { responseType: 'blob' });
+    const objUrl = URL.createObjectURL(res.data);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(res.data);
+    a.href = objUrl;
     a.download = filename;
     a.click();
+    URL.revokeObjectURL(objUrl);
   } catch (e) {
     const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
     alert(typeof msg === 'string' ? msg : 'Error generando reporte');

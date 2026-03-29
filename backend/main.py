@@ -872,6 +872,12 @@ async def restaurar_backup(
             if not rows or not columns:
                 continue
             try:
+                # Validar nombres de columnas (solo alfanuméricos y guion bajo)
+                import re
+                _col_re = re.compile(r'^[a-zA-Z_][a-zA-Z0-9_]*$')
+                for c in columns:
+                    if not _col_re.match(c):
+                        raise ValueError(f"Nombre de columna inválido: {c}")
                 # Limpiar tabla
                 db.execute(text(f'TRUNCATE TABLE "{table_name}" CASCADE'))
                 # Insertar filas

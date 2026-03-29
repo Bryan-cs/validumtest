@@ -11,10 +11,12 @@ const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5','N/
 async function dlExcel(url, filename) {
   try {
     const res = await api.get(url, { responseType: 'blob' });
+    const objUrl = URL.createObjectURL(res.data);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(res.data);
+    a.href = objUrl;
     a.download = filename;
     a.click();
+    URL.revokeObjectURL(objUrl);
   } catch (e) {
     const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
     alert(typeof msg === 'string' ? msg : 'Error generando reporte');
@@ -884,10 +886,12 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
   const handleDownload = async (doc) => {
     try {
       const res = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
+      const objUrl = URL.createObjectURL(res.data);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(res.data);
+      a.href = objUrl;
       a.download = doc.nombre;
       a.click();
+      URL.revokeObjectURL(objUrl);
     } catch (e) {
       alert('Error descargando archivo');
     }
