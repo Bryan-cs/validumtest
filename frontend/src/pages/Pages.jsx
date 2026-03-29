@@ -413,17 +413,17 @@ export function Empleados() {
   const [gnombre,setGnom]=useState(''); const [gvalor,setGval]=useState(0);
   const addGasto = useMutation({
     mutationFn:()=>api.post('/gastos',{nombre:gnombre,valor:+gvalor}),
-    onSuccess:()=>{ toast.success('Gasto agregado'); qc.invalidateQueries({queryKey:['gastos']}); setGnom(''); setGval(0); },
+    onSuccess:(res)=>{ toast.success('Gasto agregado'); qc.setQueryData(['gastos'], prev => [...(prev || []), res.data]); setGnom(''); setGval(0); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
   const toggleG = useMutation({
     mutationFn:(id)=>api.patch(`/gastos/${id}/toggle`),
-    onSuccess:()=>qc.invalidateQueries({queryKey:['gastos']}),
+    onSuccess:(res)=>qc.setQueryData(['gastos'], prev => prev?.map(g => g.id === res.data.id ? res.data : g)),
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
   const delGasto = useMutation({
     mutationFn:(id)=>api.delete(`/gastos/${id}`),
-    onSuccess:()=>{ toast.success('Gasto eliminado'); qc.invalidateQueries({queryKey:['gastos']}); },
+    onSuccess:(_, id)=>{ toast.success('Gasto eliminado'); qc.setQueryData(['gastos'], prev => prev?.filter(g => g.id !== id)); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
@@ -550,13 +550,13 @@ export function Usuarios() {
       if(form.rol==='cliente'&&!form.cliente_ref){setErr('Para rol cliente debes indicar el Cliente (cliente_ref).');return Promise.reject();}
       return api.post('/usuarios',{nombre:form.nombre,username:form.username,password:form.password,rol:form.rol,cliente_ref:form.cliente_ref||null});
     },
-    onSuccess:()=>{ toast.success('Usuario creado'); qc.invalidateQueries({queryKey:['usuarios']}); setModal(false); setErr(''); },
+    onSuccess:(res)=>{ toast.success('Usuario creado'); qc.setQueryData(['usuarios'], prev => [...(prev || []), res.data]); setModal(false); setErr(''); },
     onError:(e)=>{ if(e?.response){ const d=e.response?.data?.detail; setErr(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); } },
   });
 
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/usuarios/${id}`),
-    onSuccess:()=>{ toast.success('Usuario eliminado'); qc.invalidateQueries({queryKey:['usuarios']}); },
+    onSuccess:(_, id)=>{ toast.success('Usuario eliminado'); qc.setQueryData(['usuarios'], prev => prev?.filter(u => u.id !== id)); },
     onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
@@ -630,7 +630,7 @@ export function Listas() {
 
   const update = useMutation({
     mutationFn:(items)=>api.put(`/listas/${sel}`,{items}),
-    onSuccess:()=>{ toast.success('Lista actualizada'); qc.invalidateQueries({queryKey:['listas']}); },
+    onSuccess:(res)=>{ toast.success('Lista actualizada'); qc.setQueryData(['listas'], prev => ({ ...prev, [res.data.nombre]: res.data.items })); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
@@ -714,7 +714,7 @@ export function Calculadora() {
 
   const guardar = useMutation({
     mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts, plantilla_whatsapp:plantilla, cargo_adicional:+cargoAdicional }),
-    onSuccess:()=>{ toast.success('Configuración actualizada'); qc.invalidateQueries({queryKey:['config']}); },
+    onSuccess:(res)=>{ toast.success('Configuración actualizada'); qc.setQueryData(['config'], res.data); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
@@ -836,33 +836,33 @@ export function NovedadesClientes() {
 
   const updNovedad = useMutation({
     mutationFn:({id,estado,respuesta})=>api.patch(`/portal/novedades-pago/${id}/estado`,{estado,respuesta}),
-    onSuccess:()=>{ toast.success('Estado actualizado'); qc.invalidateQueries({queryKey:['admin-novedades-pago']}); cerrarModalResp(); },
+    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-novedades-pago'], prev => prev?.map(n => n.id === id ? { ...n, estado, respuesta: respuesta ?? n.respuesta } : n)); cerrarModalResp(); },
     onError:()=>toast.error('Error al actualizar'),
   });
   const updSolicitud = useMutation({
     mutationFn:({id,estado,respuesta})=>api.patch(`/portal/solicitudes-retiro/${id}/estado`,{estado,respuesta}),
-    onSuccess:()=>{ toast.success('Estado actualizado'); qc.invalidateQueries({queryKey:['admin-solicitudes-retiro']}); cerrarModalResp(); },
+    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-solicitudes-retiro'], prev => prev?.map(s => s.id === id ? { ...s, estado, respuesta: respuesta ?? s.respuesta } : s)); cerrarModalResp(); },
     onError:()=>toast.error('Error al actualizar'),
   });
   const updNovedadAfil = useMutation({
     mutationFn:({id,estado,respuesta})=>api.patch(`/portal/solicitudes-novedad/${id}/estado`,{estado,respuesta}),
-    onSuccess:()=>{ toast.success('Estado actualizado'); qc.invalidateQueries({queryKey:['admin-novedades-afil']}); cerrarModalResp(); },
+    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-novedades-afil'], prev => prev?.map(s => s.id === id ? { ...s, estado, respuesta: respuesta ?? s.respuesta } : s)); cerrarModalResp(); },
     onError:()=>toast.error('Error al actualizar'),
   });
 
   const delNovedad = useMutation({
     mutationFn:(id)=>api.delete(`/portal/novedades-pago/${id}`),
-    onSuccess:()=>{ toast.success('Novedad eliminada'); qc.invalidateQueries({queryKey:['admin-novedades-pago']}); },
+    onSuccess:(_, id)=>{ toast.success('Novedad eliminada'); qc.setQueryData(['admin-novedades-pago'], prev => prev?.filter(n => n.id !== id)); },
     onError:()=>toast.error('Error al eliminar'),
   });
   const delSolicitud = useMutation({
     mutationFn:(id)=>api.delete(`/portal/solicitudes-retiro/${id}`),
-    onSuccess:()=>{ toast.success('Solicitud eliminada'); qc.invalidateQueries({queryKey:['admin-solicitudes-retiro']}); },
+    onSuccess:(_, id)=>{ toast.success('Solicitud eliminada'); qc.setQueryData(['admin-solicitudes-retiro'], prev => prev?.filter(s => s.id !== id)); },
     onError:()=>toast.error('Error al eliminar'),
   });
   const delNovedadAfil = useMutation({
     mutationFn:(id)=>api.delete(`/portal/solicitudes-novedad/${id}`),
-    onSuccess:()=>{ toast.success('Solicitud eliminada'); qc.invalidateQueries({queryKey:['admin-novedades-afil']}); },
+    onSuccess:(_, id)=>{ toast.success('Solicitud eliminada'); qc.setQueryData(['admin-novedades-afil'], prev => prev?.filter(s => s.id !== id)); },
     onError:()=>toast.error('Error al eliminar'),
   });
 
