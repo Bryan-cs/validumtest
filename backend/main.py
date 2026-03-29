@@ -186,19 +186,19 @@ def _backup_db_to_r2():
                         "SELECT id FROM planillas_pago WHERE NOT (mes = :mes AND anio = :anio) AND NOT (mes = :mes_act AND anio = :anio_act)"
                     ), {"mes": mes_ant, "anio": str(anio_ant), "mes_act": _MESES[hoy.month - 1], "anio_act": str(hoy.year)}).fetchall()
                     if old_planillas:
-                        ids = [r[0] for r in old_planillas]
+                        ids = [int(r[0]) for r in old_planillas]
                         # Borrar archivos de R2/disco
                         docs = db3.execute(_t3(
-                            f"SELECT id, ruta FROM documentos WHERE contexto = 'planilla_pago' AND contexto_id IN ({','.join(str(i) for i in ids)})"
-                        )).fetchall()
+                            "SELECT id, ruta FROM documentos WHERE contexto = 'planilla_pago' AND contexto_id = ANY(:ids)"
+                        ), {"ids": ids}).fetchall()
                         for doc_id, ruta in docs:
                             if s3 and ruta and not ruta.startswith("uploads/"):
                                 try: s3.delete_object(Bucket=_R2_BUCKET, Key=ruta)
                                 except Exception: pass
                             db3.execute(_t3("DELETE FROM documentos WHERE id = :did"), {"did": doc_id})
                         db3.execute(_t3(
-                            f"DELETE FROM planillas_pago WHERE id IN ({','.join(str(i) for i in ids)})"
-                        ))
+                            "DELETE FROM planillas_pago WHERE id = ANY(:ids)"
+                        ), {"ids": ids})
                         db3.commit()
                         _log.info(f"Backup: eliminadas {len(ids)} planillas antiguas y {len(docs)} archivos de R2")
                     else:
@@ -588,9 +588,20 @@ def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
     if mes:     q = q.filter(models.PlanillaPago.mes == mes)
     if anio:    q = q.filter(models.PlanillaPago.anio == anio)
     rows = q.all()
+    if not rows:
+        return []
+    # Batch load all documents for these planillas (avoid N+1)
+    planilla_ids = [p.id for p in rows]
+    all_docs = db.query(models.Documento).filter(
+        models.Documento.contexto == "planilla_pago",
+        models.Documento.contexto_id.in_(planilla_ids),
+    ).all()
+    docs_by_planilla = {}
+    for d in all_docs:
+        docs_by_planilla.setdefault(d.contexto_id, []).append(d)
     result = []
     for p in rows:
-        docs = db.query(models.Documento).filter_by(contexto="planilla_pago", contexto_id=p.id).all()
+        docs = docs_by_planilla.get(p.id, [])
         result.append({
             "id": p.id, "cliente_ref": p.cliente_ref, "mes": p.mes, "anio": p.anio,
             "observaciones": p.observaciones, "subido_por": p.subido_por,
@@ -649,8 +660,8 @@ async def crear_planilla(
         db.add(doc)
         subidos.append(file.filename)
     db.commit()
-    crud.log(db, token.get("sub", ""), "Subió planilla SS", "Facturación",
-             f"{cliente_ref} - {mes} {anio} ({len(subidos)} archivos)")
+    crud._log(db, token.get("sub", ""), "Subió planilla SS", "Facturación",
+              f"{cliente_ref} - {mes} {anio} ({len(subidos)} archivos)")
     return {"ok": True, "id": planilla.id, "archivos": subidos}
 
 
@@ -672,7 +683,7 @@ def eliminar_planilla(planilla_id: int, db: Session = Depends(get_db), token=Dep
     mes_anio = f"{planilla.mes} {planilla.anio}"
     db.delete(planilla)
     db.commit()
-    crud.log(db, token.get("sub", ""), "Eliminó planilla SS", "Facturación", f"{cliente} - {mes_anio}")
+    crud._log(db, token.get("sub", ""), "Eliminó planilla SS", "Facturación", f"{cliente} - {mes_anio}")
     return {"ok": True}
 
 
@@ -829,6 +840,8 @@ async def restaurar_backup(
         raise HTTPException(400, "Solo se aceptan archivos .json")
 
     content = await file.read()
+    if len(content) > 50 * 1024 * 1024:  # 50 MB max
+        raise HTTPException(400, "Archivo de backup demasiado grande (máx 50 MB)")
     try:
         backup_data = json.loads(content)
     except json.JSONDecodeError:
