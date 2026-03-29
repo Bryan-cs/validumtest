@@ -10,10 +10,12 @@ const UP = v => (v||'').toUpperCase();
 async function dlExcel(url, filename) {
   try {
     const res = await api.get(url, { responseType: 'blob' });
+    const objUrl = URL.createObjectURL(res.data);
     const a = document.createElement('a');
-    a.href = URL.createObjectURL(res.data);
+    a.href = objUrl;
     a.download = filename;
     a.click();
+    URL.revokeObjectURL(objUrl);
   } catch (e) {
     const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
     alert(typeof msg === 'string' ? msg : 'Error generando reporte');
@@ -1104,7 +1106,7 @@ export function NovedadesClientes() {
                     <span style={{flex:1,color:C.blue,cursor:'pointer',textDecoration:'underline'}}
                       onClick={async()=>{
                         const res = await api.get(`/documentos/${d.id}/descargar`,{responseType:'blob'});
-                        const a = document.createElement('a'); a.href=URL.createObjectURL(res.data); a.download=d.nombre; a.click();
+                        const u=URL.createObjectURL(res.data); const a=document.createElement('a'); a.href=u; a.download=d.nombre; a.click(); URL.revokeObjectURL(u);
                       }}>
                       📄 {d.nombre}
                     </span>

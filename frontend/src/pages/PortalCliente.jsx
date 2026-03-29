@@ -454,7 +454,7 @@ function DocsNovedad({ novedadId, contexto = 'novedad_resp' }) {
               onClick={async () => {
                 try {
                   const res = await api.get(`/documentos/${d.id}/descargar`, { responseType:'blob' });
-                  const a = document.createElement('a'); a.href = URL.createObjectURL(res.data); a.download = d.nombre; a.click();
+                  const u = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = u; a.download = d.nombre; a.click(); URL.revokeObjectURL(u);
                 } catch { toast.error('Error al descargar archivo'); }
               }}>
               📄 {d.nombre}
@@ -606,10 +606,12 @@ function TabPlanillas() {
   const descargar = async (docId, nombre) => {
     try {
       const res = await api.get(`/documentos/${docId}/descargar`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(res.data);
+      a.href = url;
       a.download = nombre;
       a.click();
+      URL.revokeObjectURL(url);
     } catch { toast.error('Error al descargar'); }
   };
 

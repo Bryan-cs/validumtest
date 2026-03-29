@@ -684,10 +684,12 @@ function TareaDocumentos({ tareaId }) {
   const handleDownload = async (doc) => {
     try {
       const res = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
+      const url = URL.createObjectURL(res.data);
       const a = document.createElement('a');
-      a.href = URL.createObjectURL(res.data);
+      a.href = url;
       a.download = doc.nombre;
       a.click();
+      URL.revokeObjectURL(url);
     } catch { alert('Error descargando'); }
   };
 
