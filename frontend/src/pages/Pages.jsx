@@ -129,10 +129,11 @@ export function Retiros() {
 
   const aplicar = useMutation({
     mutationFn: ()=>api.post('/retiros',{doc,fecha,motivo,obs}),
-    onSuccess: (r)=>{
-      const n = r.data?.facturas_pendientes;
+    onSuccess: (res)=>{
+      const n = res.data?.facturas_pendientes;
       toast.success(n ? `Retiro aplicado. ${n} factura(s) pendiente(s) del mes` : 'Retiro aplicado');
-      qc.invalidateQueries({queryKey:['retiros']}); qc.invalidateQueries({queryKey:['afiliados']});
+      qc.setQueryData(['retiros'], prev => [res.data.retiro, ...(prev || [])]);
+      qc.invalidateQueries({queryKey:['afiliados']});
       setModal(false); setDoc(''); setObs('');
     },
     onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Afiliado no encontrado')); },
@@ -140,7 +141,7 @@ export function Retiros() {
 
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/retiros/${id}`),
-    onSuccess:()=>{ toast.success('Retiro eliminado'); qc.invalidateQueries({queryKey:['retiros']}); },
+    onSuccess:(_, id)=>{ toast.success('Retiro eliminado'); qc.setQueryData(['retiros'], prev => prev?.filter(r => r.id !== id)); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
@@ -285,12 +286,12 @@ export function Facturacion() {
 
   const pagar = useMutation({
     mutationFn:(id)=>api.patch(`/facturas/${id}/pagar`),
-    onSuccess:()=>{ toast.success('Factura marcada como pagada'); qc.invalidateQueries({queryKey:['facturas']}); },
+    onSuccess:(res)=>{ toast.success('Factura marcada como pagada'); qc.setQueriesData({ queryKey: ['facturas'] }, (prev) => prev?.map(f => f.id === res.data.id ? res.data : f)); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/facturas/${id}`),
-    onSuccess:()=>{ toast.success('Factura eliminada'); qc.invalidateQueries({queryKey:['facturas']}); },
+    onSuccess:(_, id)=>{ toast.success('Factura eliminada'); qc.setQueriesData({ queryKey: ['facturas'] }, (prev) => prev?.filter(f => f.id !== id)); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
@@ -391,13 +392,21 @@ export function Empleados() {
 
   const guardarEmp = useMutation({
     mutationFn:()=>modal==='nuevo'?api.post('/empleados',form):api.put(`/empleados/${modal.id}`,form),
-    onSuccess:()=>{ toast.success('Empleado guardado'); qc.invalidateQueries({queryKey:['empleados']}); setModal(null); },
+    onSuccess:(res)=>{
+      toast.success('Empleado guardado');
+      if (modal === 'nuevo') {
+        qc.setQueryData(['empleados'], prev => [...(prev || []), res.data]);
+      } else {
+        qc.setQueryData(['empleados'], prev => prev?.map(e => e.id === res.data.id ? res.data : e));
+      }
+      setModal(null);
+    },
     onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
   const eliminarEmp = useMutation({
     mutationFn:(id)=>api.delete(`/empleados/${id}`),
-    onSuccess:()=>{ toast.success('Empleado eliminado'); qc.invalidateQueries({queryKey:['empleados']}); },
+    onSuccess:(_, id)=>{ toast.success('Empleado eliminado'); qc.setQueryData(['empleados'], prev => prev?.filter(e => e.id !== id)); },
     onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
