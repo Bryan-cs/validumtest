@@ -796,6 +796,25 @@ def crear_backup_manual(token=Depends(require_admin)):
     return {"ok": True, "mensaje": "Backup ejecutado, revisa la lista de backups"}
 
 
+@app.delete("/backups/{nombre}")
+def eliminar_backup(nombre: str, token=Depends(require_admin)):
+    """Elimina un backup específico de R2."""
+    if "/" in nombre or "\\" in nombre:
+        raise HTTPException(400, "Nombre inválido")
+    try:
+        from routers.documentos import _get_s3, _R2_BUCKET
+        s3 = _get_s3()
+        if not s3:
+            raise HTTPException(503, "R2 no disponible")
+        key = f"backups/{nombre}"
+        s3.delete_object(Bucket=_R2_BUCKET, Key=key)
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(500, f"Error eliminando backup: {e}")
+
+
 @app.post("/backups/restaurar")
 async def restaurar_backup(
     file: UploadFile = File(...),
