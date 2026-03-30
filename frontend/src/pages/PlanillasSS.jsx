@@ -25,11 +25,16 @@ export default function PlanillasSS() {
     queryFn: () => api.get('/planillas', { params: { cliente: filtroCliente, mes: filtroMes, anio: filtroAnio } }).then(r => r.data),
   });
 
-  const { data: clientes = [] } = useQuery({
-    queryKey: ['clientes'],
-    queryFn: () => api.get('/clientes').then(r => r.data),
+  const { data: listas = {} } = useQuery({
+    queryKey: ['listas'],
+    queryFn: () => api.get('/listas').then(r => {
+      const m = {};
+      r.data.forEach(l => { try { m[l.nombre] = JSON.parse(l.items); } catch { m[l.nombre] = []; } });
+      return m;
+    }),
     staleTime: 300_000,
   });
+  const clientes = listas.clientes || [];
 
   const handleDelete = async () => {
     if (!confirmDel) return;

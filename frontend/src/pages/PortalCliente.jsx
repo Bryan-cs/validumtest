@@ -375,9 +375,19 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
 }
 
 // ─── MODAL SOLICITAR RETIRO ────────────────────────────────────────────────────
+const MOTIVOS_RETIRO_DEFAULT = ['Renuncia voluntaria','Terminación de contrato','Pensión','Fallecimiento','Otro'];
+
 function ModalRetiro({ afiliado, onClose, onSuccess }) {
   const [motivo, setMotivo] = useState('');
   const [obs, setObs] = useState('');
+  const { data: motivosRetiro = MOTIVOS_RETIRO_DEFAULT } = useQuery({
+    queryKey: ['listas-motivos-retiro'],
+    queryFn: () => api.get('/listas').then(r => {
+      const lista = r.data.find(l => l.nombre === 'motivos_retiro');
+      return lista ? JSON.parse(lista.items) : MOTIVOS_RETIRO_DEFAULT;
+    }),
+    staleTime: 300_000,
+  });
 
   const crear = useMutation({
     mutationFn: () => {
@@ -406,11 +416,7 @@ function ModalRetiro({ afiliado, onClose, onSuccess }) {
           <label style={lbl}>Motivo *</label>
           <select style={inp} value={motivo} onChange={e => setMotivo(e.target.value)}>
             <option value="">— Seleccionar motivo —</option>
-            <option value="Renuncia voluntaria">Renuncia voluntaria</option>
-            <option value="Terminación de contrato">Terminación de contrato</option>
-            <option value="Pensión">Pensión</option>
-            <option value="Fallecimiento">Fallecimiento</option>
-            <option value="Otro">Otro</option>
+            {motivosRetiro.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </div>
 
