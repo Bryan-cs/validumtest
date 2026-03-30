@@ -59,8 +59,9 @@ def _upload_file(unique_name: str, content: bytes):
         s3.put_object(Bucket=_R2_BUCKET, Key=unique_name, Body=content)
         return
     # Fallback: disco local
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    with open(os.path.join(UPLOAD_DIR, unique_name), 'wb') as f:
+    dest = os.path.join(UPLOAD_DIR, unique_name)
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, 'wb') as f:
         f.write(content)
 
 
@@ -120,7 +121,12 @@ async def subir_documento(
     # Sanitizar nombre: solo alfanuméricos, guiones, puntos y guiones bajos
     import re
     safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'archivo')
-    unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+    file_id = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+    if afiliado_doc:
+        safe_doc = re.sub(r'[^\w\-]', '_', afiliado_doc)
+        unique_name = f"afiliados/{safe_doc}/{file_id}"
+    else:
+        unique_name = file_id
     _upload_file(unique_name, content)
 
     doc = models.Documento(
