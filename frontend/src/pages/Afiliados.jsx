@@ -754,7 +754,7 @@ export default function Afiliados() {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 16px' }}>
           <Sel label="Estado del afiliado" value={form.estado||'ACTIVO'}
             onChange={v=>{ sf('estado',v); sf('estado_srv',v); }}
-            options={ESTADOS_SRV.map(e=>({value:e,label:e}))} />
+            options={(listas.estados_srv||ESTADOS_SRV).map(e=>({value:e,label:e}))} />
           <InputUp label="Fecha ingreso"    type="date" value={form.fecha_ingreso||''}    onChange={v=>sf('fecha_ingreso',v)} />
           <InputUp label="Fecha afiliación" type="date" value={form.fecha_afiliacion||''} onChange={v=>sf('fecha_afiliacion',v)} />
         </div>
