@@ -453,12 +453,6 @@ def update_empleado(db, id, data: schemas.EmpleadoCreate):
     db.commit(); db.refresh(e)
     return {"id":e.id,"nombre":e.nombre,"nomina":e.nomina}
 
-def update_nomina(db, id, nomina):
-    e = db.query(models.Empleado).filter_by(id=id).first()
-    if not e: return None
-    e.nomina = nomina; db.commit()
-    return {"id":e.id,"nomina":e.nomina}
-
 def delete_empleado(db, id, user=""):
     e = db.query(models.Empleado).filter_by(id=id).first()
     if e:

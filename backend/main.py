@@ -393,6 +393,14 @@ def create_gasto(data: schemas.GastoCreate,
     return crud.create_gasto(db, data)
 
 
+@app.post("/gastos/copiar")
+def copiar_gastos(data: schemas.CopiarMesRequest,
+                  db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.copiar_gastos_mes_anterior(
+        db, data.mes_origen, data.anio_origen, data.mes_destino, data.anio_destino,
+        user=token.get("sub", "sistema"))
+
+
 @app.put("/gastos/{id}")
 def update_gasto(id: int, data: schemas.GastoUpdate,
                  db: Session = Depends(get_db), token=Depends(require_admin)):
@@ -407,27 +415,11 @@ def delete_gasto(id: int, db: Session = Depends(get_db), token=Depends(require_a
     return {"ok": True}
 
 
-@app.post("/gastos/copiar")
-def copiar_gastos(data: schemas.CopiarMesRequest,
-                  db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.copiar_gastos_mes_anterior(
-        db, data.mes_origen, data.anio_origen, data.mes_destino, data.anio_destino,
-        user=token.get("sub", "sistema"))
-
-
 # ─── NÓMINA MENSUAL ───────────────────────────────────────────────────────────
 @app.get("/nomina")
 def get_nomina(mes: int, anio: int,
                db: Session = Depends(get_db), token=Depends(require_admin)):
     return crud.get_nomina_mensual(db, mes=mes, anio=anio)
-
-
-@app.put("/nomina/{empleado_id}")
-def update_nomina_mensual(empleado_id: int, mes: int, anio: int,
-                          data: schemas.NominaItemUpdate,
-                          db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.upsert_nomina_mensual(db, empleado_id, mes, anio, data.valor,
-                                      user=token.get("sub", "sistema"))
 
 
 @app.post("/nomina/copiar")
@@ -436,6 +428,14 @@ def copiar_nomina(data: schemas.CopiarMesRequest,
     return crud.copiar_nomina_mes_anterior(
         db, data.mes_origen, data.anio_origen, data.mes_destino, data.anio_destino,
         user=token.get("sub", "sistema"))
+
+
+@app.put("/nomina/{empleado_id}")
+def update_nomina_mensual(empleado_id: int, mes: int, anio: int,
+                          data: schemas.NominaItemUpdate,
+                          db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.upsert_nomina_mensual(db, empleado_id, mes, anio, data.valor,
+                                      user=token.get("sub", "sistema"))
 
 
 # ─── USUARIOS ─────────────────────────────────────────────────────────────────
