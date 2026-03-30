@@ -639,17 +639,16 @@ def get_dashboard(db, anio="", mes=""):
     if mes:  fq = fq.filter(models.Factura.mes==mes)
     facts = fq.one()
 
-    nominas = db.query(func.coalesce(func.sum(models.Empleado.nomina), 0)).filter_by(activo=True).scalar()
-    gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor),    0)).filter_by(activo=True).scalar()
+    # Determinar el mes/año a usar para nómina y gastos
+    _mes_ref  = int(mes)  if mes  else datetime.now(COL_TZ).month
+    _anio_ref = int(anio) if anio else datetime.now(COL_TZ).year
+    # Nómina y gastos del mes/año de referencia (ya no son valores fijos).
+    nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
+        mes=_mes_ref, anio=_anio_ref).scalar()
+    gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
+        mes=_mes_ref, anio=_anio_ref).scalar()
 
-    # Nóminas y gastos son valores mensuales fijos.
-    # Se multiplican según el período filtrado para comparar correctamente contra los ingresos.
-    if anio and not mes:
-        meses_factor = 12          # año completo → 12 meses de costos fijos
-    elif mes:
-        meses_factor = 1           # mes específico → 1 mes de costos fijos
-    else:
-        meses_factor = 1           # sin filtro → referencia mensual
+    meses_factor = 1  # gastos y nómina ya son del mes de referencia, no se multiplican
 
     util_neta = float(facts.utilidad) - (float(nominas) + float(gastos)) * meses_factor
 
