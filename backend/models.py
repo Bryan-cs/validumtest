@@ -155,6 +155,8 @@ class Config(Base):
     porcentajes        = Column(Text)    # JSON dict
     plantilla_whatsapp = Column(Text)    # Plantilla del mensaje de WhatsApp
     cargo_adicional    = Column(Float, default=2200)
+    mes_inicio_cobro   = Column(Integer)  # Mes a partir del cual el módulo de cobro genera filas
+    anio_inicio_cobro  = Column(Integer)  # Año correspondiente
 
 class Lista(Base):
     __tablename__ = "listas"

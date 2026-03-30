@@ -811,16 +811,20 @@ export function Calculadora() {
   const [pcts, setPcts] = useState({});
   const [plantilla, setPlantilla] = useState('');
   const [cargoAdicional, setCargoAdicional] = useState(2200);
+  const [mesCobro, setMesCobro] = useState('');
+  const [anioCobro, setAnioCobro] = useState('');
 
   React.useEffect(()=>{
     if(cfg.ibc_global) setIbc(cfg.ibc_global);
     if(cfg.porcentajes) setPcts({...cfg.porcentajes});
     if(cfg.plantilla_whatsapp !== undefined) setPlantilla(cfg.plantilla_whatsapp || PLANTILLA_DEFAULT);
     if(cfg.cargo_adicional !== undefined) setCargoAdicional(cfg.cargo_adicional ?? 2200);
+    if(cfg.mes_inicio_cobro) setMesCobro(cfg.mes_inicio_cobro);
+    if(cfg.anio_inicio_cobro) setAnioCobro(cfg.anio_inicio_cobro);
   },[cfg]);
 
   const guardar = useMutation({
-    mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts, plantilla_whatsapp:plantilla, cargo_adicional:+cargoAdicional }),
+    mutationFn:()=>api.put('/config',{ ibc_global:+ibc, porcentajes:pcts, plantilla_whatsapp:plantilla, cargo_adicional:+cargoAdicional, mes_inicio_cobro: mesCobro?+mesCobro:null, anio_inicio_cobro: anioCobro?+anioCobro:null }),
     onSuccess:(res)=>{ toast.success('Configuración actualizada'); qc.setQueryData(['config'], res.data); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
@@ -886,6 +890,23 @@ export function Calculadora() {
         <Btn size="sm" variant="secondary" style={{ marginTop:8 }} onClick={()=>setPlantilla(PLANTILLA_DEFAULT)}>
           Restaurar plantilla por defecto
         </Btn>
+      </div>
+      <div style={{ background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:24,marginBottom:20 }}>
+        <h3 style={{ margin:'0 0 6px',color:C.primary }}>Fecha de inicio del módulo de cobro</h3>
+        <p style={{ margin:'0 0 14px',fontSize:12,color:C.text2 }}>El módulo de cobro solo mostrará recordatorios a partir de este mes. Meses anteriores serán ignorados aunque el afiliado tenga deuda sin factura.</p>
+        <div style={{ display:'flex',gap:10,alignItems:'center',flexWrap:'wrap' }}>
+          <div>
+            <label style={lbl}>Mes</label>
+            <select style={{ ...inp,width:150 }} value={mesCobro} onChange={e=>setMesCobro(e.target.value)}>
+              <option value="">Sin límite</option>
+              {MESES_ES.map((m,i)=><option key={i+1} value={i+1}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Año</label>
+            <input type="number" style={{ ...inp,width:110 }} placeholder="ej: 2026" value={anioCobro} onChange={e=>setAnioCobro(e.target.value)} />
+          </div>
+        </div>
       </div>
       <Btn onClick={()=>guardar.mutate()} disabled={guardar.isPending}>
         {guardar.isPending?'Guardando...':'💾 Guardar configuración'}
