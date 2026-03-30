@@ -709,7 +709,7 @@ export default function Afiliados() {
           <Sel label="Razón Social" value={form.empresa||''} onChange={v=>sf('empresa',v)}
             options={['', ...(listas.empresas||[])].map(e=>({value:e,label:e||'— Seleccionar'}))} />
           <Sel label="Subtipo" value={form.subtipo||'0'} onChange={v=>sf('subtipo',v)}
-            options={['0','3','4','20','22'].map(s=>({value:s,label:`Subtipo ${s}`}))} />
+            options={(listas.subtipos||['0','3','4','20','22']).map(s=>({value:s,label:`Subtipo ${s}`}))} />
           <Sel label="Cliente (empresa o persona que contrata)" value={form.cliente_txt||''}
             onChange={v=>sf('cliente_txt',v)} style={{ gridColumn:'1/-1' }}
             options={['', ...(listas.clientes||[])].map(c=>({value:c, label:c||'— Seleccionar cliente'}))} />
