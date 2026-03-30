@@ -372,14 +372,6 @@ def update_empleado(id: int, data: schemas.EmpleadoCreate,
     return result
 
 
-@app.patch("/empleados/{id}/nomina")
-def update_nomina(id: int, data: schemas.NominaUpdate,
-                  db: Session = Depends(get_db), token=Depends(require_admin)):
-    result = crud.update_nomina(db, id, data.nomina)
-    if not result: raise HTTPException(404, "Empleado no encontrado")
-    return result
-
-
 @app.delete("/empleados/{id}")
 def delete_empleado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     e = db.query(models.Empleado).filter_by(id=id).first()
@@ -388,10 +380,11 @@ def delete_empleado(id: int, db: Session = Depends(get_db), token=Depends(requir
     return {"ok": True}
 
 
-# ─── GASTOS ───────────────────────────────────────────────────────────────────
+# ─── GASTOS MENSUALES ─────────────────────────────────────────────────────────
 @app.get("/gastos")
-def list_gastos(db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_gastos(db)
+def list_gastos(mes: int, anio: int,
+                db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.get_gastos(db, mes=mes, anio=anio)
 
 
 @app.post("/gastos", status_code=201)
@@ -400,17 +393,49 @@ def create_gasto(data: schemas.GastoCreate,
     return crud.create_gasto(db, data)
 
 
-@app.patch("/gastos/{id}/toggle")
-def toggle_gasto(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    result = crud.toggle_gasto(db, id)
+@app.put("/gastos/{id}")
+def update_gasto(id: int, data: schemas.GastoUpdate,
+                 db: Session = Depends(get_db), token=Depends(require_admin)):
+    result = crud.update_gasto(db, id, data)
     if not result: raise HTTPException(404, "Gasto no encontrado")
     return result
 
 
 @app.delete("/gastos/{id}")
 def delete_gasto(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    crud.delete_gasto(db, id, user=token.get("sub","sistema"))
+    crud.delete_gasto(db, id, user=token.get("sub", "sistema"))
     return {"ok": True}
+
+
+@app.post("/gastos/copiar")
+def copiar_gastos(data: schemas.CopiarMesRequest,
+                  db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.copiar_gastos_mes_anterior(
+        db, data.mes_origen, data.anio_origen, data.mes_destino, data.anio_destino,
+        user=token.get("sub", "sistema"))
+
+
+# ─── NÓMINA MENSUAL ───────────────────────────────────────────────────────────
+@app.get("/nomina")
+def get_nomina(mes: int, anio: int,
+               db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.get_nomina_mensual(db, mes=mes, anio=anio)
+
+
+@app.put("/nomina/{empleado_id}")
+def update_nomina_mensual(empleado_id: int, mes: int, anio: int,
+                          data: schemas.NominaItemUpdate,
+                          db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.upsert_nomina_mensual(db, empleado_id, mes, anio, data.valor,
+                                      user=token.get("sub", "sistema"))
+
+
+@app.post("/nomina/copiar")
+def copiar_nomina(data: schemas.CopiarMesRequest,
+                  db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.copiar_nomina_mes_anterior(
+        db, data.mes_origen, data.anio_origen, data.mes_destino, data.anio_destino,
+        user=token.get("sub", "sistema"))
 
 
 # ─── USUARIOS ─────────────────────────────────────────────────────────────────
@@ -426,6 +451,15 @@ def create_usuario(data: schemas.UsuarioCreate,
     if existing:
         raise HTTPException(400, f"El usuario '{data.username}' ya existe")
     return crud.create_usuario(db, data)
+
+
+@app.put("/usuarios/{id}/password")
+def change_usuario_password(id: int, data: schemas.UsuarioPasswordUpdate,
+                            db: Session = Depends(get_db), token=Depends(require_admin)):
+    u = crud.update_usuario_password(db, id, data.password, user=token.get("sub", "admin"))
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado")
+    return {"ok": True}
 
 
 @app.delete("/usuarios/{id}")
