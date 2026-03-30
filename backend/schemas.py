@@ -143,12 +143,35 @@ class EmpleadoCreate(BaseModel):
     activo: bool = True
     fecha_ingreso: str = ""
 
-class NominaUpdate(BaseModel):
-    nomina: float
-
 class GastoCreate(BaseModel):
     nombre: str
     valor: float
+    mes: int
+    anio: int
+
+class GastoUpdate(BaseModel):
+    nombre: str
+    valor: float
+
+class NominaItemUpdate(BaseModel):
+    valor: float
+
+class CopiarMesRequest(BaseModel):
+    mes_origen: int
+    anio_origen: int
+    mes_destino: int
+    anio_destino: int
+
+class UsuarioPasswordUpdate(BaseModel):
+    password: str
+
+    @field_validator('password')
+    @classmethod
+    def password_min_length(cls, v):
+        if len(v) < 6:
+            raise ValueError('La contraseña debe tener al menos 6 caracteres')
+        return v
+
 
 class UsuarioCreate(BaseModel):
     nombre: str
