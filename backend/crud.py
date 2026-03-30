@@ -499,12 +499,14 @@ def get_config(db):
     if cached is not None:
         return cached
     c = db.query(models.Config).first()
-    if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200}
+    if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200,"mes_inicio_cobro":None,"anio_inicio_cobro":None}
     result = {
         "ibc_global": c.ibc_global,
         "porcentajes": json.loads(c.porcentajes or "{}"),
         "plantilla_whatsapp": c.plantilla_whatsapp or "",
         "cargo_adicional": c.cargo_adicional if c.cargo_adicional is not None else 2200,
+        "mes_inicio_cobro": c.mes_inicio_cobro,
+        "anio_inicio_cobro": c.anio_inicio_cobro,
     }
     _cache_set("config:global", result)
     return result
@@ -518,6 +520,8 @@ def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
     if data.porcentajes is not None: c.porcentajes = json.dumps(data.porcentajes)
     if data.plantilla_whatsapp is not None: c.plantilla_whatsapp = data.plantilla_whatsapp
     if data.cargo_adicional is not None: c.cargo_adicional = data.cargo_adicional
+    if data.mes_inicio_cobro is not None: c.mes_inicio_cobro = data.mes_inicio_cobro
+    if data.anio_inicio_cobro is not None: c.anio_inicio_cobro = data.anio_inicio_cobro
     _log(db, user, "actualizó configuración global", "Config", "")
     cache_invalidar("config:")
     db.commit(); return get_config(db)
@@ -633,18 +637,29 @@ def get_dashboard(db, anio="", mes=""):
     if mes:  fq = fq.filter(models.Factura.mes==mes)
     facts = fq.one()
 
-    # Determinar el mes/año a usar para nómina y gastos
-    _mes_ref  = int(mes)  if mes  else datetime.now(COL_TZ).month
+    # Nómina y gastos: si hay mes específico → ese mes; si hay solo año → suma todos los meses del año
     _anio_ref = int(anio) if anio else datetime.now(COL_TZ).year
-    # Nómina y gastos del mes/año de referencia (ya no son valores fijos).
-    nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
-        mes=_mes_ref, anio=_anio_ref).scalar()
-    gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
-        mes=_mes_ref, anio=_anio_ref).scalar()
+    if mes:
+        _mes_ref = int(mes)
+        nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
+            mes=_mes_ref, anio=_anio_ref).scalar()
+        gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
+            mes=_mes_ref, anio=_anio_ref).scalar()
+    elif anio:
+        # Año completo: sumar todos los meses registrados de ese año
+        nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
+            anio=_anio_ref).scalar()
+        gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
+            anio=_anio_ref).scalar()
+    else:
+        # Sin filtro → mes actual
+        _mes_ref = datetime.now(COL_TZ).month
+        nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
+            mes=_mes_ref, anio=_anio_ref).scalar()
+        gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
+            mes=_mes_ref, anio=_anio_ref).scalar()
 
-    meses_factor = 1  # gastos y nómina ya son del mes de referencia, no se multiplican
-
-    util_neta = float(facts.utilidad) - (float(nominas) + float(gastos)) * meses_factor
+    util_neta = float(facts.utilidad) - float(nominas) - float(gastos)
 
     result = {
         "activos": int(stats.activos or 0), "retirados": int(stats.retirados or 0),
@@ -653,7 +668,6 @@ def get_dashboard(db, anio="", mes=""):
         "utilidad_bruta": float(facts.utilidad), "nominas": float(nominas),
         "gastos_fijos": float(gastos), "utilidad_neta": util_neta,
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
-        "meses_factor": meses_factor,
     }
     _cache_set(cache_key, result)
     return result
@@ -796,6 +810,8 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     cfg = db.query(models.Config).first()
     ibc_global = cfg.ibc_global if cfg else 1_950_905
     pcts = json.loads(cfg.porcentajes or "{}") if cfg else {}
+    # Fecha de corte global: el módulo de cobro ignora meses anteriores a esta fecha
+    _corte = (cfg.anio_inicio_cobro, cfg.mes_inicio_cobro) if cfg and cfg.anio_inicio_cobro and cfg.mes_inicio_cobro else None
 
     # Pre-cargar TODAS las facturas de los últimos 6 meses → set de (doc, mes, anio)
     anios_ventana = list({str(y) for y, _ in meses_ventana})
@@ -841,6 +857,8 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
         for (y, m) in meses_ventana:
             # No mostrar meses anteriores al primer cobro (mes siguiente a afiliación)
             if (y, m) < (primer_cobro_y, primer_cobro_m): continue
+            # No mostrar meses anteriores a la fecha de corte global del sistema
+            if _corte and (y, m) < _corte: continue
 
             mes_nombre = MESES[m - 1]
             anio_str   = str(y)

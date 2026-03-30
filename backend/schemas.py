@@ -218,6 +218,8 @@ class ConfigUpdate(BaseModel):
     porcentajes: Optional[dict] = None
     plantilla_whatsapp: Optional[str] = None
     cargo_adicional: Optional[float] = None
+    mes_inicio_cobro: Optional[int] = None
+    anio_inicio_cobro: Optional[int] = None
 
     @field_validator('ibc_global', 'cargo_adicional', mode='before')
     @classmethod
