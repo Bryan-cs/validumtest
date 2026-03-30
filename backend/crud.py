@@ -127,6 +127,15 @@ def create_usuario(db, data: schemas.UsuarioCreate):
     u = models.Usuario(nombre=data.nombre, username=data.username, password=hash_password(data.password), rol=data.rol, cliente_ref=data.cliente_ref)
     db.add(u); db.commit(); db.refresh(u)
     return {"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"cliente_ref":u.cliente_ref}
+def update_usuario_password(db, id: int, new_password: str, user: str = ""):
+    u = db.query(models.Usuario).filter_by(id=id).first()
+    if not u:
+        return None
+    u.password = hash_password(new_password)
+    _log(db, user, "cambió contraseña de usuario", "Usuarios", u.username)
+    db.commit()
+    return u
+
 def delete_usuario(db, id, user=""):
     u = db.query(models.Usuario).filter_by(id=id).first()
     if u:
@@ -444,12 +453,6 @@ def update_empleado(db, id, data: schemas.EmpleadoCreate):
     db.commit(); db.refresh(e)
     return {"id":e.id,"nombre":e.nombre,"nomina":e.nomina}
 
-def update_nomina(db, id, nomina):
-    e = db.query(models.Empleado).filter_by(id=id).first()
-    if not e: return None
-    e.nomina = nomina; db.commit()
-    return {"id":e.id,"nomina":e.nomina}
-
 def delete_empleado(db, id, user=""):
     e = db.query(models.Empleado).filter_by(id=id).first()
     if e:
@@ -457,28 +460,38 @@ def delete_empleado(db, id, user=""):
         db.delete(e)
         db.commit()
 
-# ─── GASTOS ───────────────────────────────────────────────────────────────────
-def get_gastos(db):
-    return [{"id":g.id,"nombre":g.nombre,"valor":g.valor,"activo":g.activo}
-            for g in db.query(models.Gasto).all()]
+# ─── GASTOS MENSUALES ─────────────────────────────────────────────────────────
+def get_gastos(db, mes: int, anio: int):
+    return [{"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio}
+            for g in db.query(models.Gasto).filter_by(mes=mes, anio=anio).order_by(models.Gasto.nombre).all()]
 
 def create_gasto(db, data: schemas.GastoCreate):
-    g = models.Gasto(nombre=data.nombre, valor=data.valor)
+    g = models.Gasto(nombre=data.nombre, valor=data.valor, mes=data.mes, anio=data.anio)
     db.add(g); db.commit(); db.refresh(g)
-    return {"id":g.id,"nombre":g.nombre,"valor":g.valor,"activo":g.activo}
+    return {"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio}
 
-def toggle_gasto(db, id):
+def update_gasto(db, id: int, data: schemas.GastoUpdate):
     g = db.query(models.Gasto).filter_by(id=id).first()
     if not g: return None
-    g.activo = not g.activo; db.commit()
-    return {"id":g.id,"activo":g.activo}
+    g.nombre = data.nombre; g.valor = data.valor
+    db.commit()
+    return {"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio}
 
 def delete_gasto(db, id, user=""):
     g = db.query(models.Gasto).filter_by(id=id).first()
     if g:
-        _log(db, user, "eliminó un gasto fijo", "Gastos", g.nombre)
-    db.query(models.Gasto).filter_by(id=id).delete()
+        _log(db, user, "eliminó un gasto", "Gastos", g.nombre)
+        db.delete(g)
+        db.commit()
+
+def copiar_gastos_mes_anterior(db, origen_mes: int, origen_anio: int, dest_mes: int, dest_anio: int, user: str = ""):
+    db.query(models.Gasto).filter_by(mes=dest_mes, anio=dest_anio).delete()
+    origen = db.query(models.Gasto).filter_by(mes=origen_mes, anio=origen_anio).all()
+    for g in origen:
+        db.add(models.Gasto(nombre=g.nombre, valor=g.valor, mes=dest_mes, anio=dest_anio))
     db.commit()
+    _log(db, user, "copió gastos", "Gastos", f"{origen_mes}/{origen_anio} → {dest_mes}/{dest_anio}")
+    return get_gastos(db, dest_mes, dest_anio)
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 def get_config(db):
@@ -562,6 +575,38 @@ def clear_actividad(db, user=""):
                             modulo="Sistema", detalle="Historial borrado"))
     db.commit()
 
+# ─── NÓMINA MENSUAL ───────────────────────────────────────────────────────────
+def get_nomina_mensual(db, mes: int, anio: int):
+    empleados = db.query(models.Empleado).filter_by(activo=True).order_by(models.Empleado.nombre).all()
+    registros = {r.empleado_id: r.valor for r in
+                 db.query(models.NominaMensual).filter_by(mes=mes, anio=anio).all()}
+    return [{"empleado_id": e.id, "nombre": e.nombre, "cargo": e.cargo,
+             "valor": registros.get(e.id, 0.0)} for e in empleados]
+
+def upsert_nomina_mensual(db, empleado_id: int, mes: int, anio: int, valor: float, user: str = ""):
+    r = db.query(models.NominaMensual).filter_by(empleado_id=empleado_id, mes=mes, anio=anio).first()
+    if r:
+        r.valor = valor
+    else:
+        db.add(models.NominaMensual(empleado_id=empleado_id, mes=mes, anio=anio, valor=valor))
+    db.commit()
+    e = db.query(models.Empleado).filter_by(id=empleado_id).first()
+    nombre = e.nombre if e else str(empleado_id)
+    _log(db, user, "actualizó nómina mensual", "Nómina", f"{nombre} {mes}/{anio}")
+    return {"empleado_id": empleado_id, "mes": mes, "anio": anio, "valor": valor}
+
+def copiar_nomina_mes_anterior(db, origen_mes: int, origen_anio: int, dest_mes: int, dest_anio: int, user: str = ""):
+    empleados = db.query(models.Empleado).filter_by(activo=True).all()
+    registros_origen = {r.empleado_id: r.valor for r in
+                        db.query(models.NominaMensual).filter_by(mes=origen_mes, anio=origen_anio).all()}
+    db.query(models.NominaMensual).filter_by(mes=dest_mes, anio=dest_anio).delete()
+    for e in empleados:
+        valor = registros_origen.get(e.id, e.nomina)
+        db.add(models.NominaMensual(empleado_id=e.id, mes=dest_mes, anio=dest_anio, valor=valor))
+    db.commit()
+    _log(db, user, "copió nómina", "Nómina", f"{origen_mes}/{origen_anio} → {dest_mes}/{dest_anio}")
+    return get_nomina_mensual(db, dest_mes, dest_anio)
+
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
 def get_dashboard(db, anio="", mes=""):
     cache_key = f"dashboard:{anio}:{mes}"
@@ -588,17 +633,16 @@ def get_dashboard(db, anio="", mes=""):
     if mes:  fq = fq.filter(models.Factura.mes==mes)
     facts = fq.one()
 
-    nominas = db.query(func.coalesce(func.sum(models.Empleado.nomina), 0)).filter_by(activo=True).scalar()
-    gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor),    0)).filter_by(activo=True).scalar()
+    # Determinar el mes/año a usar para nómina y gastos
+    _mes_ref  = int(mes)  if mes  else datetime.now(COL_TZ).month
+    _anio_ref = int(anio) if anio else datetime.now(COL_TZ).year
+    # Nómina y gastos del mes/año de referencia (ya no son valores fijos).
+    nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
+        mes=_mes_ref, anio=_anio_ref).scalar()
+    gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
+        mes=_mes_ref, anio=_anio_ref).scalar()
 
-    # Nóminas y gastos son valores mensuales fijos.
-    # Se multiplican según el período filtrado para comparar correctamente contra los ingresos.
-    if anio and not mes:
-        meses_factor = 12          # año completo → 12 meses de costos fijos
-    elif mes:
-        meses_factor = 1           # mes específico → 1 mes de costos fijos
-    else:
-        meses_factor = 1           # sin filtro → referencia mensual
+    meses_factor = 1  # gastos y nómina ya son del mes de referencia, no se multiplican
 
     util_neta = float(facts.utilidad) - (float(nominas) + float(gastos)) * meses_factor
 

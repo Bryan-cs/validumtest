@@ -28,6 +28,12 @@ const up = (e, setter) => setter(e.target.value.toUpperCase());
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
+const NOW = new Date();
+const MES_ACTUAL = NOW.getMonth() + 1;
+const ANIO_ACTUAL = NOW.getFullYear();
+const MESES_ES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
+                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"];
+
 // ─── COBRO ────────────────────────────────────────────────────────────────────
 export function Cobro() {
   const qc = useQueryClient();
@@ -379,20 +385,23 @@ export function Facturacion() {
 // ─── EMPLEADOS ────────────────────────────────────────────────────────────────
 export function Empleados() {
   const qc = useQueryClient();
-  const [modal,setModal]= useState(null);
+  const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
-  const sf = (k,v)=>setForm(f=>({...f,[k]:v}));
+  const sf = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  const [mes, setMes] = useState(MES_ACTUAL);
+  const [anio, setAnio] = useState(ANIO_ACTUAL);
 
-  const { data: emps=[] } = useQuery({ queryKey:['empleados'], queryFn:()=>api.get('/empleados').then(r=>r.data) });
-  const { data: gastos=[] }= useQuery({ queryKey:['gastos'],   queryFn:()=>api.get('/gastos').then(r=>r.data) });
-  const { data: usuarios=[] }= useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data) });
+  const { data: emps = [] } = useQuery({ queryKey: ['empleados'], queryFn: () => api.get('/empleados').then(r => r.data) });
+  const { data: usuarios = [] } = useQuery({ queryKey: ['usuarios'], queryFn: () => api.get('/usuarios').then(r => r.data) });
+  const { data: gastos = [] } = useQuery({ queryKey: ['gastos', mes, anio], queryFn: () => api.get('/gastos', { params: { mes, anio } }).then(r => r.data) });
+  const { data: nomina = [] } = useQuery({ queryKey: ['nomina', mes, anio], queryFn: () => api.get('/nomina', { params: { mes, anio } }).then(r => r.data) });
 
-  const nomTotal = emps.filter(e=>e.activo).reduce((s,e)=>s+e.nomina,0);
-  const gasTotal = gastos.filter(g=>g.activo).reduce((s,g)=>s+g.valor,0);
+  const nomTotal = nomina.reduce((s, n) => s + n.valor, 0);
+  const gasTotal = gastos.reduce((s, g) => s + g.valor, 0);
 
   const guardarEmp = useMutation({
-    mutationFn:()=>modal==='nuevo'?api.post('/empleados',form):api.put(`/empleados/${modal.id}`,form),
-    onSuccess:(res)=>{
+    mutationFn: () => modal === 'nuevo' ? api.post('/empleados', form) : api.put(`/empleados/${modal.id}`, form),
+    onSuccess: (res) => {
       toast.success('Empleado guardado');
       if (modal === 'nuevo') {
         qc.setQueryData(['empleados'], prev => [...(prev || []), res.data]);
@@ -401,128 +410,191 @@ export function Empleados() {
       }
       setModal(null);
     },
-    onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
+    onError: (e) => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
   });
 
   const eliminarEmp = useMutation({
-    mutationFn:(id)=>api.delete(`/empleados/${id}`),
-    onSuccess:(_, id)=>{ toast.success('Empleado eliminado'); qc.setQueryData(['empleados'], prev => prev?.filter(e => e.id !== id)); },
-    onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
+    mutationFn: (id) => api.delete(`/empleados/${id}`),
+    onSuccess: (_, id) => { toast.success('Empleado eliminado'); qc.setQueryData(['empleados'], prev => prev?.filter(e => e.id !== id)); },
+    onError: (e) => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
   });
 
-  const [gnombre,setGnom]=useState(''); const [gvalor,setGval]=useState(0);
+  const updateNomina = useMutation({
+    mutationFn: ({ empleado_id, valor }) => api.put(`/nomina/${empleado_id}`, { valor }, { params: { mes, anio } }),
+    onSuccess: (res) => {
+      qc.setQueryData(['nomina', mes, anio], prev =>
+        prev?.map(n => n.empleado_id === res.data.empleado_id ? { ...n, valor: res.data.valor } : n));
+    },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error'),
+  });
+
+  const copiarNomina = useMutation({
+    mutationFn: () => {
+      const om = mes === 1 ? 12 : mes - 1;
+      const oa = mes === 1 ? anio - 1 : anio;
+      return api.post('/nomina/copiar', { mes_origen: om, anio_origen: oa, mes_destino: mes, anio_destino: anio });
+    },
+    onSuccess: (res) => { toast.success('Nómina copiada del mes anterior'); qc.setQueryData(['nomina', mes, anio], res.data); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error'),
+  });
+
+  const [gnombre, setGnom] = useState('');
+  const [gvalor, setGval] = useState(0);
+
   const addGasto = useMutation({
-    mutationFn:()=>api.post('/gastos',{nombre:gnombre,valor:+gvalor}),
-    onSuccess:(res)=>{ toast.success('Gasto agregado'); qc.setQueryData(['gastos'], prev => [...(prev || []), res.data]); setGnom(''); setGval(0); },
-    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
+    mutationFn: () => api.post('/gastos', { nombre: gnombre, valor: +gvalor, mes, anio }),
+    onSuccess: (res) => { toast.success('Gasto agregado'); qc.setQueryData(['gastos', mes, anio], prev => [...(prev || []), res.data]); setGnom(''); setGval(0); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error'),
   });
-  const toggleG = useMutation({
-    mutationFn:(id)=>api.patch(`/gastos/${id}/toggle`),
-    onSuccess:(res)=>qc.setQueryData(['gastos'], prev => prev?.map(g => g.id === res.data.id ? res.data : g)),
-    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
-  });
+
   const delGasto = useMutation({
-    mutationFn:(id)=>api.delete(`/gastos/${id}`),
-    onSuccess:(_, id)=>{ toast.success('Gasto eliminado'); qc.setQueryData(['gastos'], prev => prev?.filter(g => g.id !== id)); },
-    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
+    mutationFn: (id) => api.delete(`/gastos/${id}`),
+    onSuccess: (_, id) => { toast.success('Gasto eliminado'); qc.setQueryData(['gastos', mes, anio], prev => prev?.filter(g => g.id !== id)); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error'),
   });
+
+  const copiarGastos = useMutation({
+    mutationFn: () => {
+      const om = mes === 1 ? 12 : mes - 1;
+      const oa = mes === 1 ? anio - 1 : anio;
+      return api.post('/gastos/copiar', { mes_origen: om, anio_origen: oa, mes_destino: mes, anio_destino: anio });
+    },
+    onSuccess: (res) => { toast.success('Gastos copiados del mes anterior'); qc.setQueryData(['gastos', mes, anio], res.data); },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'Error'),
+  });
+
+  const anios = [ANIO_ACTUAL - 1, ANIO_ACTUAL, ANIO_ACTUAL + 1];
 
   return (
     <div>
       <PageHeader title="👔 Empleados y gastos" />
-      <div style={{ display:'flex',gap:10,marginBottom:20,flexWrap:'wrap' }}>
-        <StatCard label="Nómina mensual"     value={fmt(nomTotal)} color={C.red} />
-        <StatCard label="Gastos mensuales"   value={fmt(gasTotal)} color={C.amber} />
-        <StatCard label="Total egresos"      value={fmt(nomTotal+gasTotal)} color={C.red} />
-        <StatCard label="Empleados activos"  value={emps.filter(e=>e.activo).length} color={C.primary} />
+
+      <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center', flexWrap: 'wrap' }}>
+        <select style={sel} value={mes} onChange={e => setMes(+e.target.value)}>
+          {MESES_ES.map((m, i) => <option key={i + 1} value={i + 1}>{m}</option>)}
+        </select>
+        <select style={sel} value={anio} onChange={e => setAnio(+e.target.value)}>
+          {anios.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
       </div>
 
-      {/* Empleados */}
-      <div style={{ display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:10 }}>
-        <h3 style={{ margin:0,color:C.primary }}>Empleados</h3>
-        <Btn variant="accent" onClick={()=>{setForm({activo:true,nomina:0});setModal('nuevo');}}>+ Nuevo empleado</Btn>
+      <div style={{ display: 'flex', gap: 10, marginBottom: 20, flexWrap: 'wrap' }}>
+        <StatCard label="Nómina del mes"    value={fmt(nomTotal)} color={C.red} />
+        <StatCard label="Gastos del mes"    value={fmt(gasTotal)} color={C.amber} />
+        <StatCard label="Total egresos"     value={fmt(nomTotal + gasTotal)} color={C.red} />
+        <StatCard label="Empleados activos" value={emps.filter(e => e.activo).length} color={C.primary} />
       </div>
-      <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}`,marginBottom:24 }}>
-        <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
-          <thead><tr style={{ background:C.surface2 }}>
-            {['Nombre','Documento','Cargo','Usuario','Nómina ($)','Estado','Acciones'].map(h=>(
-              <th key={h} style={{ padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.text2,borderBottom:`1px solid ${C.border}` }}>{h}</th>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3 style={{ margin: 0, color: C.primary }}>Empleados</h3>
+        <Btn variant="accent" onClick={() => { setForm({ activo: true, nomina: 0 }); setModal('nuevo'); }}>+ Nuevo empleado</Btn>
+      </div>
+      <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
+          <thead><tr style={{ background: C.surface2 }}>
+            {['Nombre', 'Cargo', 'Estado', 'Acciones'].map(h => (
+              <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
-            {emps.map(e=>(
-              <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}` }}>
-                <td style={tdc}>{e.nombre}</td><td style={tdc}>{e.doc}</td>
-                <td style={tdc}>{e.cargo}</td><td style={tdc}>{e.usuario||'—'}</td>
-                <td style={{ ...tdc,textAlign:'right' }}>{fmt(e.nomina)}</td>
-                <td style={tdc}><span style={{ background:e.activo?C.greenBg:C.redBg,color:e.activo?C.green:C.red,borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>{e.activo?'Activo':'Inactivo'}</span></td>
+            {emps.map(e => (
+              <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                <td style={tdc}>{e.nombre}</td>
+                <td style={tdc}>{e.cargo}</td>
+                <td style={tdc}><span style={{ background: e.activo ? C.greenBg : C.redBg, color: e.activo ? C.green : C.red, borderRadius: 10, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{e.activo ? 'Activo' : 'Inactivo'}</span></td>
                 <td style={tdc}>
-                  <div style={{ display:'flex', gap:6 }}>
-                    <Btn size="sm" variant="secondary" onClick={()=>{setForm({...e});setModal(e);}}>✏️ Editar</Btn>
-                    <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm(`¿Eliminar a ${e.nombre}?`)) eliminarEmp.mutate(e.id); }}>🗑️ Eliminar</Btn>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <Btn size="sm" variant="secondary" onClick={() => { setForm({ ...e }); setModal(e); }}>✏️ Editar</Btn>
+                    <Btn size="sm" variant="danger" onClick={() => { if (window.confirm(`¿Eliminar a ${e.nombre}?`)) eliminarEmp.mutate(e.id); }}>🗑️ Eliminar</Btn>
                   </div>
                 </td>
               </tr>
             ))}
-            {emps.length===0&&<tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin empleados</td></tr>}
+            {emps.length === 0 && <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados</td></tr>}
           </tbody>
         </table>
       </div>
 
-      {/* Gastos */}
-      <h3 style={{ margin:'0 0 10px',color:C.primary }}>Gastos mensuales fijos</h3>
-      <div style={{ display:'flex',gap:8,marginBottom:12,flexWrap:'wrap' }}>
-        <input style={{ ...sel,flex:2,textTransform:'uppercase' }} placeholder="NOMBRE DEL GASTO..." value={gnombre} onChange={e=>setGnom(UP(e.target.value))} />
-        <input type="number" style={sel} placeholder="Valor $" value={gvalor} onChange={e=>setGval(e.target.value)} />
-        <Btn onClick={()=>addGasto.mutate()} disabled={!gnombre}>+ Agregar</Btn>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3 style={{ margin: 0, color: C.primary }}>Nómina — {MESES_ES[mes - 1]} {anio}</h3>
+        <Btn variant="secondary" onClick={() => copiarNomina.mutate()} disabled={copiarNomina.isPending}>Copiar mes anterior</Btn>
       </div>
-      <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
-          <thead><tr style={{ background:C.surface2 }}>
-            {['Concepto','Valor mensual','Estado','Acciones'].map(h=>(
-              <th key={h} style={{ padding:'9px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.text2,borderBottom:`1px solid ${C.border}` }}>{h}</th>
+      <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 24 }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
+          <thead><tr style={{ background: C.surface2 }}>
+            {['Empleado', 'Cargo', 'Valor ($)'].map(h => (
+              <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
-            {gastos.map(g=>(
-              <tr key={g.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+            {nomina.map(n => (
+              <tr key={n.empleado_id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                <td style={tdc}>{n.nombre}</td>
+                <td style={tdc}>{n.cargo}</td>
+                <td style={tdc}>
+                  <input type="number" style={{ ...inp, width: 140 }}
+                    defaultValue={n.valor}
+                    onBlur={e => updateNomina.mutate({ empleado_id: n.empleado_id, valor: +e.target.value })} />
+                </td>
+              </tr>
+            ))}
+            {nomina.length === 0 && <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados activos</td></tr>}
+          </tbody>
+        </table>
+      </div>
+
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+        <h3 style={{ margin: 0, color: C.primary }}>Gastos — {MESES_ES[mes - 1]} {anio}</h3>
+        <Btn variant="secondary" onClick={() => copiarGastos.mutate()} disabled={copiarGastos.isPending}>Copiar mes anterior</Btn>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        <input style={{ ...sel, flex: 2, textTransform: 'uppercase' }} placeholder="NOMBRE DEL GASTO..." value={gnombre} onChange={e => setGnom(UP(e.target.value))} />
+        <input type="number" style={sel} placeholder="Valor $" value={gvalor} onChange={e => setGval(e.target.value)} />
+        <Btn onClick={() => addGasto.mutate()} disabled={!gnombre}>+ Agregar</Btn>
+      </div>
+      <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
+          <thead><tr style={{ background: C.surface2 }}>
+            {['Concepto', 'Valor', 'Acciones'].map(h => (
+              <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {gastos.map(g => (
+              <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                 <td style={tdc}>{g.nombre}</td>
-                <td style={{ ...tdc,textAlign:'right' }}>{fmt(g.valor)}</td>
-                <td style={tdc}><span style={{ background:g.activo?C.greenBg:C.redBg,color:g.activo?C.green:C.red,borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>{g.activo?'Activo':'Inactivo'}</span></td>
+                <td style={{ ...tdc, textAlign: 'right' }}>{fmt(g.valor)}</td>
                 <td style={tdc}>
-                  <div style={{ display:'flex',gap:6 }}>
-                    <Btn size="sm" variant="secondary" onClick={()=>toggleG.mutate(g.id)}>{g.activo?'Desactivar':'Activar'}</Btn>
-                    <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar gasto?')) delGasto.mutate(g.id); }}>Eliminar</Btn>
-                  </div>
+                  <Btn size="sm" variant="danger" onClick={() => { if (window.confirm('¿Eliminar gasto?')) delGasto.mutate(g.id); }}>Eliminar</Btn>
                 </td>
               </tr>
             ))}
-            {gastos.length===0&&<tr><td colSpan={4} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin gastos registrados</td></tr>}
+            {gastos.length === 0 && <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin gastos este mes</td></tr>}
           </tbody>
         </table>
       </div>
 
-      {modal&&(
-        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <div style={{ background:C.surface,borderRadius:14,padding:28,width:460,boxShadow:'0 20px 60px rgba(0,0,0,.25)',maxHeight:'90vh',overflow:'auto' }}>
-            <h3 style={{ margin:'0 0 18px',color:C.primary }}>{modal==='nuevo'?'Nuevo empleado':'Editar empleado'}</h3>
-            {[['Nombre *','nombre','text',true],['Documento','doc','text',false],['Cargo','cargo','text',true],['Teléfono','tel','tel',true],['Email','email','email',false]].map(([l,k,t,ucase])=>(
-              <div key={k} style={{ marginBottom:10 }}>
+      {modal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ background: C.surface, borderRadius: 14, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.25)', maxHeight: '90vh', overflow: 'auto' }}>
+            <h3 style={{ margin: '0 0 18px', color: C.primary }}>{modal === 'nuevo' ? 'Nuevo empleado' : 'Editar empleado'}</h3>
+            {[['Nombre *', 'nombre', 'text', true], ['Documento', 'doc', 'text', false], ['Cargo', 'cargo', 'text', true], ['Teléfono', 'tel', 'tel', true], ['Email', 'email', 'email', false]].map(([l, k, t, ucase]) => (
+              <div key={k} style={{ marginBottom: 10 }}>
                 <label style={lbl}>{l}</label>
-                <input type={t||'text'} style={{ ...inp, textTransform: ucase?'uppercase':'none' }} value={form[k]||''} onChange={e=>sf(k, ucase?UP(e.target.value):e.target.value)} />
+                <input type={t || 'text'} style={{ ...inp, textTransform: ucase ? 'uppercase' : 'none' }} value={form[k] || ''} onChange={e => sf(k, ucase ? UP(e.target.value) : e.target.value)} />
               </div>
             ))}
             <label style={lbl}>Usuario asignado</label>
-            <select style={inp} value={form.usuario||''} onChange={e=>sf('usuario',e.target.value)}>
+            <select style={inp} value={form.usuario || ''} onChange={e => sf('usuario', e.target.value)}>
               <option value="">Sin asignar</option>
-              {usuarios.filter(u=>u.rol==='empleado').map(u=><option key={u.id} value={u.username}>{u.username}</option>)}
+              {usuarios.filter(u => u.rol === 'empleado').map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
             </select>
-            <label style={lbl}>Nómina mensual ($)</label>
-            <input type="number" style={inp} value={form.nomina||0} onChange={e=>sf('nomina',+e.target.value)} />
-            <div style={{ display:'flex',gap:10,marginTop:16,justifyContent:'flex-end' }}>
-              <Btn variant="secondary" onClick={()=>setModal(null)}>Cancelar</Btn>
-              <Btn onClick={()=>guardarEmp.mutate()} disabled={guardarEmp.isPending||!form.nombre}>
-                {guardarEmp.isPending?'Guardando...':'Guardar'}
+            <label style={lbl}>Salario base de referencia ($)</label>
+            <input type="number" style={inp} value={form.nomina || 0} onChange={e => sf('nomina', +e.target.value)} />
+            <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
+              <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
+              <Btn onClick={() => guardarEmp.mutate()} disabled={guardarEmp.isPending || !form.nombre}>
+                {guardarEmp.isPending ? 'Guardando...' : 'Guardar'}
               </Btn>
             </div>
           </div>
@@ -539,6 +611,9 @@ export function Usuarios() {
   const [form,setForm]=useState({rol:'empleado'});
   const [err,setErr]=useState('');
   const sf=(k,v)=>setForm(f=>({...f,[k]:v}));
+  const [pwModal,setPwModal]=useState(null); // {id, nombre}
+  const [pwForm,setPwForm]=useState({});
+  const [pwErr,setPwErr]=useState('');
 
   const { data: users=[] } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data) });
   const { data: clientes=[] } = useQuery({ queryKey:['clientes'], queryFn:()=>api.get('/clientes').then(r=>r.data) });
@@ -560,6 +635,16 @@ export function Usuarios() {
     onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const cambiarPassword = useMutation({
+    mutationFn:()=>{
+      if(!pwForm.password){setPwErr('Ingresa la nueva contraseña.');return Promise.reject();}
+      if(pwForm.password!==pwForm.password2){setPwErr('Las contraseñas no coinciden.');return Promise.reject();}
+      return api.put(`/usuarios/${pwModal.id}/password`,{password:pwForm.password});
+    },
+    onSuccess:()=>{ toast.success('Contraseña actualizada'); setPwModal(null); setPwErr(''); setPwForm({}); },
+    onError:(e)=>{ const d=e?.response?.data?.detail; setPwErr(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
+  });
+
   return (
     <div>
       <PageHeader title="⚙️ Usuarios del sistema"
@@ -578,12 +663,34 @@ export function Usuarios() {
                 <td style={tdc}><span style={{ background:u.rol==='admin'?C.blueBg:u.rol==='cliente'?'#FEF3C7':C.greenBg,color:u.rol==='admin'?C.blue:u.rol==='cliente'?'#92400E':C.green,borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>{u.rol}</span></td>
                 <td style={tdc}><span style={{ fontSize:12,color:C.text2 }}>{u.cliente_ref||'—'}</span></td>
                 <td style={tdc}><span style={{ color:u.activo?C.green:C.red,fontWeight:600 }}>{u.activo?'Activo':'Inactivo'}</span></td>
-                <td style={tdc}>{u.username!=='admin'&&<Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar usuario?')) eliminar.mutate(u.id); }}>Eliminar</Btn>}</td>
+                <td style={{...tdc,display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <Btn size="sm" variant="secondary" onClick={()=>{setPwModal({id:u.id,nombre:u.nombre});setPwForm({});setPwErr('');}}>Contraseña</Btn>
+                  {u.username!=='admin'&&<Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar usuario?')) eliminar.mutate(u.id); }}>Eliminar</Btn>}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {pwModal&&(
+        <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
+          <div style={{ background:C.surface,borderRadius:14,padding:28,width:360,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+            <h3 style={{ margin:'0 0 4px',color:C.primary }}>Cambiar contraseña</h3>
+            <p style={{ margin:'0 0 16px',fontSize:13,color:C.text2 }}>{pwModal.nombre}</p>
+            {[['Nueva contraseña *','password'],['Confirmar contraseña *','password2']].map(([l,k])=>(
+              <div key={k} style={{ marginBottom:10 }}>
+                <label style={lbl}>{l}</label>
+                <input type="password" style={inp} value={pwForm[k]||''} onChange={e=>setPwForm(f=>({...f,[k]:e.target.value}))} />
+              </div>
+            ))}
+            {pwErr&&<p style={{ color:C.red,fontSize:12,margin:'8px 0 0' }}>{pwErr}</p>}
+            <div style={{ display:'flex',gap:10,marginTop:16,justifyContent:'flex-end' }}>
+              <Btn variant="secondary" onClick={()=>setPwModal(null)}>Cancelar</Btn>
+              <Btn onClick={()=>cambiarPassword.mutate()} disabled={cambiarPassword.isPending}>Guardar</Btn>
+            </div>
+          </div>
+        </div>
+      )}
       {modal&&(
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
           <div style={{ background:C.surface,borderRadius:14,padding:28,width:400,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>

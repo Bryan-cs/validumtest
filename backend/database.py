@@ -76,6 +76,8 @@ def _ensure_columns():
     _check("config", "plantilla_whatsapp", "ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT")
     _check("config", "cargo_adicional", "ALTER TABLE config ADD COLUMN cargo_adicional FLOAT")
     _check("facturas", "afiliado_eliminado", "ALTER TABLE facturas ADD COLUMN afiliado_eliminado BOOLEAN DEFAULT 0")
+    _check("gastos", "mes",  "ALTER TABLE gastos ADD COLUMN mes INTEGER")
+    _check("gastos", "anio", "ALTER TABLE gastos ADD COLUMN anio INTEGER")
     if _missing:
         with engine.begin() as conn:
             for table, col, ddl in _missing:
@@ -107,6 +109,8 @@ def _ensure_indexes():
         ("ix_factura_doc_mes_anio", "facturas", "doc, mes, anio"),
         ("ix_afiliado_cliente_activo", "afiliados", "cliente_txt, activo"),
         ("ix_planilla_cliente_mes", "planillas_pago", "cliente_ref, mes, anio"),
+        ("ix_gastos_mes_anio",        "gastos",         "mes, anio"),
+        ("ix_nomina_mensual_emp_mes", "nomina_mensual",  "empleado_id, mes, anio"),
     ]
     with engine.begin() as conn:
         for idx_name, table, cols in indexes:
