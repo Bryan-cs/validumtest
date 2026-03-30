@@ -827,7 +827,6 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     afils = db.query(models.Afiliado).filter(
         models.Afiliado.activo == True,
         ~models.Afiliado.estado_srv.ilike("%RETIR%"),
-        ~models.Afiliado.estado_srv.ilike("%SUSPENDIDO%"),
     ).all()
 
     rows = []
