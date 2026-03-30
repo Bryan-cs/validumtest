@@ -133,11 +133,20 @@ class Empleado(Base):
 
 class Gasto(Base):
     __tablename__ = "gastos"
-    id      = Column(Integer, primary_key=True, index=True)
-    nombre  = Column(String(120))
-    valor   = Column(Float, default=0)
-    activo  = Column(Boolean, default=True)
-    creado  = Column(DateTime, default=_utcnow)
+    id     = Column(Integer, primary_key=True, index=True)
+    nombre = Column(String(120))
+    valor  = Column(Float, default=0)
+    mes    = Column(Integer)
+    anio   = Column(Integer)
+    creado = Column(DateTime, default=_utcnow)
+
+class NominaMensual(Base):
+    __tablename__ = "nomina_mensual"
+    id          = Column(Integer, primary_key=True, index=True)
+    empleado_id = Column(Integer, index=True)
+    mes         = Column(Integer)
+    anio        = Column(Integer)
+    valor       = Column(Float, default=0)
 
 class Config(Base):
     __tablename__ = "config"
