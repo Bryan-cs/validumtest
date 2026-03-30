@@ -175,8 +175,18 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
       fd.append('anio', anio);
       fd.append('observaciones', obs);
       archivos.forEach(f => fd.append('files', f));
-      await api.post('/planillas', fd);
-      toast.success('Planilla subida correctamente');
+      const res = await api.post('/planillas', fd);
+      const { archivos: guardados = [], omitidos = [] } = res.data;
+      if (omitidos.length === 0) {
+        toast.success(`Planilla subida — ${guardados.length} archivo${guardados.length !== 1 ? 's' : ''} guardado${guardados.length !== 1 ? 's' : ''}`);
+      } else if (guardados.length === 0) {
+        toast.error(`No se guardó ningún archivo. ${omitidos.length} omitido${omitidos.length !== 1 ? 's' : ''}: ${omitidos.map(o => o.nombre).join(', ')}`);
+        setSubiendo(false);
+        return;
+      } else {
+        toast.success(`${guardados.length} archivo${guardados.length !== 1 ? 's' : ''} guardado${guardados.length !== 1 ? 's' : ''}`);
+        toast.error(`${omitidos.length} omitido${omitidos.length !== 1 ? 's' : ''}: ${omitidos.map(o => `${o.nombre} (${o.motivo})`).join(' | ')}`, { duration: 8000 });
+      }
       onSuccess();
     } catch (e) {
       toast.error(e?.response?.data?.detail || 'Error al subir planilla');

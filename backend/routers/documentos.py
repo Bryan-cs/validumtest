@@ -124,7 +124,13 @@ async def subir_documento(
     file_id = f"{uuid.uuid4().hex[:8]}_{safe_name}"
     if afiliado_doc:
         safe_doc = re.sub(r'[^\w\-]', '_', afiliado_doc)
-        unique_name = f"afiliados/{safe_doc}/{file_id}"
+        # Organizar por cliente si el afiliado existe en la DB
+        afil = db.query(models.Afiliado).filter_by(doc=afiliado_doc).first()
+        if afil and afil.cliente_txt:
+            safe_cliente = re.sub(r'[^\w\-]', '_', afil.cliente_txt)
+            unique_name = f"afiliados/{safe_cliente}/{safe_doc}/{file_id}"
+        else:
+            unique_name = f"afiliados/{safe_doc}/{file_id}"
     else:
         unique_name = file_id
     _upload_file(unique_name, content)

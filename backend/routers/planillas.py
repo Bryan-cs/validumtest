@@ -63,35 +63,45 @@ async def crear_planilla(
     from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE
     s3 = _get_s3()
     subidos = []
+    omitidos = []  # {"nombre": ..., "motivo": ...}
     for file in files:
-        ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else ""
+        nombre = file.filename or "archivo"
+        ext = nombre.rsplit(".", 1)[-1].lower() if "." in nombre else ""
         if ext not in ALLOWED_EXT:
+            omitidos.append({"nombre": nombre, "motivo": f"Formato .{ext} no permitido"})
             continue
         content = await file.read()
         if len(content) > MAX_SIZE:
+            omitidos.append({"nombre": nombre, "motivo": f"Excede {MAX_SIZE // (1024*1024)} MB"})
             continue
-        safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'archivo')
+        safe_name = re.sub(r'[^\w.\-]', '_', nombre)
+        safe_cliente = re.sub(r'[^\w\-]', '_', cliente_ref or 'sin_cliente')
         unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
-        if s3:
-            key = f"planillas/{unique_name}"
-            s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=content, ContentType=file.content_type or "application/octet-stream")
-            ruta = key
-        else:
-            os.makedirs("uploads/planillas", exist_ok=True)
-            ruta = f"uploads/planillas/{unique_name}"
-            with open(ruta, "wb") as f:
-                f.write(content)
+        try:
+            if s3:
+                key = f"planillas/{safe_cliente}/{unique_name}"
+                s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=content,
+                              ContentType=file.content_type or "application/octet-stream")
+                ruta = key
+            else:
+                os.makedirs(f"uploads/planillas/{safe_cliente}", exist_ok=True)
+                ruta = f"uploads/planillas/{safe_cliente}/{unique_name}"
+                with open(ruta, "wb") as f:
+                    f.write(content)
+        except Exception as e:
+            omitidos.append({"nombre": nombre, "motivo": f"Error al guardar: {e}"})
+            continue
         doc = models.Documento(
-            afiliado_doc="", nombre=file.filename, tipo=ext, ruta=ruta,
+            afiliado_doc="", nombre=nombre, tipo=ext, ruta=ruta,
             tamano=len(content), subido_por=token.get("sub", ""),
             contexto="planilla_pago", contexto_id=planilla.id,
         )
         db.add(doc)
-        subidos.append(file.filename)
+        subidos.append(nombre)
     crud._log(db, token.get("sub", ""), "Subió planilla SS", "Facturación",
-              f"{cliente_ref} - {mes} {anio} ({len(subidos)} archivos)")
+              f"{cliente_ref} - {mes} {anio} ({len(subidos)} archivos, {len(omitidos)} omitidos)")
     db.commit()
-    return {"ok": True, "id": planilla.id, "archivos": subidos}
+    return {"ok": True, "id": planilla.id, "archivos": subidos, "omitidos": omitidos}
 
 
 @router.delete("/{planilla_id}")
