@@ -211,7 +211,7 @@ export default function Tareas() {
       toast.success(`${finalizadas} tarea${finalizadas !== 1 ? 's' : ''} finalizada${finalizadas !== 1 ? 's' : ''}`);
       qc.setQueryData(['tareas'], prev =>
         prev?.map(t => {
-          const upd = actualizadas.find(u => u.id === t.id);
+          const upd = (actualizadas || []).find(u => u.id === t.id);
           return upd ? upd : t;
         })
       );

@@ -190,6 +190,7 @@ export default function Afiliados() {
       toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado');
       if (pendingFiles.length > 0) toast.success(`${pendingFiles.length} documento(s) adjuntado(s)`);
       if (modal === 'nuevo') {
+        // invalidateQueries para ['afiliados'] (paginado): no sabemos en qué página aparece el nuevo registro
         qc.invalidateQueries({ queryKey: ['afiliados'] });
         qc.setQueryData(['afiliados_all'], prev => [res.data, ...(prev || [])]);
       } else {

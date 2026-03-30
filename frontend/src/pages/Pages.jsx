@@ -286,12 +286,12 @@ export function Facturacion() {
 
   const pagar = useMutation({
     mutationFn:(id)=>api.patch(`/facturas/${id}/pagar`),
-    onSuccess:(res)=>{ toast.success('Factura marcada como pagada'); qc.setQueriesData({ queryKey: ['facturas'] }, (prev) => prev?.map(f => f.id === res.data.id ? res.data : f)); },
+    onSuccess:(res)=>{ toast.success('Factura marcada como pagada'); qc.setQueriesData({ queryKey: ['facturas'] }, (prev) => Array.isArray(prev) ? prev.map(f => f.id === res.data.id ? res.data : f) : prev); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/facturas/${id}`),
-    onSuccess:(_, id)=>{ toast.success('Factura eliminada'); qc.setQueriesData({ queryKey: ['facturas'] }, (prev) => prev?.filter(f => f.id !== id)); },
+    onSuccess:(_, id)=>{ toast.success('Factura eliminada'); qc.setQueriesData({ queryKey: ['facturas'] }, (prev) => Array.isArray(prev) ? prev.filter(f => f.id !== id) : prev); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
