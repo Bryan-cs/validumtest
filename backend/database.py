@@ -88,8 +88,28 @@ def _ensure_columns():
                 except Exception as e:
                     import logging
                     logging.getLogger("bbcfile").warning(f"_ensure_columns: no se pudo agregar {table}.{col}: {e}")
+    # Ampliar columnas que quedaron cortas
+    _ensure_column_types()
     # Crear índices nuevos si no existen
     _ensure_indexes()
+
+
+def _ensure_column_types():
+    """Amplía columnas cuyo VARCHAR quedó corto para los datos actuales."""
+    from sqlalchemy import text
+    alterations = [
+        # subtipo era VARCHAR(10), necesita VARCHAR(50) para valores como 'SIN CONSULTAR'
+        ("postgresql", "ALTER TABLE afiliados ALTER COLUMN subtipo TYPE VARCHAR(50)"),
+        ("sqlite",     "SELECT 1"),  # SQLite ignora el límite de VARCHAR, no necesita migración
+    ]
+    with engine.begin() as conn:
+        dialect = engine.dialect.name
+        for db_type, ddl in alterations:
+            if dialect == db_type:
+                try:
+                    conn.execute(text(ddl))
+                except Exception:
+                    pass  # ya tiene el tamaño correcto o no aplica
 
 
 def _ensure_indexes():

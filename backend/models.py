@@ -36,7 +36,7 @@ class Afiliado(Base):
     arl             = Column(String(10))
     ccf             = Column(String(80))
     afp             = Column(String(80))
-    subtipo         = Column(String(10), index=True)       # índice para filtros frecuentes
+    subtipo         = Column(String(50), index=True)       # índice para filtros frecuentes
     estado          = Column(String(30), default="ACTIVO", index=True)
     estado_srv      = Column(String(50), default="ACTIVO", index=True)
     servicios       = Column(Text, default="[]")     # JSON list
