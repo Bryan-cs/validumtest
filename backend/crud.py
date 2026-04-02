@@ -661,6 +661,14 @@ def get_dashboard(db, anio="", mes=""):
 
     util_neta = float(facts.utilidad) - float(nominas) - float(gastos)
 
+    # Pendiente total siempre (sin filtro de periodo)
+    pend_total = db.query(
+        func.coalesce(func.sum(case((models.Factura.estado=="pendiente", models.Factura.ingresos), else_=0)), 0)
+    ).scalar()
+
+    # Factor de meses para las etiquetas
+    meses_factor = 1 if (mes or not anio) else 12
+
     result = {
         "activos": int(stats.activos or 0), "retirados": int(stats.retirados or 0),
         "suspendidos": int(stats.suspendidos or 0), "total_afiliados": int(stats.total or 0),
@@ -668,37 +676,35 @@ def get_dashboard(db, anio="", mes=""):
         "utilidad_bruta": float(facts.utilidad), "nominas": float(nominas),
         "gastos_fijos": float(gastos), "utilidad_neta": util_neta,
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
+        "pendiente_cobro_total": float(pend_total), "meses_factor": meses_factor,
     }
     _cache_set(cache_key, result)
     return result
 
 # ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
-def get_dashboard_meses(db):
-    """Retorna lista de {mes, anio, ingresos, facturas} de los últimos 6 meses."""
-    from sqlalchemy import func
+def get_dashboard_meses(db, anio=""):
+    """Retorna los 12 meses del año indicado (o año actual) con ingresos, facturas y pendiente."""
+    from sqlalchemy import func, case as sql_case
     now = datetime.now(COL_TZ)
-    # Calcular los 6 meses a consultar
-    periodos = []
-    for i in range(5, -1, -1):
-        month = (now.month - 1 - i) % 12 + 1
-        year  = now.year + ((now.month - 1 - i) // 12)
-        periodos.append((MESES[month - 1], str(year)))
-    # Una sola query con GROUP BY en vez de 6 queries separadas
-    mes_list = [p[0] for p in periodos]
-    anio_list = list(set(p[1] for p in periodos))
+    anio_ref = anio if anio else str(now.year)
+    periodos = [(MESES[m], anio_ref) for m in range(12)]
     rows = db.query(
         models.Factura.mes, models.Factura.anio,
         func.sum(models.Factura.ingresos).label("total_ingresos"),
         func.count(models.Factura.id).label("total_facturas"),
+        func.coalesce(func.sum(sql_case((models.Factura.estado=="pendiente", models.Factura.ingresos), else_=0)), 0).label("total_pendiente"),
     ).filter(
-        models.Factura.mes.in_(mes_list),
-        models.Factura.anio.in_(anio_list),
+        models.Factura.anio == anio_ref,
     ).group_by(models.Factura.mes, models.Factura.anio).all()
-    # Mapear resultados
-    data_map = {(r.mes, r.anio): (r.total_ingresos or 0, r.total_facturas) for r in rows}
+    data_map = {r.mes: (r.total_ingresos or 0, r.total_facturas, r.total_pendiente or 0) for r in rows}
     return [
-        {"mes": mes[:3], "anio": int(anio), "ingresos": data_map.get((mes, anio), (0, 0))[0], "facturas": data_map.get((mes, anio), (0, 0))[1]}
-        for mes, anio in periodos
+        {
+            "mes": mes[:3], "mes_full": mes, "anio": int(anio_ref),
+            "ingresos": float(data_map.get(mes, (0, 0, 0))[0]),
+            "facturas": int(data_map.get(mes, (0, 0, 0))[1]),
+            "pendiente": float(data_map.get(mes, (0, 0, 0))[2]),
+        }
+        for mes, _ in periodos
     ]
 
 # ─── CACHÉ (Redis en producción, dict en memoria para dev) ───────────────────
@@ -870,26 +876,29 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
                 estado = "VENCIDO"   # mes pasado sin factura
             else:
                 # Mes actual: usar día de cobro
-                if dia_afil < dia_hoy:   estado = "VENCIDO"
+                if dia_afil < dia_hoy:    estado = "VENCIDO"
                 elif dia_afil == dia_hoy: estado = "HOY"
-                else:                     estado = "PROXIMO"
+                elif dia_afil == dia_hoy + 1: estado = "PROXIMO"
+                else:
+                    continue  # aún no se muestra — el día no ha llegado
 
             rows.append({
-                "id":       f"{a.id}_{m}_{y}",
-                "afil_id":  a.id,
-                "nombre":   a.nombre,
-                "empresa":  a.empresa,
-                "doc":      a.doc,
-                "dia_cobro":dia_afil,
-                "mes":      mes_nombre,
-                "anio":     anio_str,
+                "id":        f"{a.id}_{m}_{y}",
+                "afil_id":   a.id,
+                "nombre":    a.nombre,
+                "empresa":   a.empresa,
+                "doc":       a.doc,
+                "dia_cobro": dia_afil,
+                "mes":       mes_nombre,
+                "anio":      anio_str,
                 "fecha_afiliacion": fa,
-                "cliente":  cliente_afil,
-                "servicios":srvs,
-                "planilla": planilla,
-                "estado":   estado,
-                "novedades":a.novedades or "",
-                "subtipo":  a.subtipo or "",
+                "cliente":   cliente_afil,
+                "servicios": srvs,
+                "planilla":  planilla,
+                "estado":    estado,
+                "novedades": a.novedades or "",
+                "subtipo":   a.subtipo or "",
+                "estado_srv": a.estado_srv or "",
             })
 
     if doc:     rows = [r for r in rows if r["doc"] == doc]

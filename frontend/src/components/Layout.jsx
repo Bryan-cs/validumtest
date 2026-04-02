@@ -67,6 +67,27 @@ export default function Layout() {
     refetchInterval: 60_000,
   });
   const noLeidas = notifs.filter(n => !n.leida).length;
+  const prevNoLeidas = useRef(noLeidas);
+
+  useEffect(() => {
+    if (noLeidas > prevNoLeidas.current) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.3, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.4);
+      } catch (_) {}
+    }
+    prevNoLeidas.current = noLeidas;
+  }, [noLeidas]);
 
   const abrirNotifs = () => {
     setShowNotifs(v => !v);

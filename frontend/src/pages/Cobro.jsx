@@ -33,7 +33,7 @@ const ANIOS = [String(new Date().getFullYear()), String(new Date().getFullYear()
 const POR_PAG = 50;
 
 export default function Cobro() {
-  const [filtros, setFiltros] = useState({ empresa:[], cliente:[], estado:[], subtipo:[] });
+  const [filtros, setFiltros] = useState({ empresa:[], cliente:[], estado:[], subtipo:[], estado_srv:[] });
   const [expanded, setExp] = useState(null);
   const [novedadModal, setNovedadModal] = useState(null);
   const [mesFiltro,  setMesFiltro]  = useState('');
@@ -43,7 +43,7 @@ export default function Cobro() {
   const [pagina, setPagina] = useState(1);
 
   const setFiltro = (key, vals) => { setFiltros(f => ({ ...f, [key]: vals })); setPagina(1); };
-  const limpiar   = () => { setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] }); setDocBuscar(''); setDocFiltro(''); setPagina(1); };
+  const limpiar   = () => { setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[], estado_srv:[] }); setDocBuscar(''); setDocFiltro(''); setPagina(1); };
 
   const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   const { data: config = {} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
@@ -53,16 +53,18 @@ export default function Cobro() {
     refetchInterval: 60_000,
   });
 
-  const clientesUnicos = useMemo(() => [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort(), [rows]);
-  const subtiposUnicos = useMemo(() => [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort(), [rows]);
-  const estadosOpts    = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
+  const clientesUnicos  = useMemo(() => [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort(), [rows]);
+  const subtiposUnicos  = useMemo(() => [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort(), [rows]);
+  const estadoSrvOpts   = useMemo(() => [...new Set(rows.map(r=>r.estado_srv).filter(Boolean))].sort(), [rows]);
+  const estadosOpts     = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
 
   const rowsFiltrados = useMemo(() => rows.filter(r => {
     const labelEstado = ESTADO_CONFIG[r.estado]?.label || r.estado;
-    if (filtros.empresa.length  && !filtros.empresa.includes(r.empresa))    return false;
-    if (filtros.cliente.length  && !filtros.cliente.includes(r.cliente))    return false;
-    if (filtros.estado.length   && !filtros.estado.includes(labelEstado))   return false;
-    if (filtros.subtipo.length  && !filtros.subtipo.includes(r.subtipo))    return false;
+    if (filtros.empresa.length    && !filtros.empresa.includes(r.empresa))       return false;
+    if (filtros.cliente.length    && !filtros.cliente.includes(r.cliente))       return false;
+    if (filtros.estado.length     && !filtros.estado.includes(labelEstado))      return false;
+    if (filtros.subtipo.length    && !filtros.subtipo.includes(r.subtipo))       return false;
+    if (filtros.estado_srv.length && !filtros.estado_srv.includes(r.estado_srv)) return false;
     return true;
   }), [rows, filtros]);
 
@@ -146,10 +148,11 @@ export default function Cobro() {
 
       <BarraFiltros
         filtros={[
-          { key:'empresa', label:'Empresa', icon:'🏢', options: listas.empresas||[] },
-          { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
-          { key:'estado',  label:'Estado',  icon:'📌', options: estadosOpts },
-          { key:'subtipo', label:'Subtipo', icon:'🔢', options: subtiposUnicos },
+          { key:'empresa',    label:'Empresa',     icon:'🏢', options: listas.empresas||[] },
+          { key:'cliente',    label:'Cliente',     icon:'👤', options: clientesUnicos },
+          { key:'estado',     label:'Estado',      icon:'📌', options: estadosOpts },
+          { key:'subtipo',    label:'Subtipo',     icon:'🔢', options: subtiposUnicos },
+          { key:'estado_srv', label:'Estado SS',   icon:'🏥', options: estadoSrvOpts },
         ]}
         valores={filtros}
         onChange={setFiltro}
@@ -160,16 +163,16 @@ export default function Cobro() {
         <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
-              {['','Nombre','Empresa','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades'].map(h=>(
+              {['','Nombre','Empresa','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Estado SS','Novedades'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                   color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+            {isLoading && <tr><td colSpan={13} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
             {!isLoading && rowsFiltrados.length===0 && (
-              <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
+              <tr><td colSpan={13} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
             )}
             {rowsPagina.map(r => {
               const cfg  = ESTADO_CONFIG[r.estado]||ESTADO_CONFIG.PROXIMO;
@@ -203,6 +206,14 @@ export default function Cobro() {
                         {cfg.label}
                       </span>
                     </td>
+                    <td style={tdc}>
+                      {r.estado_srv ? (
+                        <span style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:5,
+                          padding:'2px 8px',fontSize:10,fontWeight:600,color:C.text2,whiteSpace:'nowrap' }}>
+                          {r.estado_srv}
+                        </span>
+                      ) : '—'}
+                    </td>
                     <td style={{ ...tdc, maxWidth:180 }}
                       title={r.novedades || undefined}>
                       {r.novedades ? (
@@ -217,7 +228,7 @@ export default function Cobro() {
                   </tr>
                   {isExp && (
                     <tr style={{ background:C.surface2,borderBottom:`1px solid ${C.border}` }}>
-                      <td colSpan={12} style={{ padding:'12px 20px' }}>
+                      <td colSpan={13} style={{ padding:'12px 20px' }}>
                         <PlanillaDetalle afiliado={r} cobroRow={r} config={config} />
                       </td>
                     </tr>
