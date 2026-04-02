@@ -492,9 +492,9 @@ def dashboard(anio: str = "", mes: str = "",
 
 
 @app.get("/dashboard/meses")
-def dashboard_meses(db: Session = Depends(get_db), token=Depends(verify_token)):
-    """Retorna ingresos de los últimos 6 meses para la gráfica."""
-    return crud.get_dashboard_meses(db)
+def dashboard_meses(anio: str = "", db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Retorna los 12 meses del año indicado con ingresos, facturas y pendiente."""
+    return crud.get_dashboard_meses(db, anio=anio)
 
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
