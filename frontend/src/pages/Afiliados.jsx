@@ -232,6 +232,12 @@ export default function Afiliados() {
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const aHistorialRetiros = useMutation({
+    mutationFn: id => api.post(`/eliminados/${id}/a-retiros`),
+    onSuccess: res => { toast.success(`${res.data.nombre} agregado al historial de retiros`); qc.invalidateQueries({queryKey:['retiros']}); },
+    onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
+  });
+
   // Seguimiento state
   const [segBusqueda, setSegBusqueda] = useState('');
   const [segFiltros,  setSegFiltros]  = useState({ empresa:[], cliente:[] });
@@ -428,6 +434,11 @@ export default function Afiliados() {
                           onClick={() => setConfirm({ title:'Restaurar afiliado', message:`¿Restaurar a ${e.nombre} como ACTIVO?`, confirmLabel:'Restaurar', variant:'success', onConfirm:()=>restaurar.mutate(e.id) })}
                           disabled={restaurar.isPending}>
                           ↩ Restaurar
+                        </Btn>
+                        <Btn size="sm" variant="warning"
+                          onClick={() => setConfirm({ title:'Agregar a historial de retiros', message:`¿Agregar a ${e.nombre} al historial de retiros?`, confirmLabel:'Agregar', variant:'warning', onConfirm:()=>aHistorialRetiros.mutate(e.id) })}
+                          disabled={aHistorialRetiros.isPending}>
+                          📋 → Retiros
                         </Btn>
                         <Btn size="sm" variant="danger"
                           onClick={() => setConfirm({ title:'Eliminar permanentemente', message:`¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`, confirmLabel:'Eliminar para siempre', onConfirm:()=>borrarPermanente.mutate(e.id) })}

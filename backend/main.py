@@ -352,6 +352,11 @@ def delete_retiro(id: int, db: Session = Depends(get_db), token=Depends(verify_t
     return {"ok": True}
 
 
+@app.post("/eliminados/{id}/a-retiros", status_code=201)
+def eliminado_a_retiros(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.eliminado_a_retiro(db, id, user=token.get("sub","sistema"))
+
+
 # ─── EMPLEADOS ────────────────────────────────────────────────────────────────
 @app.get("/empleados")
 def list_empleados(db: Session = Depends(get_db), token=Depends(require_admin)):
