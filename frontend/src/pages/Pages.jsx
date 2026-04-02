@@ -140,7 +140,7 @@ export function Retiros() {
     onSuccess: (res)=>{
       const n = res.data?.facturas_pendientes;
       toast.success(n ? `Retiro aplicado. ${n} factura(s) pendiente(s) del mes` : 'Retiro aplicado');
-      qc.setQueryData(['retiros'], prev => [res.data.retiro, ...(prev || [])]);
+      qc.invalidateQueries({queryKey:['retiros']});
       qc.invalidateQueries({queryKey:['afiliados']});
       setModal(false); setDoc(''); setObs('');
     },
