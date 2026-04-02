@@ -624,6 +624,9 @@ def get_dashboard(db, anio="", mes=""):
         func.sum(case((models.Afiliado.estado_srv.ilike("%ACTIVO%"), 1), else_=0)).label("activos"),
         func.sum(case((models.Afiliado.estado_srv.ilike("%RETIR%"),  1), else_=0)).label("retirados"),
         func.sum(case((models.Afiliado.estado_srv.ilike("%SUSPENDIDO%"), 1), else_=0)).label("suspendidos"),
+        func.sum(case((models.Afiliado.estado_srv.ilike("%DOBLE%"), 1), else_=0)).label("doble_afiliacion"),
+        func.sum(case((models.Afiliado.estado_srv.ilike("%NO SE ENCUENTRA%"), 1), else_=0)).label("no_encontrado"),
+        func.sum(case((models.Afiliado.estado_srv.ilike("%ESPERA%"), 1), else_=0)).label("en_espera"),
     ).filter(models.Afiliado.activo==True).one()
 
     fq = db.query(
@@ -670,8 +673,11 @@ def get_dashboard(db, anio="", mes=""):
     meses_factor = 1 if (mes or not anio) else 12
 
     result = {
-        "activos": int(stats.activos or 0), "retirados": int(stats.retirados or 0),
-        "suspendidos": int(stats.suspendidos or 0), "total_afiliados": int(stats.total or 0),
+        "activos": int(stats.activos or 0), "suspendidos": int(stats.suspendidos or 0),
+        "doble_afiliacion": int(stats.doble_afiliacion or 0),
+        "no_encontrado": int(stats.no_encontrado or 0),
+        "en_espera": int(stats.en_espera or 0),
+        "total_afiliados": int(stats.total or 0),
         "facturas": int(facts.n or 0), "ingresos": float(facts.ingresos),
         "utilidad_bruta": float(facts.utilidad), "nominas": float(nominas),
         "gastos_fijos": float(gastos), "utilidad_neta": util_neta,
