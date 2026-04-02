@@ -1,5 +1,5 @@
 // ─── COBRO PAGE ───────────────────────────────────────────────────────────────
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -118,9 +118,10 @@ export function Cobro() {
 // ─── RETIROS ──────────────────────────────────────────────────────────────────
 export function Retiros() {
   const qc = useQueryClient();
-  const [tab,   setTab]  = useState('retiros');
-  const [anio, setAnio] = useState('');
-  const [mes,  setMes]  = useState('');
+  const [tab,      setTab]     = useState('retiros');
+  const [anio,     setAnio]    = useState('');
+  const [mes,      setMes]     = useState('');
+  const [buscarH,  setBuscarH] = useState('');
   const [modal, setModal] = useState(false);
   const [doc,   setDoc]  = useState('');
   const [fecha, setFecha]= useState(new Date().toISOString().slice(0,10));
@@ -153,11 +154,19 @@ export function Retiros() {
 
   const anios = [...new Set(rows.map(r=>r.anio).filter(Boolean))];
 
-  const { data: historial=[] } = useQuery({
-    queryKey: ['actividad','Retiros'],
-    queryFn: () => api.get('/actividad', { params:{ modulo:'Retiros' } }).then(r=> r.data?.items || r.data),
+  const { data: todosRetiros=[], isLoading: loadHistorial } = useQuery({
+    queryKey: ['retiros_historial'],
+    queryFn: () => api.get('/retiros').then(r => r.data),
     enabled: tab === 'historial',
   });
+
+  const retiradosFiltrados = useMemo(() => {
+    const q = buscarH.trim().toLowerCase();
+    if (!q) return todosRetiros;
+    return todosRetiros.filter(r =>
+      r.doc?.toLowerCase().includes(q) || r.nombre?.toLowerCase().includes(q)
+    );
+  }, [todosRetiros, buscarH]);
 
   return (
     <div>
@@ -172,7 +181,7 @@ export function Retiros() {
       <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:`2px solid ${C.border}` }}>
         {[
           { key:'retiros',   label:`↪️ Retiros (${rows.length})` },
-          { key:'historial', label:'📋 Historial de cambios' },
+          { key:'historial', label:'📋 Historial de retirados' },
         ].map(t=>(
           <button key={t.key} onClick={()=>setTab(t.key)} style={{
             padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
@@ -223,30 +232,69 @@ export function Retiros() {
         </div>
       </>)}
 
-      {tab === 'historial' && (
+      {tab === 'historial' && (<>
+        <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:14 }}>
+          <input
+            type="text"
+            value={buscarH}
+            onChange={e => setBuscarH(e.target.value)}
+            placeholder="🔍 Buscar por documento o nombre..."
+            style={{ padding:'8px 14px', borderRadius:7, border:`1px solid ${C.border}`,
+              fontSize:13, color:C.text, background:C.surface, width:300, outline:'none' }}
+          />
+          {buscarH && (
+            <button onClick={() => setBuscarH('')}
+              style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`,
+                background:C.surface2, fontSize:12, cursor:'pointer', color:C.text2 }}>
+              ✕ Limpiar
+            </button>
+          )}
+          <span style={{ fontSize:12, color:C.text2, marginLeft:'auto' }}>
+            {retiradosFiltrados.length} {retiradosFiltrados.length === 1 ? 'persona' : 'personas'}
+          </span>
+        </div>
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
           <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead>
               <tr style={{ background:C.surface2 }}>
-                {['Fecha','Usuario','Acción','Detalle'].map(h=>(
-                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                {['Nombre','Empresa','Documento','Fecha retiro','Motivo','Observaciones','Registrado por'].map(h=>(
+                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
+                    color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {historial.map((a,i)=>(
-                <tr key={i} style={{ borderBottom:`1px solid ${C.border}` }}>
-                  <td style={{ ...tdc, fontSize:11, color:C.text2, whiteSpace:'nowrap' }}>{a.fecha}</td>
-                  <td style={{ ...tdc, fontWeight:600 }}>{a.usuario}</td>
-                  <td style={tdc}>{a.accion}</td>
-                  <td style={{ ...tdc, color:C.text2, fontSize:12 }}>{a.detalle}</td>
+              {loadHistorial && <tr><td colSpan={7} style={{ padding:20, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>}
+              {!loadHistorial && retiradosFiltrados.map((r, i) => (
+                <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}`,
+                  background: i % 2 === 0 ? C.surface : C.surface2 }}>
+                  <td style={{ ...tdc, fontWeight:600 }}>{r.nombre}</td>
+                  <td style={tdc}>{r.empresa || '—'}</td>
+                  <td style={{ ...tdc, fontFamily:'monospace', fontSize:12 }}>{r.doc}</td>
+                  <td style={{ ...tdc, whiteSpace:'nowrap', color:C.text2 }}>{r.fecha}</td>
+                  <td style={tdc}>
+                    <span style={{ background:C.redBg, color:C.red, borderRadius:6,
+                      padding:'2px 8px', fontSize:11, fontWeight:600 }}>
+                      {r.motivo || '—'}
+                    </span>
+                  </td>
+                  <td style={{ ...tdc, fontSize:12, color:C.text2, maxWidth:260 }}>
+                    {r.obs
+                      ? <span style={{ color:C.text }}>{r.obs}</span>
+                      : <span style={{ color:C.text2, fontStyle:'italic' }}>Sin observaciones</span>}
+                  </td>
+                  <td style={{ ...tdc, fontSize:12, color:C.text2 }}>{r.registrado_por || '—'}</td>
                 </tr>
               ))}
-              {historial.length===0&&<tr><td colSpan={4} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin historial de retiros</td></tr>}
+              {!loadHistorial && retiradosFiltrados.length === 0 && (
+                <tr><td colSpan={7} style={{ padding:20, textAlign:'center', color:C.text2 }}>
+                  {buscarH ? `Sin resultados para "${buscarH}"` : 'Sin personas retiradas'}
+                </td></tr>
+              )}
             </tbody>
           </table>
         </div>
-      )}
+      </>)}
       {modal && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
           <div style={{ background:C.surface,borderRadius:14,padding:28,width:420,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
