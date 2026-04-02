@@ -1,5 +1,5 @@
 // ─── COBRO PAGE ───────────────────────────────────────────────────────────────
-import React, { useState, useMemo } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -122,6 +122,7 @@ export function Retiros() {
   const [anio,     setAnio]    = useState('');
   const [mes,      setMes]     = useState('');
   const [buscarH,  setBuscarH] = useState('');
+  const [docConsulta, setDocConsulta] = useState('');
   const [modal, setModal] = useState(false);
   const [doc,   setDoc]  = useState('');
   const [fecha, setFecha]= useState(new Date().toISOString().slice(0,10));
@@ -154,19 +155,11 @@ export function Retiros() {
 
   const anios = [...new Set(rows.map(r=>r.anio).filter(Boolean))];
 
-  const { data: todosRetiros=[], isLoading: loadHistorial } = useQuery({
-    queryKey: ['retiros_historial'],
-    queryFn: () => api.get('/retiros').then(r => r.data),
-    enabled: tab === 'historial',
+  const { data: resultadoConsulta=[], isLoading: loadConsulta, isFetched: consultaHecha } = useQuery({
+    queryKey: ['retiro_consulta', docConsulta],
+    queryFn: () => api.get('/retiros', { params: { doc: docConsulta } }).then(r => r.data),
+    enabled: !!docConsulta,
   });
-
-  const retiradosFiltrados = useMemo(() => {
-    const q = buscarH.trim().toLowerCase();
-    if (!q) return todosRetiros;
-    return todosRetiros.filter(r =>
-      r.doc?.toLowerCase().includes(q) || r.nombre?.toLowerCase().includes(q)
-    );
-  }, [todosRetiros, buscarH]);
 
   return (
     <div>
@@ -233,67 +226,80 @@ export function Retiros() {
       </>)}
 
       {tab === 'historial' && (<>
-        <div style={{ display:'flex', gap:10, alignItems:'center', marginBottom:14 }}>
-          <input
-            type="text"
-            value={buscarH}
-            onChange={e => setBuscarH(e.target.value)}
-            placeholder="🔍 Buscar por documento o nombre..."
-            style={{ padding:'8px 14px', borderRadius:7, border:`1px solid ${C.border}`,
-              fontSize:13, color:C.text, background:C.surface, width:300, outline:'none' }}
-          />
-          {buscarH && (
-            <button onClick={() => setBuscarH('')}
+        <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:20 }}>
+          <div style={{ position:'relative' }}>
+            <input
+              type="text"
+              value={buscarH}
+              onChange={e => setBuscarH(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') setDocConsulta(buscarH.trim()); }}
+              placeholder="N° documento..."
+              style={{ padding:'8px 14px', paddingRight:90, borderRadius:7,
+                border:`1px solid ${C.border}`, fontSize:13, color:C.text,
+                background:C.surface, width:260, outline:'none' }}
+            />
+            <button
+              onClick={() => setDocConsulta(buscarH.trim())}
+              style={{ position:'absolute', right:4, top:'50%', transform:'translateY(-50%)',
+                padding:'4px 12px', borderRadius:5, border:'none', background:C.primary,
+                color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+              Consultar
+            </button>
+          </div>
+          {docConsulta && (
+            <button onClick={() => { setBuscarH(''); setDocConsulta(''); }}
               style={{ padding:'7px 12px', borderRadius:7, border:`1px solid ${C.border}`,
                 background:C.surface2, fontSize:12, cursor:'pointer', color:C.text2 }}>
               ✕ Limpiar
             </button>
           )}
-          <span style={{ fontSize:12, color:C.text2, marginLeft:'auto' }}>
-            {retiradosFiltrados.length} {retiradosFiltrados.length === 1 ? 'persona' : 'personas'}
-          </span>
         </div>
-        <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
-            <thead>
-              <tr style={{ background:C.surface2 }}>
-                {['Nombre','Empresa','Documento','Fecha retiro','Motivo','Observaciones','Registrado por'].map(h=>(
-                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
-                    color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {loadHistorial && <tr><td colSpan={7} style={{ padding:20, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>}
-              {!loadHistorial && retiradosFiltrados.map((r, i) => (
-                <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}`,
-                  background: i % 2 === 0 ? C.surface : C.surface2 }}>
-                  <td style={{ ...tdc, fontWeight:600 }}>{r.nombre}</td>
-                  <td style={tdc}>{r.empresa || '—'}</td>
-                  <td style={{ ...tdc, fontFamily:'monospace', fontSize:12 }}>{r.doc}</td>
-                  <td style={{ ...tdc, whiteSpace:'nowrap', color:C.text2 }}>{r.fecha}</td>
-                  <td style={tdc}>
-                    <span style={{ background:C.redBg, color:C.red, borderRadius:6,
-                      padding:'2px 8px', fontSize:11, fontWeight:600 }}>
-                      {r.motivo || '—'}
-                    </span>
-                  </td>
-                  <td style={{ ...tdc, fontSize:12, color:C.text2, maxWidth:260 }}>
-                    {r.obs
-                      ? <span style={{ color:C.text }}>{r.obs}</span>
-                      : <span style={{ color:C.text2, fontStyle:'italic' }}>Sin observaciones</span>}
-                  </td>
-                  <td style={{ ...tdc, fontSize:12, color:C.text2 }}>{r.registrado_por || '—'}</td>
-                </tr>
-              ))}
-              {!loadHistorial && retiradosFiltrados.length === 0 && (
-                <tr><td colSpan={7} style={{ padding:20, textAlign:'center', color:C.text2 }}>
-                  {buscarH ? `Sin resultados para "${buscarH}"` : 'Sin personas retiradas'}
-                </td></tr>
+
+        {!docConsulta && (
+          <div style={{ textAlign:'center', padding:'48px 0', color:C.text2, fontSize:14 }}>
+            Ingresa el número de documento para consultar si la persona fue retirada.
+          </div>
+        )}
+
+        {docConsulta && loadConsulta && (
+          <div style={{ textAlign:'center', padding:'32px 0', color:C.text2 }}>Consultando...</div>
+        )}
+
+        {docConsulta && !loadConsulta && consultaHecha && (
+          resultadoConsulta.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'32px 0', borderRadius:10,
+              border:`1px solid ${C.border}`, background:C.surface }}>
+              <div style={{ fontSize:32, marginBottom:8 }}>✅</div>
+              <div style={{ fontSize:14, color:C.text2 }}>
+                No hay registro de retiro para el documento <strong style={{color:C.text}}>{docConsulta}</strong>
+              </div>
+            </div>
+          ) : resultadoConsulta.map(r => (
+            <div key={r.id} style={{ borderRadius:10, border:`1px solid ${C.red}`,
+              background:C.redBg, padding:'20px 24px' }}>
+              <div style={{ fontSize:13, fontWeight:700, color:C.red, marginBottom:14 }}>
+                ↪️ Registro de retiro encontrado
+              </div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:20 }}>
+                <div><div style={etiq}>Nombre</div><div style={val}>{r.nombre}</div></div>
+                <div><div style={etiq}>Documento</div><div style={{ ...val, fontFamily:'monospace' }}>{r.doc}</div></div>
+                <div><div style={etiq}>Empresa</div><div style={val}>{r.empresa || '—'}</div></div>
+                <div><div style={etiq}>Fecha retiro</div><div style={val}>{r.fecha}</div></div>
+                <div><div style={etiq}>Motivo</div>
+                  <span style={{ background:C.red, color:'#fff', borderRadius:6,
+                    padding:'2px 10px', fontSize:12, fontWeight:700 }}>{r.motivo || '—'}</span>
+                </div>
+                <div><div style={etiq}>Registrado por</div><div style={val}>{r.registrado_por || '—'}</div></div>
+              </div>
+              {r.obs && (
+                <div style={{ marginTop:14, padding:'10px 14px', borderRadius:7,
+                  background:'rgba(0,0,0,.06)', fontSize:13, color:C.text }}>
+                  <span style={{ fontWeight:600, color:C.red }}>Observaciones: </span>{r.obs}
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
+            </div>
+          ))
+        )}
       </>)}
       {modal && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
@@ -964,7 +970,9 @@ export function Calculadora() {
 }
 
 // ─── SHARED STYLES ────────────────────────────────────────────────────────────
-const tdc = { padding:'10px 12px', fontSize:13, color:C.text, verticalAlign:'middle' };
+const tdc  = { padding:'10px 12px', fontSize:13, color:C.text, verticalAlign:'middle' };
+const etiq = { fontSize:11, color:C.text2, fontWeight:500, marginBottom:3 };
+const val  = { fontSize:14, fontWeight:600, color:C.text };
 const sel = { padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', background:C.surface, color:C.text };
 const sel_s = { padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', background:C.surface, color:C.text };
 const lbl = { display:'block', fontSize:12, color:C.text2, fontWeight:500, marginBottom:4 };

@@ -378,8 +378,9 @@ def delete_factura(db, id, user=""):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # invalidar caché al eliminar factura
 
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
-def get_retiros(db, anio="", mes=""):
+def get_retiros(db, anio="", mes="", doc=""):
     q = db.query(models.Retiro)
+    if doc:  q = q.filter(models.Retiro.doc == doc)
     if anio: q = q.filter_by(anio=anio)
     if mes:  q = q.filter_by(mes=mes)
     rows = q.order_by(models.Retiro.id.desc()).all()
