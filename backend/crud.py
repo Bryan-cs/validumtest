@@ -643,7 +643,8 @@ def get_dashboard(db, anio="", mes=""):
     # Nómina y gastos: si hay mes específico → ese mes; si hay solo año → suma todos los meses del año
     _anio_ref = int(anio) if anio else datetime.now(COL_TZ).year
     if mes:
-        _mes_ref = int(mes)
+        # mes llega como nombre español ("Enero") — convertir a índice 1-12
+        _mes_ref = (MESES.index(mes) + 1) if mes in MESES else int(mes)
         nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
             mes=_mes_ref, anio=_anio_ref).scalar()
         gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
