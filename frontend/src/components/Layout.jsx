@@ -21,6 +21,7 @@ const navItems = (rol) => [
   { to: '/afiliados',   label: '👥 Afiliados',            section: 'GESTIÓN' },
   { to: '/retiros',     label: '↪️ Retiros',               section: null },
   { to: '/tareas',      label: '✅ Tareas',                section: null },
+  { to: '/chat',        label: '💬 Chat',                  section: null },
   { to: '/facturacion', label: '🧾 Facturación',           section: 'FINANCIERO' },
   { to: '/cobro',       label: '💰 Módulo de cobro',       section: null },
   { to: '/planillas-ss', label: '📋 Planillas SS',          section: null },
@@ -88,6 +89,34 @@ export default function Layout() {
     }
     prevNoLeidas.current = noLeidas;
   }, [noLeidas]);
+
+  const { data: chatBadge = { count: 0 } } = useQuery({
+    queryKey: ['chat-no-leidos'],
+    queryFn: () => api.get('/chat/no-leidos').then(r => r.data),
+    refetchInterval: 30_000,
+    enabled: user?.rol === 'admin',
+  });
+  const prevChatCount = useRef(chatBadge.count);
+
+  useEffect(() => {
+    if (chatBadge.count > prevChatCount.current) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000, ctx.currentTime);
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.2);
+        osc.addEventListener('ended', () => ctx.close());
+      } catch (_) {}
+    }
+    prevChatCount.current = chatBadge.count;
+  }, [chatBadge.count]);
 
   const abrirNotifs = () => {
     setShowNotifs(v => !v);
@@ -178,6 +207,16 @@ export default function Layout() {
                 })}>
                 <span style={{ fontSize: collapsed ? 16 : 14 }}>{item.label.split(' ')[0]}</span>
                 {!collapsed && <span style={{ marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
+                {!collapsed && item.to === '/chat' && chatBadge.count > 0 && (
+                  <span style={{
+                    background: '#E53E3E', color: 'white', borderRadius: '50%',
+                    minWidth: 17, height: 17, fontSize: 10, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginLeft: 'auto', flexShrink: 0,
+                  }}>
+                    {chatBadge.count > 9 ? '9+' : chatBadge.count}
+                  </span>
+                )}
               </NavLink>
             </React.Fragment>
           ))}
