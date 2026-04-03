@@ -149,7 +149,7 @@ export function Retiros() {
 
   const eliminar = useMutation({
     mutationFn:(id)=>api.delete(`/retiros/${id}`),
-    onSuccess:(_, id)=>{ toast.success('Retiro eliminado'); qc.setQueryData(['retiros'], prev => prev?.filter(r => r.id !== id)); },
+    onSuccess:()=>{ toast.success('Retiro eliminado. Afiliado movido a Eliminados.'); qc.invalidateQueries({queryKey:['retiros']}); qc.invalidateQueries({queryKey:['eliminados']}); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 

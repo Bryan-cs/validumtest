@@ -417,23 +417,51 @@ def create_retiro(db, data: schemas.RetiroCreate):
     return {"id":r.id,"nombre":r.nombre,"doc":r.doc,"fecha":r.fecha,"motivo":r.motivo}
 
 def delete_retiro(db, id, user=""):
-    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # reactivación afecta cobro
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     r = db.query(models.Retiro).filter_by(id=id).first()
-    if r:
-        _log(db, user, "eliminó un retiro", "Retiros", r.nombre)
-        # Reactivar afiliado solo si no tiene otros retiros registrados
-        otros = db.query(models.Retiro).filter(
-            models.Retiro.doc == r.doc, models.Retiro.id != id
-        ).count()
-        if otros == 0:
-            afil = db.query(models.Afiliado).filter_by(doc=r.doc).first()
-            if afil:
-                afil.estado = "ACTIVO"
-                afil.estado_srv = "ACTIVO"
-                afil.activo = True  # asegurar que esté activo
-                _log(db, user, "reactivó afiliado por eliminación de retiro", "Afiliados", afil.nombre)
+    if not r:
+        return
+    _log(db, user, "eliminó un retiro (→ eliminados)", "Retiros", r.nombre)
+    # Mover el afiliado a eliminados en lugar de reactivarlo
+    afil = db.query(models.Afiliado).filter_by(doc=r.doc).first()
+    if afil:
+        elim_existente = db.query(models.Eliminado).filter_by(doc=r.doc).first()
+        if not elim_existente:
+            elim = models.Eliminado(
+                nombre=afil.nombre, doc=afil.doc, empresa=afil.empresa,
+                datos_completos=json.dumps(_afiliado_to_dict(afil)),
+                fecha_eliminacion=datetime.now(COL_TZ).strftime("%Y-%m-%d"),
+                mes=MESES[datetime.now(COL_TZ).month-1], eliminado_por=user,
+            )
+            db.add(elim)
+        afil.activo = False
+        _log(db, user, "afiliado movido a eliminados por eliminación de retiro", "Afiliados", afil.nombre)
     db.query(models.Retiro).filter_by(id=id).delete()
     db.commit()
+
+
+def eliminado_a_retiro(db, eliminado_id, user=""):
+    """Crea un registro de retiro a partir de un eliminado (para historial)."""
+    from fastapi import HTTPException
+    e = db.query(models.Eliminado).filter_by(id=eliminado_id).first()
+    if not e:
+        raise HTTPException(404, "Eliminado no encontrado")
+    retiro_existente = db.query(models.Retiro).filter_by(doc=e.doc).first()
+    if retiro_existente:
+        raise HTTPException(400, f"Ya existe un retiro registrado para el documento {e.doc}")
+    anio_actual = str(datetime.now(COL_TZ).year)
+    mes_actual  = MESES[datetime.now(COL_TZ).month-1]
+    r = models.Retiro(
+        nombre=e.nombre, doc=e.doc, empresa=e.empresa,
+        fecha=e.fecha_eliminacion or datetime.now(COL_TZ).strftime("%Y-%m-%d"),
+        motivo="ELIMINADO", obs="",
+        mes=mes_actual, anio=anio_actual, registrado_por=user,
+    )
+    db.add(r)
+    _log(db, user, "agregó a historial de retiros desde eliminados", "Retiros", e.nombre)
+    db.commit()
+    db.refresh(r)
+    return {"id": r.id, "nombre": r.nombre, "doc": r.doc}
 
 # ─── EMPLEADOS ────────────────────────────────────────────────────────────────
 def get_empleados(db):
