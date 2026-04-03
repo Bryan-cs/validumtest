@@ -61,17 +61,18 @@ async def _escuchar_redis():
         await pubsub.aclose()
         await r.aclose()
 
+_redis_pub: "aioredis.Redis | None" = None  # type: ignore[name-defined]
+
 async def _publicar(canal: str, data: dict):
     """Publica en Redis; si no hay Redis hace broadcast directo (1 worker)."""
     if not _REDIS_URL:
         await manager.broadcast(canal, data)
         return
+    global _redis_pub
     import redis.asyncio as aioredis
-    r = aioredis.from_url(_REDIS_URL, decode_responses=True)
-    try:
-        await r.publish(canal, json.dumps(data, default=str))
-    finally:
-        await r.aclose()
+    if _redis_pub is None:
+        _redis_pub = aioredis.from_url(_REDIS_URL, decode_responses=True)
+    await _redis_pub.publish(canal, json.dumps(data, default=str))
 
 def iniciar_listener():
     global _pubsub_task
@@ -119,6 +120,8 @@ def get_mensajes(
         # cliente solo ve su propia conversación (cliente_ref del token)
         if rol == "cliente":
             cliente_ref = payload.get("cliente_ref")
+        elif rol != "admin":
+            raise HTTPException(403, "Acceso denegado a conversaciones privadas")
         if not cliente_ref:
             raise HTTPException(400, "cliente_ref requerido para tipo=privado")
         q = db.query(models.Mensaje).filter(
@@ -127,8 +130,8 @@ def get_mensajes(
         )
     else:
         raise HTTPException(400, "tipo inválido")
-    msgs = q.order_by(models.Mensaje.creado.asc()).limit(100).all()
-    return [_to_dict(m) for m in msgs]
+    msgs = q.order_by(models.Mensaje.creado.desc()).limit(100).all()
+    return [_to_dict(m) for m in reversed(msgs)]
 
 
 @router.get("/chat/clientes-activos")
