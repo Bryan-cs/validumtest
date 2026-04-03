@@ -18,9 +18,17 @@ function fmtFecha(iso) {
   return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
 }
 
+let _audioCtx = null;
+function _getAudioCtx() {
+  if (!_audioCtx || _audioCtx.state === 'closed') {
+    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  }
+  return _audioCtx;
+}
+
 function _beep() {
   try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = _getAudioCtx();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.connect(gain);
@@ -45,7 +53,9 @@ export default function Chat() {
   const [texto, setTexto] = useState('');
   const wsRef = useRef(null);
   const bottomRef = useRef(null);
-  const prevCountRef = useRef(0);
+  const userRef = useRef(user);
+
+  useEffect(() => { userRef.current = user; }, [user]);
 
   // Lista de clientes con conversaciones (solo admin)
   const { data: clientes = [] } = useQuery({
@@ -75,12 +85,8 @@ export default function Chat() {
     ws.onmessage = (e) => {
       try {
         const msg = JSON.parse(e.data);
-        setMensajes(prev => {
-          const newCount = prev.length + 1;
-          if (newCount > prevCountRef.current) _beep();
-          prevCountRef.current = newCount;
-          return [...prev, msg];
-        });
+        setMensajes(prev => [...prev, msg]);
+        if (msg.remitente !== userRef.current?.username) _beep();
       } catch (_) {}
     };
     wsRef.current = ws;
@@ -98,14 +104,8 @@ export default function Chat() {
         .then(() => qc.invalidateQueries({ queryKey: ['chat-clientes'] }))
         .catch(() => {});
     }
-    return () => { if (wsRef.current) wsRef.current.close(); };
+    return () => { if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } };
   }, [tab, clienteActivo, cargarHistorial, conectarWS, qc]);
-
-  // Sincronizar prevCountRef cuando se carga historial (reset al cambiar canal)
-  useEffect(() => {
-    prevCountRef.current = mensajes.length;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mensajes.length === 0 ? 0 : -1]);
 
   // Auto-scroll
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensajes]);
