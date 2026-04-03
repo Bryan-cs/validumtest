@@ -4,7 +4,7 @@ import json
 import os
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from sqlalchemy import func
+from sqlalchemy import func, case
 from database import get_db, SessionLocal
 import models
 from routers.deps import verify_token, require_admin, _decode_token
@@ -112,6 +112,8 @@ def get_mensajes(
 ):
     rol = payload.get("rol")
     if tipo == "grupal":
+        if rol not in ("admin", "empleado"):
+            raise HTTPException(403, "Acceso denegado al canal grupal")
         q = db.query(models.Mensaje).filter(models.Mensaje.tipo == "grupal")
     elif tipo == "privado":
         # cliente solo ve su propia conversación (cliente_ref del token)
@@ -139,7 +141,7 @@ def get_clientes_activos(
             models.Mensaje.destinatario,
             func.count(models.Mensaje.id).label("total"),
             func.sum(
-                func.cast(~models.Mensaje.leido, models.Mensaje.__table__.c.leido.type)
+                case((models.Mensaje.leido == False, 1), else_=0)
             ).label("no_leidos"),
         )
         .filter(models.Mensaje.tipo == "privado")
@@ -236,6 +238,9 @@ async def ws_chat(
                 db.commit()
                 db.refresh(msg)
                 msg_dict = _to_dict(msg)
+            except Exception:
+                db.rollback()
+                raise
             finally:
                 db.close()
 
@@ -243,5 +248,7 @@ async def ws_chat(
 
     except WebSocketDisconnect:
         manager.disconnect(ws, canal)
-    except Exception:
+    except Exception as exc:
+        from logger import logger as _log
+        _log.error(f"ws_chat error (canal={canal}, user={username}): {exc}", exc_info=True)
         manager.disconnect(ws, canal)
