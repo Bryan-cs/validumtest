@@ -815,6 +815,7 @@ export default function PortalCliente() {
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
           osc.start(ctx.currentTime);
           osc.stop(ctx.currentTime + 0.2);
+          osc.addEventListener('ended', () => ctx.close());
         } catch (_) {}
       } catch (_) {}
     };
@@ -1077,7 +1078,7 @@ export default function PortalCliente() {
             {chatMsgs.map((m) => {
               const mio = m.remitente === user?.username;
               return (
-                <div key={m.id} style={{ display:'flex', flexDirection:'column', alignItems:mio ? 'flex-end' : 'flex-start', marginBottom:2 }}>
+                <div key={m.id ?? `${m.remitente}-${m.creado}`} style={{ display:'flex', flexDirection:'column', alignItems:mio ? 'flex-end' : 'flex-start', marginBottom:2 }}>
                   {!mio && <span style={{ fontSize:11, color:C.text2, marginBottom:2 }}>{m.remitente_nombre}</span>}
                   <div style={{
                     maxWidth:'72%', padding:'8px 12px',
