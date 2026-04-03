@@ -57,10 +57,7 @@ export default function Dashboard() {
 
       {/* Métricas financieras */}
       <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap' }}>
-        <StatCard label="Facturas emitidas"         value={d?.facturas            ?? '—'} color={C.blue} />
         <StatCard label="Ingresos"                  value={fmt(d?.ingresos)}              color={C.primary} />
-        <StatCard label="Pendiente período"         value={fmt(d?.pendiente_cobro)}        color={C.amber} />
-        <StatCard label="⚠ Pendiente total"        value={fmt(d?.pendiente_cobro_total)}  color={C.red} />
         <StatCard label={`Nóminas (×${d?.meses_factor??1} mes)`}     value={fmt(d?.nominas)}      color={C.red} />
         <StatCard label={`Gastos fijos (×${d?.meses_factor??1} mes)`} value={fmt(d?.gastos_fijos)} color={C.red} />
         <StatCard label="Utilidad neta"             value={fmt(d?.utilidad_neta)}

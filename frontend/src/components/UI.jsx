@@ -59,6 +59,7 @@ export function Btn({ children, onClick, variant='primary', size='md', disabled,
     accent:    { background: C.accent, color: '#fff', padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
     danger:    { background: C.redBg, color: C.red, border:`1px solid ${C.red}`, padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
     success:   { background: C.greenBg, color: C.green, border:`1px solid ${C.green}`, padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
+    warning:   { background: C.amberBg, color: C.amber, border:`1px solid ${C.amber}`, padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
   };
   return <button onClick={onClick} disabled={disabled} style={{ ...base, ...variants[variant] }}>{children}</button>;
 }
