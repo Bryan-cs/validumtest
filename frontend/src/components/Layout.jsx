@@ -167,6 +167,19 @@ export default function Layout() {
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <style>{`
+      @keyframes chat-pulse-ring {
+        0%   { box-shadow: 0 0 0 0 rgba(229,62,62,.55); }
+        70%  { box-shadow: 0 0 0 6px rgba(229,62,62,0); }
+        100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+      }
+      .chat-badge-pulse { animation: chat-pulse-ring 1.6s ease-out infinite; }
+      @keyframes chat-nav-glow {
+        0%, 100% { background: rgba(229,62,62,.10); }
+        50%       { background: rgba(229,62,62,.18); }
+      }
+      .chat-nav-unread { animation: chat-nav-glow 2.4s ease-in-out infinite; }
+    `}</style>
 
       {/* Sidebar */}
       <aside style={{
@@ -199,20 +212,21 @@ export default function Layout() {
               )}
               <NavLink to={item.to} end={item.to === '/'}
                 title={collapsed ? item.label : undefined}
+                className={({ isActive }) => item.to === '/chat' && chatBadge.count > 0 && !isActive ? 'chat-nav-unread' : undefined}
                 style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', position: 'relative',
                   padding: collapsed ? '10px 0' : '9px 14px',
                   margin: '1px 7px', borderRadius: 7, textDecoration: 'none', fontSize: 13,
-                  color: isActive ? '#fff' : 'rgba(255,255,255,.72)',
+                  color: isActive ? '#fff' : item.to === '/chat' && chatBadge.count > 0 ? '#fff' : 'rgba(255,255,255,.72)',
                   background: isActive ? 'var(--c-sidebar-active)' : 'transparent',
-                  fontWeight: isActive ? 600 : 400,
+                  fontWeight: isActive ? 600 : item.to === '/chat' && chatBadge.count > 0 ? 600 : 400,
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   whiteSpace: 'nowrap', overflow: 'hidden',
                 })}>
                 <span style={{ fontSize: collapsed ? 16 : 14 }}>{item.label.split(' ')[0]}</span>
                 {!collapsed && <span style={{ marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
                 {item.to === '/chat' && chatBadge.count > 0 && (
-                  <span style={{
+                  <span className="chat-badge-pulse" style={{
                     background: '#E53E3E', color: 'white', borderRadius: '50%',
                     minWidth: 17, height: 17, fontSize: 10, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',

@@ -112,6 +112,18 @@ export default function Chat() {
   // Auto-scroll
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [mensajes]);
 
+  const limpiar = async () => {
+    const canal = tab === 'grupal' ? 'canal grupal' : `conversación con ${clienteActivo}`;
+    if (!window.confirm(`¿Eliminar todos los mensajes del ${canal}? Esta acción no se puede deshacer.`)) return;
+    try {
+      const params = { tipo: tab };
+      if (tab === 'privado' && clienteActivo) params.cliente_ref = clienteActivo;
+      await api.delete('/chat/mensajes', { params });
+      setMensajes([]);
+      if (tab === 'privado') qc.invalidateQueries({ queryKey: ['chat-clientes'] });
+    } catch (_) {}
+  };
+
   const enviar = () => {
     const t = texto.trim();
     if (!t || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
@@ -143,18 +155,26 @@ export default function Chat() {
         <div style={{ width: 240, flexShrink: 0, background: C.surface, borderRight: `1px solid ${C.border}`, display: 'flex', flexDirection: 'column' }}>
           {/* Tabs */}
           <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}` }}>
-            {[['grupal', '👥 Interno'], ['privado', '💬 Clientes']].map(([id, label]) => (
-              <button key={id}
-                onClick={() => { setTab(id); if (id === 'grupal') setClienteActivo(null); }}
-                style={{
-                  flex: 1, padding: '11px 6px', border: 'none', fontSize: 12, fontWeight: 600,
-                  cursor: 'pointer', background: 'transparent',
-                  color: tab === id ? C.primary : C.text2,
-                  borderBottom: tab === id ? `2px solid ${C.primary}` : '2px solid transparent',
-                }}>
-                {label}
-              </button>
-            ))}
+            {[['grupal', '👥 Interno'], ['privado', '💬 Clientes']].map(([id, label]) => {
+              const tabUnread = id === 'privado' ? clientes.reduce((s, c) => s + (c.no_leidos || 0), 0) : 0;
+              return (
+                <button key={id}
+                  onClick={() => { setTab(id); if (id === 'grupal') setClienteActivo(null); }}
+                  style={{
+                    flex: 1, padding: '11px 6px', border: 'none', fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', background: 'transparent', position: 'relative',
+                    color: tab === id ? C.primary : C.text2,
+                    borderBottom: tab === id ? `2px solid ${C.primary}` : '2px solid transparent',
+                  }}>
+                  {label}
+                  {tabUnread > 0 && (
+                    <span style={{ marginLeft: 5, background: '#E53E3E', color: '#fff', borderRadius: 10, padding: '1px 5px', fontSize: 10, fontWeight: 700 }}>
+                      {tabUnread}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           {/* Tab: Interno */}
@@ -197,8 +217,19 @@ export default function Chat() {
       {/* Panel de chat */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         {/* Header */}
-        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${C.border}`, background: C.surface, fontWeight: 700, fontSize: 14, color: C.text, flexShrink: 0 }}>
-          {tab === 'grupal' ? '👥 Chat interno' : clienteActivo ? `💬 ${clienteActivo}` : 'Selecciona un cliente'}
+        <div style={{ padding: '10px 20px', borderBottom: `1px solid ${C.border}`, background: C.surface, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontWeight: 700, fontSize: 14, color: C.text }}>
+            {tab === 'grupal' ? '👥 Chat interno' : clienteActivo ? `💬 ${clienteActivo}` : 'Selecciona un cliente'}
+          </span>
+          {isAdmin && (tab === 'grupal' || (tab === 'privado' && clienteActivo)) && mensajes.length > 0 && (
+            <button onClick={limpiar} title="Limpiar conversación" style={{
+              background: 'none', border: `1px solid ${C.border}`, borderRadius: 6,
+              color: C.text2, fontSize: 11, cursor: 'pointer', padding: '3px 8px',
+              display: 'flex', alignItems: 'center', gap: 4,
+            }}>
+              🗑 Limpiar
+            </button>
+          )}
         </div>
 
         {/* Mensajes */}

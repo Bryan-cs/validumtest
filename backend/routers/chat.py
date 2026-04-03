@@ -171,6 +171,28 @@ def get_no_leidos(
     return {"count": count}
 
 
+@router.delete("/chat/mensajes")
+def limpiar_mensajes(
+    tipo: str = Query(...),
+    cliente_ref: str | None = Query(None),
+    payload=Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    if tipo == "grupal":
+        db.query(models.Mensaje).filter(models.Mensaje.tipo == "grupal").delete()
+    elif tipo == "privado":
+        if not cliente_ref:
+            raise HTTPException(400, "cliente_ref requerido para tipo=privado")
+        db.query(models.Mensaje).filter(
+            models.Mensaje.tipo == "privado",
+            models.Mensaje.destinatario == cliente_ref,
+        ).delete()
+    else:
+        raise HTTPException(400, "tipo inválido")
+    db.commit()
+    return {"ok": True}
+
+
 @router.put("/chat/mensajes/{cliente_ref}/leer")
 def marcar_leidos(
     cliente_ref: str,
