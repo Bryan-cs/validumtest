@@ -1,6 +1,7 @@
 // frontend/src/pages/Chat.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 import { C } from '../components/UI';
@@ -119,9 +120,12 @@ export default function Chat() {
       const params = { tipo: tab };
       if (tab === 'privado' && clienteActivo) params.cliente_ref = clienteActivo;
       await api.delete('/chat/mensajes', { params });
-      setMensajes([]);
+      await cargarHistorial(tab, tab === 'privado' ? clienteActivo : null);
       if (tab === 'privado') qc.invalidateQueries({ queryKey: ['chat-clientes'] });
-    } catch (_) {}
+      toast.success('Conversación limpiada');
+    } catch (_) {
+      toast.error('Error al limpiar mensajes');
+    }
   };
 
   const enviar = () => {

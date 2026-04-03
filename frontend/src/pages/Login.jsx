@@ -147,23 +147,23 @@ export default function Login() {
           position: relative; z-index: 1;
         }
         .lr-eyebrow {
-          font-size: 10.5px; letter-spacing: 2.8px;
+          font-size: 12px; letter-spacing: 2.8px;
           text-transform: uppercase;
           color: #E89B2A; font-weight: 600; margin-bottom: 8px;
         }
         .lr-heading {
           font-family: 'Playfair Display', serif;
-          font-size: 34px; font-weight: 700;
+          font-size: 38px; font-weight: 700;
           color: #071E3D; margin: 0 0 6px; line-height: 1.1;
         }
         .lr-sub {
-          font-size: 13px; color: #94A3B8;
+          font-size: 15px; color: #94A3B8;
           margin: 0 0 38px; font-weight: 300;
         }
         .lr-field { margin-bottom: 22px; }
         .lr-label {
           display: block;
-          font-size: 11px; font-weight: 600;
+          font-size: 12.5px; font-weight: 600;
           color: #475569; margin-bottom: 7px;
           letter-spacing: .8px; text-transform: uppercase;
         }
@@ -173,7 +173,7 @@ export default function Login() {
           padding: 13px 16px;
           border: 1.5px solid #DDE3EF;
           border-radius: 10px;
-          font-size: 14.5px;
+          font-size: 16px;
           font-family: 'DM Sans', sans-serif;
           color: #0F172A; background: #fff;
           outline: none;
@@ -197,32 +197,49 @@ export default function Login() {
         .lr-btn {
           width: 100%; padding: 14px;
           margin-top: 6px;
-          background: #0D3B6E;
-          color: #fff; border: none;
+          background: linear-gradient(90deg, #E89B2A 50%, #0D3B6E 50%);
+          background-size: 200% 100%;
+          background-position: right center;
+          color: #fff;
+          border: 1.5px solid transparent;
           border-radius: 10px;
-          font-size: 14.5px; font-weight: 600;
+          font-size: 16px; font-weight: 600;
           font-family: 'DM Sans', sans-serif;
           cursor: pointer; letter-spacing: .3px;
           position: relative; overflow: hidden;
-          transition: background .2s, transform .15s, box-shadow .2s;
+          transition: background-position 0.4s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s;
+        }
+        .lr-btn::after {
+          width: 0; left: 50%;
+          height: 100%;
+          position: absolute;
+          top: 0;
+          border-top: 1.5px solid transparent;
+          border-bottom: 1.5px solid transparent;
+          transform: translate(-50%, 0);
+          transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+          content: "";
         }
         .lr-btn:hover:not(:disabled) {
-          background: #0A2E57;
-          transform: translateY(-1px);
-          box-shadow: 0 8px 24px rgba(13,59,110,.28);
+          background-position: left center;
+          color: #071E3D;
         }
-        .lr-btn:active:not(:disabled) { transform: translateY(0); }
-        .lr-btn:disabled { opacity: .6; cursor: not-allowed; transform: none; }
-        .lr-btn-shine {
-          position: absolute; inset: 0;
-          background: linear-gradient(105deg, transparent 35%, rgba(255,255,255,.14) 50%, transparent 65%);
-          animation: lr-shine 3s infinite;
+        .lr-btn:hover:not(:disabled)::after {
+          width: 100%;
+          border-color: #E89B2A;
+          transition-delay: 0.15s;
         }
-        @keyframes lr-shine {
-          0%   { transform: translateX(-100%); }
-          20%  { transform: translateX(160%); }
-          100% { transform: translateX(160%); }
+        .lr-btn:active:not(:disabled) {
+          background-position: right center;
+          color: #fff;
+          transition: all 0.1s;
         }
+        .lr-btn:active:not(:disabled)::after {
+          border-color: transparent;
+          width: 0;
+          transition: all 0.1s;
+        }
+        .lr-btn:disabled { opacity: .6; cursor: not-allowed; }
         .lr-divider {
           display: flex; align-items: center; gap: 12px;
           margin: 28px 0 0;
@@ -234,9 +251,76 @@ export default function Login() {
           font-size: 11px; color: #C1CBDB;
           letter-spacing: .5px; margin: 0;
         }
-        .lr-footer {
-          margin-top: 28px; text-align: center;
-          font-size: 11.5px; color: #C1CBDB; letter-spacing: .2px;
+        /* ── SOCIAL ── */
+        .lr-social { margin-top: 24px; text-align: center; }
+        .lr-social-label {
+          font-size: 12px; letter-spacing: 2px;
+          text-transform: uppercase;
+          color: #1877F2; font-weight: 600; margin: 0 0 12px;
+        }
+        .lr-social-row { display: flex; justify-content: center; gap: 10px; }
+
+        .fb-trapdoor {
+          position: relative;
+          width: 108px; height: 44px;
+          overflow: hidden;
+          background: #fff;
+          border-radius: 10px;
+          box-shadow: inset -6px 0 12px -8px rgba(0,0,0,.35), inset 6px 0 12px -8px rgba(0,0,0,.35);
+          transition: background 400ms ease-in-out;
+          text-decoration: none;
+          display: inline-flex; align-items: center; justify-content: center;
+          cursor: pointer;
+        }
+        .fb-trapdoor:hover .fb-door {
+          box-shadow: 0 0 10px -2px rgba(0,0,0,.3);
+          transform: scale(1.06);
+        }
+        .fb-trapdoor:hover .fb-door-top    { top: -50%; }
+        .fb-trapdoor:hover .fb-door-bottom { top: 100%; }
+
+        .fb-door {
+          position: absolute; left: 0;
+          width: 100%; height: 50%;
+          background: #0D3B6E;
+          overflow: hidden;
+          z-index: 2;
+          transition: top 400ms ease-in-out, box-shadow 200ms ease-in-out, transform 300ms ease-in-out;
+          transition-timing-function: ease-in-out;
+        }
+        .fb-door-top    { top: 0; }
+        .fb-door-bottom { top: 50%; }
+
+        /* "f" split entre las dos mitades de la puerta */
+        .fb-door::before {
+          content: "f";
+          position: absolute;
+          font-family: Georgia, serif;
+          font-weight: 900;
+          font-size: 22px;
+          color: rgba(255,255,255,.9);
+          left: 50%;
+          transform: translateX(-50%);
+          line-height: 44px;
+          height: 44px;
+        }
+        .fb-door-top::before    { top: 0; }
+        .fb-door-bottom::before { top: -22px; }
+
+        /* nombre revelado cuando las puertas abren */
+        .fb-icon {
+          position: relative; z-index: 1;
+          color: #1877F2; font-size: 13px;
+          font-weight: 700;
+          font-family: 'DM Sans', sans-serif;
+          letter-spacing: .3px;
+          text-align: center;
+          line-height: 1;
+        }
+
+        .lr-copyright {
+          margin-top: 18px; text-align: center;
+          font-size: 13.5px; color: #1877F2; letter-spacing: .3px;
         }
 
         @media (max-width: 820px) {
@@ -314,16 +398,32 @@ export default function Login() {
               </div>
 
               <button type="submit" disabled={loading} className="lr-btn">
-                {!loading && <span className="lr-btn-shine" />}
                 {loading ? 'Verificando…' : 'Ingresar al sistema'}
               </button>
             </form>
 
-            <div className="lr-divider">
-              <span /><p>BBC File · Colombia</p><span />
+            <div className="lr-social">
+              <p className="lr-social-label">Síguenos en Facebook</p>
+              <div className="lr-social-row">
+                <a href="https://www.facebook.com/TechPlanetEsal" target="_blank" rel="noreferrer" className="fb-trapdoor">
+                  <div className="fb-door fb-door-top" />
+                  <div className="fb-door fb-door-bottom" />
+                  <span className="fb-icon">Techplanet</span>
+                </a>
+                <a href="https://www.facebook.com/profile.php?id=61584899039203" target="_blank" rel="noreferrer" className="fb-trapdoor">
+                  <div className="fb-door fb-door-top" />
+                  <div className="fb-door fb-door-bottom" />
+                  <span className="fb-icon">Protsecoop</span>
+                </a>
+                <a href="https://www.facebook.com/profile.php?id=61586640354662" target="_blank" rel="noreferrer" className="fb-trapdoor">
+                  <div className="fb-door fb-door-top" />
+                  <div className="fb-door fb-door-bottom" />
+                  <span className="fb-icon">Carsecoop</span>
+                </a>
+              </div>
             </div>
 
-            <p className="lr-footer">Gestión de Personal — Seguridades Sociales</p>
+            <p className="lr-copyright">Copyright © 2026 — "BBC File" Todos los derechos reservados</p>
           </div>
         </div>
       </div>
