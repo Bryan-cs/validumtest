@@ -90,21 +90,23 @@ export default function Chat() {
       } catch (_) {}
     };
     wsRef.current = ws;
+    return ws;
   }, [token]);
 
   // Reconectar al cambiar de canal
   useEffect(() => {
+    let ws;
     if (tab === 'grupal') {
       cargarHistorial('grupal', null);
-      conectarWS('grupal', null);
+      ws = conectarWS('grupal', null);
     } else if (tab === 'privado' && clienteActivo) {
       cargarHistorial('privado', clienteActivo);
-      conectarWS('privado', clienteActivo);
+      ws = conectarWS('privado', clienteActivo);
       api.put(`/chat/mensajes/${clienteActivo}/leer`)
         .then(() => qc.invalidateQueries({ queryKey: ['chat-clientes'] }))
         .catch(() => {});
     }
-    return () => { if (wsRef.current) { wsRef.current.close(); wsRef.current = null; } };
+    return () => { if (ws) { ws.close(); wsRef.current = null; } };
   }, [tab, clienteActivo, cargarHistorial, conectarWS, qc]);
 
   // Auto-scroll
