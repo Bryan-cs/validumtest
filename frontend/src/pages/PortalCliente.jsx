@@ -821,7 +821,7 @@ export default function PortalCliente() {
     };
     wsPortalRef.current = ws;
     return () => ws.close();
-  }, [token]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [token]); // eslint-disable-line
 
   useEffect(() => {
     chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
