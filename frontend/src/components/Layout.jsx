@@ -96,9 +96,13 @@ export default function Layout() {
     refetchInterval: 30_000,
     enabled: user?.rol === 'admin',
   });
-  const prevChatCount = useRef(chatBadge.count);
+  const prevChatCount = useRef(null);
 
   useEffect(() => {
+    if (prevChatCount.current === null) {
+      prevChatCount.current = chatBadge.count;
+      return;
+    }
     if (chatBadge.count > prevChatCount.current) {
       try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -207,12 +211,14 @@ export default function Layout() {
                 })}>
                 <span style={{ fontSize: collapsed ? 16 : 14 }}>{item.label.split(' ')[0]}</span>
                 {!collapsed && <span style={{ marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
-                {!collapsed && item.to === '/chat' && chatBadge.count > 0 && (
+                {item.to === '/chat' && chatBadge.count > 0 && (
                   <span style={{
                     background: '#E53E3E', color: 'white', borderRadius: '50%',
                     minWidth: 17, height: 17, fontSize: 10, fontWeight: 700,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    marginLeft: 'auto', flexShrink: 0,
+                    marginLeft: collapsed ? 0 : 'auto', flexShrink: 0,
+                    position: collapsed ? 'absolute' : 'static',
+                    top: collapsed ? 4 : 'auto', right: collapsed ? 4 : 'auto',
                   }}>
                     {chatBadge.count > 9 ? '9+' : chatBadge.count}
                   </span>
