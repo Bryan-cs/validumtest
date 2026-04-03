@@ -170,7 +170,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             from logger import logger as _log
             _log.error(f"APScheduler no pudo iniciar: {e}")
+    iniciar_listener()
     yield
+    detener_listener()
 
 
 app = FastAPI(title="BBC File API", version="1.0.0", lifespan=lifespan)
@@ -219,6 +221,7 @@ from routers import portal as portal_router
 from routers.documentos import router as documentos_router
 from routers import backups as backups_router
 from routers import planillas as planillas_router
+from routers.chat import router as chat_router, iniciar_listener, detener_listener
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
@@ -229,6 +232,7 @@ app.include_router(portal_router.router)
 app.include_router(documentos_router)
 app.include_router(backups_router.router)
 app.include_router(planillas_router.router)
+app.include_router(chat_router)
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
