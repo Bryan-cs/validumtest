@@ -200,7 +200,7 @@ export default function Layout() {
               <NavLink to={item.to} end={item.to === '/'}
                 title={collapsed ? item.label : undefined}
                 style={({ isActive }) => ({
-                  display: 'flex', alignItems: 'center',
+                  display: 'flex', alignItems: 'center', position: 'relative',
                   padding: collapsed ? '10px 0' : '9px 14px',
                   margin: '1px 7px', borderRadius: 7, textDecoration: 'none', fontSize: 13,
                   color: isActive ? '#fff' : 'rgba(255,255,255,.72)',
