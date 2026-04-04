@@ -91,24 +91,36 @@ export default function Layout() {
     if (user?.rol !== 'admin' || !token) return;
     let ws;
     let reconnectTimer;
+    let pingInterval;
     let active = true;
 
     const connect = () => {
       if (!active) return;
       ws = new WebSocket(`${_WS_BASE}/ws/chat-alertas?token=${token}`);
+      ws.onopen = () => {
+        // Keepalive ping cada 25 s para evitar que el proxy/balanceador cierre la conexión por inactividad
+        pingInterval = setInterval(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send('ping');
+        }, 25000);
+      };
       ws.onmessage = () => {
         qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
         qc.invalidateQueries({ queryKey: ['chat-clientes'] });
         playBeep();
       };
       ws.onclose = () => {
+        clearInterval(pingInterval);
         if (active) reconnectTimer = setTimeout(connect, 5000);
+      };
+      ws.onerror = () => {
+        // onerror siempre dispara antes de onclose; no se necesita acción extra
       };
     };
     connect();
 
     return () => {
       active = false;
+      clearInterval(pingInterval);
       clearTimeout(reconnectTimer);
       ws?.close();
     };

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
+import { playBeep } from '../utils/audio';
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const anioActual = new Date().getFullYear();
@@ -803,20 +804,7 @@ export default function PortalCliente() {
         const msg = JSON.parse(e.data);
         setChatMsgs(prev => [...prev, msg]);
         // Sonido siempre que llegue un mensaje (independiente del tab activo)
-        try {
-          const ctx = new (window.AudioContext || window.webkitAudioContext)();
-          const osc = ctx.createOscillator();
-          const gain = ctx.createGain();
-          osc.connect(gain);
-          gain.connect(ctx.destination);
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(1000, ctx.currentTime);
-          gain.gain.setValueAtTime(0.25, ctx.currentTime);
-          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-          osc.start(ctx.currentTime);
-          osc.stop(ctx.currentTime + 0.2);
-          osc.addEventListener('ended', () => ctx.close());
-        } catch (_) {}
+        playBeep();
       } catch (_) {}
     };
     wsPortalRef.current = ws;
