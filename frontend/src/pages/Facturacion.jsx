@@ -85,9 +85,8 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   const [afiliado, setAfiliado] = useState(null);
   const [errorBusq, setErrorBusq] = useState('');
   const [dias, setDias] = useState(30);
-  const _nextMonth = () => { const d = new Date(); d.setMonth(d.getMonth() + 1); return d; };
-  const [mes, setMes] = useState(() => MESES[_nextMonth().getMonth()]);
-  const [anio, setAnio] = useState(() => String(_nextMonth().getFullYear()));
+  const [mes, setMes] = useState(() => MESES[new Date().getMonth()]);
+  const [anio, setAnio] = useState(() => String(new Date().getFullYear()));
   const [estado, setEstado] = useState('pendiente');
   const [ingreso, setIngreso] = useState(0);
   const [novedades, setNovedades] = useState('');
@@ -99,8 +98,8 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   useEffect(() => {
     if (!open) {
       setCedula(''); setAfiliado(null); setErrorBusq(''); setDias(30);
-      const nm = new Date(); nm.setMonth(nm.getMonth() + 1);
-      setMes(MESES[nm.getMonth()]); setAnio(String(nm.getFullYear())); setEstado('pendiente');
+      const hoy = new Date();
+      setMes(MESES[hoy.getMonth()]); setAnio(String(hoy.getFullYear())); setEstado('pendiente');
       setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
       setCargoAdicional(config?.cargo_adicional ?? 2200);
     }
