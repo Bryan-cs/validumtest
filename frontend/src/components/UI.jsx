@@ -29,14 +29,45 @@ export function Card({ children, style }) {
   );
 }
 
-export function StatCard({ label, value, color = C.primary }) {
+export function StatCard({ label, value, color = C.primary, icon, trend, trendUp = true }) {
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
-      padding: '14px 18px', flex: 1 }}>
-      <div style={{ borderTop: `3px solid ${color}`, marginBottom: 10, borderRadius: 2 }} />
-      <div style={{ fontSize: 11, color: C.text2, fontWeight: 600, textTransform:'uppercase',
-        letterSpacing:'0.05em', marginBottom: 4 }}>{label}</div>
-      <div style={{ fontSize: 22, fontWeight: 700, color }}>{value}</div>
+    <div className="stat-card-lift" style={{
+      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
+      padding: '18px', flex: 1, position: 'relative', overflow: 'hidden', cursor: 'default',
+    }}>
+      <div style={{
+        position: 'absolute', inset: 0,
+        background: `linear-gradient(135deg, ${color}15 0%, transparent 65%)`,
+        pointerEvents: 'none',
+      }} />
+      {trend && (
+        <div style={{
+          position: 'absolute', top: 14, right: 14,
+          background: trendUp ? C.greenBg : C.redBg,
+          color: trendUp ? C.green : C.red,
+          borderRadius: 100, padding: '2px 8px',
+          fontSize: 11, fontWeight: 700,
+        }}>{trend}</div>
+      )}
+      {icon && (
+        <div style={{
+          width: 34, height: 34, borderRadius: 9,
+          background: `${color}18`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: 15, marginBottom: 12, position: 'relative',
+        }}>{icon}</div>
+      )}
+      <div style={{
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: 26, fontWeight: 700,
+        letterSpacing: '-0.3px', lineHeight: 1,
+        color, marginBottom: 4, position: 'relative',
+      }}>{value}</div>
+      <div style={{
+        fontSize: 11, color: C.text2, fontWeight: 600,
+        textTransform: 'uppercase', letterSpacing: '0.06em',
+        position: 'relative',
+      }}>{label}</div>
     </div>
   );
 }
@@ -51,25 +82,35 @@ export function Badge({ label, color = C.text2, bg = C.surface2 }) {
 }
 
 export function Btn({ children, onClick, variant='primary', size='md', disabled, style }) {
-  const base = { border:'none', borderRadius:7, fontWeight:600, cursor: disabled?'not-allowed':'pointer',
-    opacity: disabled?0.6:1, transition:'opacity .15s', ...style };
-  const variants = {
-    primary:   { background: C.primary, color: '#fff', padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
-    secondary: { background: C.surface2, color: C.text, border:`1px solid ${C.border}`, padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
-    accent:    { background: C.accent, color: '#fff', padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
-    danger:    { background: C.redBg, color: C.red, border:`1px solid ${C.red}`, padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
-    success:   { background: C.greenBg, color: C.green, border:`1px solid ${C.green}`, padding: size==='sm'?'6px 14px':'9px 20px', fontSize: size==='sm'?12:14 },
+  const p = size === 'sm' ? '6px 14px' : '9px 20px';
+  const fs = size === 'sm' ? 12 : 14;
+  const base = {
+    border: 'none', borderRadius: 9, fontWeight: 600,
+    cursor: disabled ? 'not-allowed' : 'pointer',
+    opacity: disabled ? 0.6 : 1,
+    fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6,
+    ...style,
   };
-  return <button onClick={onClick} disabled={disabled} style={{ ...base, ...variants[variant] }}>{children}</button>;
+  const variants = {
+    primary:   { background: C.primary, color: '#fff', padding: p, fontSize: fs, boxShadow: '0 1px 3px rgba(0,0,0,.12), 0 3px 8px rgba(0,0,0,.08)' },
+    secondary: { background: C.surface2, color: C.text, border: `1.5px solid ${C.border}`, padding: p, fontSize: fs, boxShadow: '0 1px 2px rgba(0,0,0,.04)' },
+    accent:    { background: C.accent, color: '#fff', padding: p, fontSize: fs, boxShadow: '0 1px 3px rgba(0,0,0,.12)' },
+    danger:    { background: C.redBg, color: C.red, border: `1.5px solid ${C.red}44`, padding: p, fontSize: fs },
+    success:   { background: C.greenBg, color: C.green, border: `1.5px solid ${C.green}44`, padding: p, fontSize: fs },
+    warning:   { background: C.amberBg, color: C.amber, border: `1.5px solid ${C.amber}44`, padding: p, fontSize: fs },
+  };
+  return <button onClick={onClick} disabled={disabled} className="btn-lift" style={{ ...base, ...variants[variant] }}>{children}</button>;
 }
 
 export function Input({ label, value, onChange, placeholder, type='text', style }) {
   return (
     <div style={{ marginBottom: 12, ...style }}>
-      {label && <label style={{ display:'block', fontSize:12, color:C.text2, fontWeight:500, marginBottom:4 }}>{label}</label>}
+      {label && <label style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
       <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        style={{ width:'100%', padding:'9px 12px', border:`1px solid ${C.border}`,
-          borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box', color:C.text, background:C.surface }} />
+        className="ui-input"
+        style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.border}`,
+          borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box', color:C.text, background:C.surface,
+          transition:'border-color .18s, box-shadow .18s' }} />
     </div>
   );
 }
@@ -77,11 +118,12 @@ export function Input({ label, value, onChange, placeholder, type='text', style 
 export function Select({ label, value, onChange, options = [], style }) {
   return (
     <div style={{ marginBottom: 12, ...style }}>
-      {label && <label style={{ display:'block', fontSize:12, color:C.text2, fontWeight:500, marginBottom:4 }}>{label}</label>}
+      {label && <label style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
       <select value={value} onChange={e=>onChange(e.target.value)}
-        style={{ width:'100%', padding:'9px 12px', border:`1px solid ${C.border}`,
-          borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box',
-          color:C.text, background:C.surface }}>
+        className="ui-input"
+        style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.border}`,
+          borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box',
+          color:C.text, background:C.surface, transition:'border-color .18s, box-shadow .18s' }}>
         {options.map(o => typeof o === 'string'
           ? <option key={o} value={o}>{o}</option>
           : <option key={o.value} value={o.value}>{o.label}</option>
@@ -92,16 +134,21 @@ export function Select({ label, value, onChange, options = [], style }) {
 }
 
 export function Table({ headers, rows, loading }) {
-  const thStyle = { padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
-    color: C.text2, background: C.surface2, borderBottom:`1px solid ${C.border}`,
-    textTransform:'uppercase', letterSpacing:'0.05em', whiteSpace:'nowrap' };
-  const tdStyle = { padding:'10px 12px', fontSize:13, color: C.text,
-    borderBottom:`1px solid ${C.border}`, verticalAlign:'middle' };
+  const thStyle = {
+    padding:'12px 16px', textAlign:'left', fontSize:10.5, fontWeight:700,
+    color: C.text2, background: C.surface, borderBottom:`2px solid ${C.border}`,
+    textTransform:'uppercase', letterSpacing:'0.1em', whiteSpace:'nowrap',
+  };
+  const tdStyle = {
+    padding:'13px 16px', fontSize:13.5, color: C.text,
+    borderBottom:`1px solid ${C.border}`, verticalAlign:'middle',
+    transition:'background .12s',
+  };
   return (
     <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-      <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+      <table className="tbl" style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
         <thead>
-          <tr>{headers.map((h,i)=><th key={i} style={thStyle}>{h}</th>)}</tr>
+          <tr>{headers.map((h,i)=><th key={i} style={{ ...thStyle, paddingLeft: i===0?20:undefined, paddingRight: i===headers.length-1?20:undefined }}>{h}</th>)}</tr>
         </thead>
         <tbody>
           {loading
@@ -126,28 +173,38 @@ export function Modal({ open, onClose, title, children, width=540 }) {
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000,
       display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:C.surface, borderRadius:14, width:'100%', maxWidth:width,
-        maxHeight:'90vh', overflow:'auto', boxShadow:'0 25px 80px rgba(0,0,0,.3)' }}>
+      <div style={{ background:C.surface, borderRadius:16, width:'100%', maxWidth:width,
+        maxHeight:'90vh', overflow:'auto', boxShadow:'0 32px 80px rgba(0,0,0,.25)', overflow:'hidden' }}>
+        <div style={{ height:4, background:`linear-gradient(90deg, ${C.primary}, ${C.accent})` }} />
         <div style={{ display:'flex', alignItems:'center', padding:'18px 22px',
           borderBottom:`1px solid ${C.border}` }}>
-          <h2 style={{ margin:0, fontSize:16, fontWeight:700, color:C.primary }}>{title}</h2>
-          <button onClick={onClose} style={{ marginLeft:'auto', background:'none', border:'none',
-            fontSize:20, cursor:'pointer', color:C.text2 }}>✕</button>
+          <h2 style={{ margin:0, fontFamily:"'Syne', sans-serif", fontSize:18, fontWeight:800, color:C.text, letterSpacing:'-.3px' }}>{title}</h2>
+          <button onClick={onClose} style={{
+            marginLeft:'auto', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center',
+            background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+            fontSize:14, cursor:'pointer', color:C.text2, flexShrink:0,
+          }}>✕</button>
         </div>
-        <div style={{ padding:22 }}>{children}</div>
+        <div style={{ padding:22, overflowY:'auto', maxHeight:'calc(90vh - 110px)' }}>{children}</div>
       </div>
     </div>
   );
 }
 
-export function PageHeader({ title, subtitle, action }) {
+export function PageHeader({ title, subtitle, action, crumb }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', marginBottom:20 }}>
-      <div>
-        <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.primary }}>{title}</h1>
-        {subtitle && <p style={{ margin:'2px 0 0', fontSize:13, color:C.text2 }}>{subtitle}</p>}
+    <div style={{ marginBottom:24, paddingBottom:20, borderBottom:`1px solid ${C.border}`, position:'relative' }}>
+      <div style={{ position:'absolute', bottom:-1, left:0, width:48, height:2, background:`linear-gradient(90deg, ${C.primary}, ${C.accent})`, borderRadius:2 }} />
+      {crumb && (
+        <div style={{ fontSize:11, color:C.text2, marginBottom:5, fontFamily:"'IBM Plex Mono', monospace" }}>{crumb}</div>
+      )}
+      <div style={{ display:'flex', alignItems:'flex-end' }}>
+        <div>
+          <h1 style={{ margin:0, fontFamily:"'Syne', sans-serif", fontSize:24, fontWeight:800, color:C.text, letterSpacing:'-.4px', lineHeight:1.1 }}>{title}</h1>
+          {subtitle && <p style={{ margin:'3px 0 0', fontSize:13, color:C.text2, fontWeight:300 }}>{subtitle}</p>}
+        </div>
+        {action && <div style={{ marginLeft:'auto' }}>{action}</div>}
       </div>
-      {action && <div style={{ marginLeft:'auto' }}>{action}</div>}
     </div>
   );
 }
@@ -166,7 +223,13 @@ export function statusBadge(estado) {
   };
   const key = Object.keys(map).find(k => (estado||'').toUpperCase().includes(k.toUpperCase())) || '';
   const [color, bg] = map[key] || [C.text2, C.surface2];
-  return <Badge label={estado} color={color} bg={bg} />;
+  const isActivo = (estado||'').toUpperCase() === 'ACTIVO';
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', background:bg, color, borderRadius:100, padding:'2px 9px', fontSize:11, fontWeight:700, letterSpacing:'.3px', textTransform:'uppercase' }}>
+      {isActivo && <span className="status-dot-activo" />}
+      {estado}
+    </span>
+  );
 }
 
 export const fmt = (n) => n == null ? '$ 0' : '$ ' + Math.round(n).toLocaleString('es-CO');
@@ -182,13 +245,16 @@ export function ConfirmModal({ open, title, message, confirmLabel = 'Eliminar', 
   return (
     <div onClick={onCancel} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
       zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:14,
-        maxWidth:400, width:'100%', padding:28, boxShadow:'0 25px 80px rgba(0,0,0,.3)' }}>
-        <h3 style={{ margin:'0 0 8px', color:C.text, fontSize:16, fontWeight:700 }}>{title}</h3>
-        <p style={{ margin:'0 0 22px', color:C.text2, fontSize:14, lineHeight:1.5 }}>{message}</p>
-        <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
-          <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
-          <Btn variant={variant} onClick={onConfirm}>{confirmLabel}</Btn>
+      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:16,
+        maxWidth:400, width:'100%', boxShadow:'0 32px 80px rgba(0,0,0,.25)', overflow:'hidden' }}>
+        <div style={{ height:4, background:`linear-gradient(90deg, ${C.primary}, ${C.accent})` }} />
+        <div style={{ padding:'22px 24px 24px' }}>
+          <h3 style={{ margin:'0 0 8px', color:C.text, fontFamily:"'Syne', sans-serif", fontSize:17, fontWeight:800, letterSpacing:'-.3px' }}>{title}</h3>
+          <p style={{ margin:'0 0 22px', color:C.text2, fontSize:14, lineHeight:1.6 }}>{message}</p>
+          <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+            <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
+            <Btn variant={variant} onClick={onConfirm}>{confirmLabel}</Btn>
+          </div>
         </div>
       </div>
     </div>

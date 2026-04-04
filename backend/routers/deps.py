@@ -51,6 +51,16 @@ def invalidate_user_cache(username: str = None):
         _user_active_cache.clear()
 
 
+def _decode_token(token: str) -> dict:
+    """Decodifica y valida un JWT dado el string raw. Lanza excepción si inválido."""
+    payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+    if payload.get("type") == "refresh":
+        raise jwt.InvalidTokenError("Token de refresco no válido como token de acceso")
+    if not _is_user_active(payload.get("sub", "")):
+        raise jwt.InvalidTokenError("Usuario desactivado o eliminado")
+    return payload
+
+
 def create_token(data: dict, expires: timedelta = None):
     payload = data.copy()
     if expires is None:

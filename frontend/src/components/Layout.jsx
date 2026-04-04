@@ -21,6 +21,7 @@ const navItems = (rol) => [
   { to: '/afiliados',   label: '👥 Afiliados',            section: 'GESTIÓN' },
   { to: '/retiros',     label: '↪️ Retiros',               section: null },
   { to: '/tareas',      label: '✅ Tareas',                section: null },
+  { to: '/chat',        label: '💬 Chat',                  section: null },
   { to: '/facturacion', label: '🧾 Facturación',           section: 'FINANCIERO' },
   { to: '/cobro',       label: '💰 Módulo de cobro',       section: null },
   { to: '/planillas-ss', label: '📋 Planillas SS',          section: null },
@@ -89,6 +90,38 @@ export default function Layout() {
     prevNoLeidas.current = noLeidas;
   }, [noLeidas]);
 
+  const { data: chatBadge = { count: 0 } } = useQuery({
+    queryKey: ['chat-no-leidos'],
+    queryFn: () => api.get('/chat/no-leidos').then(r => r.data),
+    refetchInterval: 30_000,
+    enabled: user?.rol === 'admin',
+  });
+  const prevChatCount = useRef(null);
+
+  useEffect(() => {
+    if (prevChatCount.current === null) {
+      prevChatCount.current = chatBadge.count;
+      return;
+    }
+    if (chatBadge.count > prevChatCount.current) {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(1000, ctx.currentTime);
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.2);
+        osc.addEventListener('ended', () => ctx.close());
+      } catch (_) {}
+    }
+    prevChatCount.current = chatBadge.count;
+  }, [chatBadge.count]);
+
   const abrirNotifs = () => {
     setShowNotifs(v => !v);
     if (noLeidas > 0) {
@@ -133,7 +166,67 @@ export default function Layout() {
   const items = navItems(user?.rol);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: 'Inter, system-ui, sans-serif' }}>
+    <div style={{ display: 'flex', height: '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <style>{`
+      @keyframes status-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%       { opacity: .45; transform: scale(.7); }
+      }
+      .status-dot-activo {
+        display: inline-block;
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--c-green);
+        margin-right: 5px;
+        vertical-align: middle;
+        animation: status-pulse 1.8s ease-in-out infinite;
+      }
+      @keyframes chat-pulse-ring {
+        0%   { box-shadow: 0 0 0 0 rgba(229,62,62,.55); }
+        70%  { box-shadow: 0 0 0 6px rgba(229,62,62,0); }
+        100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+      }
+      .chat-badge-pulse { animation: chat-pulse-ring 1.6s ease-out infinite; }
+      @keyframes chat-nav-glow {
+        0%, 100% { background: rgba(229,62,62,.10); }
+        50%       { background: rgba(229,62,62,.18); }
+      }
+      .chat-nav-unread { animation: chat-nav-glow 2.4s ease-in-out infinite; }
+
+      /* ── Global UI enhancements ── */
+      .stat-card-lift { transition: transform .2s, box-shadow .2s; }
+      .stat-card-lift:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,.1) !important; }
+
+      .btn-lift { transition: transform .15s, box-shadow .15s, background .15s, border-color .15s !important; }
+      .btn-lift:hover:not(:disabled) { transform: translateY(-1px) !important; filter: brightness(1.06); }
+      .btn-lift:active:not(:disabled) { transform: scale(.97) !important; }
+
+      .ui-input:focus {
+        border-color: var(--c-primary) !important;
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 15%, transparent) !important;
+        background: var(--c-surface) !important;
+        outline: none;
+      }
+
+      .tbl tbody tr { transition: background .1s; cursor: pointer; }
+      .tbl tbody tr:nth-child(even) td { background: var(--c-surface2); }
+      .tbl tbody tr:hover td { background: var(--c-blue-bg) !important; }
+      .tbl tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 var(--c-primary); }
+      .tbl tbody tr:last-child td { border-bottom: none !important; }
+
+      /* ── Sidebar items ── */
+      .sb-item { transition: background .15s, color .15s; }
+      .sb-item:hover { background: rgba(255,255,255,.07) !important; color: rgba(255,255,255,.9) !important; }
+      .sb-item.active::before {
+        content: '';
+        position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
+        width: 3px; height: 60%;
+        background: var(--c-sidebar-active);
+        border-radius: 0 2px 2px 0;
+      }
+      .sb-icon-box { width:28px; height:28px; border-radius:7px; background:rgba(255,255,255,.07); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; transition:background .15s; }
+      .sb-item.active .sb-icon-box { background: rgba(249,158,11,.18) !important; }
+      .sb-item:hover .sb-icon-box { background: rgba(255,255,255,.12) !important; }
+    `}</style>
 
       {/* Sidebar */}
       <aside style={{
@@ -142,42 +235,59 @@ export default function Layout() {
         position: 'relative', flexShrink: 0, overflow: 'hidden',
       }}>
         {/* Logo */}
-        {!collapsed && (
-          <div style={{ padding: '18px 16px 8px', display: 'flex', alignItems: 'center', gap: 8, whiteSpace: 'nowrap', overflow: 'hidden' }}>
-            <span style={{ fontSize: 18, fontWeight: 700, color: '#fff' }}>
-              BBC <span style={{ color: 'var(--c-sidebar-active)' }}>File</span>
+        <div style={{ padding: collapsed ? '14px 0 16px' : '14px 16px 16px', display:'flex', alignItems:'center', gap:10, whiteSpace:'nowrap', overflow:'hidden', justifyContent: collapsed ? 'center' : 'flex-start' }}>
+          <div style={{ width:30, height:30, borderRadius:8, background:'linear-gradient(135deg,#F59E0B,#F97316)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#fff', flexShrink:0 }}>B</div>
+          {!collapsed && (
+            <span style={{ fontFamily:"'Syne', sans-serif", fontSize:16, fontWeight:800, color:'#fff', letterSpacing:'-.3px' }}>
+              BBC <span style={{ color:'var(--c-sidebar-active)' }}>File</span>
             </span>
-          </div>
-        )}
-        {collapsed && (
-          <div style={{ padding: '18px 0 8px', textAlign: 'center' }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--c-sidebar-active)' }}>B</span>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* Nav */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 12 }}>
           {items.map((item) => (
             <React.Fragment key={item.to}>
               {item.section && !collapsed && (
-                <div style={{ fontSize: 10, color: 'rgba(255,255,255,.4)', padding: '14px 16px 4px', fontWeight: 600, letterSpacing: '0.1em', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,.28)', padding: '14px 18px 5px', fontWeight: 700, letterSpacing: '.15em', whiteSpace: 'nowrap', display:'flex', alignItems:'center', gap:8 }}>
                   {item.section}
+                  <span style={{ flex:1, height:1, background:'rgba(255,255,255,.07)' }} />
                 </div>
               )}
               <NavLink to={item.to} end={item.to === '/'}
                 title={collapsed ? item.label : undefined}
+                className={({ isActive }) => {
+                  const cls = ['sb-item'];
+                  if (isActive) cls.push('active');
+                  if (item.to === '/chat' && chatBadge.count > 0 && !isActive) cls.push('chat-nav-unread');
+                  return cls.join(' ');
+                }}
                 style={({ isActive }) => ({
-                  display: 'flex', alignItems: 'center',
-                  padding: collapsed ? '10px 0' : '9px 14px',
-                  margin: '1px 7px', borderRadius: 7, textDecoration: 'none', fontSize: 13,
-                  color: isActive ? '#fff' : 'rgba(255,255,255,.72)',
-                  background: isActive ? 'var(--c-sidebar-active)' : 'transparent',
-                  fontWeight: isActive ? 600 : 400,
+                  display: 'flex', alignItems: 'center', position: 'relative',
+                  padding: collapsed ? '10px 0' : '9px 10px',
+                  margin: '1px 8px', borderRadius: 9, textDecoration: 'none', fontSize: 13,
+                  color: isActive ? 'var(--c-sidebar-active)' : item.to === '/chat' && chatBadge.count > 0 ? '#fff' : 'rgba(255,255,255,.55)',
+                  background: isActive ? 'linear-gradient(90deg,rgba(249,158,11,.16),rgba(249,158,11,.04))' : 'transparent',
+                  fontWeight: isActive ? 600 : item.to === '/chat' && chatBadge.count > 0 ? 600 : 400,
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   whiteSpace: 'nowrap', overflow: 'hidden',
                 })}>
-                <span style={{ fontSize: collapsed ? 16 : 14 }}>{item.label.split(' ')[0]}</span>
-                {!collapsed && <span style={{ marginLeft: 6, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
+                <span className="sb-icon-box" style={{ fontSize: collapsed ? 15 : 13, width: collapsed ? 'auto' : 28, background: 'transparent' }}>
+                  {item.label.split(' ')[0]}
+                </span>
+                {!collapsed && <span style={{ marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
+                {item.to === '/chat' && chatBadge.count > 0 && (
+                  <span className="chat-badge-pulse" style={{
+                    background: '#E53E3E', color: 'white', borderRadius: '50%',
+                    minWidth: 17, height: 17, fontSize: 10, fontWeight: 700,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    marginLeft: collapsed ? 0 : 'auto', flexShrink: 0,
+                    position: collapsed ? 'absolute' : 'static',
+                    top: collapsed ? 4 : 'auto', right: collapsed ? 4 : 'auto',
+                  }}>
+                    {chatBadge.count > 9 ? '9+' : chatBadge.count}
+                  </span>
+                )}
               </NavLink>
             </React.Fragment>
           ))}

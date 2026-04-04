@@ -761,7 +761,7 @@ function CampanaNotif() {
 
 // ─── PORTAL PRINCIPAL ──────────────────────────────────────────────────────────
 export default function PortalCliente() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, token } = useAuthStore();
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -782,6 +782,57 @@ export default function PortalCliente() {
   const [showNovedadModal, setShowNovedadModal] = useState(false);
   const [pagina, setPagina] = useState(1);
   const POR_PAGINA = 50;
+
+  // ── Chat 1-a-1 ────────────────────────────────────────────────────────────
+  const WS_BASE_PORTAL = (process.env.REACT_APP_API_URL || 'http://localhost:8000')
+    .replace(/^https?/, (m) => (m === 'https' ? 'wss' : 'ws'));
+  const [chatMsgs, setChatMsgs] = useState([]);
+  const [chatTexto, setChatTexto] = useState('');
+  const wsPortalRef = useRef(null);
+  const chatBottomRef = useRef(null);
+
+  // Conectar WS de chat al montar — siempre activo para que el sonido funcione en cualquier tab
+  useEffect(() => {
+    api.get('/chat/mensajes', { params: { tipo: 'privado' } })
+      .then(r => setChatMsgs(r.data))
+      .catch(() => {});
+
+    const ws = new WebSocket(`${WS_BASE_PORTAL}/ws/chat?token=${token}&tipo=privado`);
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        setChatMsgs(prev => [...prev, msg]);
+        // Sonido siempre que llegue un mensaje (independiente del tab activo)
+        try {
+          const ctx = new (window.AudioContext || window.webkitAudioContext)();
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(1000, ctx.currentTime);
+          gain.gain.setValueAtTime(0.25, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
+          osc.start(ctx.currentTime);
+          osc.stop(ctx.currentTime + 0.2);
+          osc.addEventListener('ended', () => ctx.close());
+        } catch (_) {}
+      } catch (_) {}
+    };
+    wsPortalRef.current = ws;
+    return () => ws.close();
+  }, [token]); // eslint-disable-line
+
+  useEffect(() => {
+    chatBottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [chatMsgs]);
+
+  const enviarChatPortal = () => {
+    const t = chatTexto.trim();
+    if (!t || !wsPortalRef.current || wsPortalRef.current.readyState !== WebSocket.OPEN) return;
+    wsPortalRef.current.send(JSON.stringify({ texto: t }));
+    setChatTexto('');
+  };
 
   const { data: afiliados = [], isLoading } = useQuery({
     queryKey: ['portal-afiliados'],
@@ -891,7 +942,7 @@ export default function PortalCliente() {
     <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
-        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas']].map(([id, label]) => (
+        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas'],['chat','💬 Chat']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding:'9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
             borderBottom: tab===id?`2px solid ${C.primary}`:'none',
@@ -1016,6 +1067,49 @@ export default function PortalCliente() {
       {tab === 'historial' && <TabHistorial />}
 
       {tab === 'planillas' && <TabPlanillas />}
+
+      {tab === 'chat' && (
+        <div style={{ display:'flex', flexDirection:'column', height:500, background:C.surface, borderRadius:12, border:`1px solid ${C.border}`, overflow:'hidden' }}>
+          {/* Mensajes */}
+          <div style={{ flex:1, overflowY:'auto', padding:16, display:'flex', flexDirection:'column', gap:4 }}>
+            {chatMsgs.length === 0 && (
+              <p style={{ color:C.text2, textAlign:'center', marginTop:60, fontSize:13 }}>Escríbenos, te respondemos pronto.</p>
+            )}
+            {chatMsgs.map((m) => {
+              const mio = m.remitente === user?.username;
+              return (
+                <div key={m.id ?? `${m.remitente}-${m.creado}`} style={{ display:'flex', flexDirection:'column', alignItems:mio ? 'flex-end' : 'flex-start', marginBottom:2 }}>
+                  {!mio && <span style={{ fontSize:11, color:C.text2, marginBottom:2 }}>{m.remitente_nombre}</span>}
+                  <div style={{
+                    maxWidth:'72%', padding:'8px 12px',
+                    borderRadius: mio ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                    background: mio ? C.primary : C.surface2,
+                    color: mio ? '#fff' : C.text, fontSize:13, lineHeight:1.45, wordBreak:'break-word',
+                  }}>
+                    {m.texto}
+                  </div>
+                  <span style={{ fontSize:10, color:C.text2, marginTop:2 }}>
+                    {new Date(m.creado).toLocaleTimeString('es-CO', { hour:'2-digit', minute:'2-digit' })}
+                  </span>
+                </div>
+              );
+            })}
+            <div ref={chatBottomRef} />
+          </div>
+          {/* Input */}
+          <div style={{ padding:'10px 12px', borderTop:`1px solid ${C.border}`, display:'flex', gap:8, background:C.bg, flexShrink:0 }}>
+            <textarea
+              value={chatTexto}
+              onChange={e => setChatTexto(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); enviarChatPortal(); } }}
+              rows={1}
+              placeholder="Escribe un mensaje…"
+              style={{ flex:1, padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, color:C.text, background:C.surface, resize:'none', outline:'none', fontFamily:'inherit' }}
+            />
+            <button onClick={enviarChatPortal} style={{ background:C.primary, border:'none', color:'#fff', borderRadius:7, padding:'0 14px', cursor:'pointer', fontWeight:700, fontSize:18 }}>➤</button>
+          </div>
+        </div>
+      )}
 
       {/* Modales */}
       {resumenDoc && <ModalResumen doc={resumenDoc} onClose={() => setResumenDoc(null)} />}
