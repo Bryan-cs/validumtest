@@ -27,10 +27,12 @@ export default function Dashboard() {
   return (
     <div>
       {/* Header + filtros */}
-      <div style={{ display:'flex', alignItems:'center', marginBottom:20, gap:10 }}>
+      <div style={{ display:'flex', alignItems:'center', marginBottom:24, gap:10, paddingBottom:20, borderBottom:`1px solid ${C.border}`, position:'relative' }}>
+        <div style={{ position:'absolute', bottom:-1, left:0, width:48, height:2, background:`linear-gradient(90deg, ${C.primary}, ${C.accent})`, borderRadius:2 }} />
         <div>
-          <h1 style={{ margin:0, fontSize:22, fontWeight:700, color:C.primary }}>Dashboard</h1>
-          <p style={{ margin:0, fontSize:13, color:C.text2 }}>Resumen general del sistema</p>
+          <div style={{ fontSize:11, color:C.text2, marginBottom:4, fontFamily:"'IBM Plex Mono', monospace" }}>Panel / Dashboard</div>
+          <h1 style={{ margin:0, fontFamily:"'Syne', sans-serif", fontSize:24, fontWeight:800, color:C.text, letterSpacing:'-.4px' }}>Resumen general</h1>
+          <p style={{ margin:0, fontSize:13, color:C.text2, fontWeight:300 }}>Resumen general del sistema</p>
         </div>
         <div style={{ marginLeft:'auto', display:'flex', gap:8, alignItems:'center' }}>
           <span style={{ fontSize:12, color:C.text2 }}>Período:</span>
@@ -47,21 +49,22 @@ export default function Dashboard() {
 
       {/* Métricas afiliados */}
       <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-        <StatCard label="Activos"             value={d?.activos          ?? '—'} color={C.green} />
-        <StatCard label="Suspendidos"         value={d?.suspendidos      ?? '—'} color={C.amber} />
-        <StatCard label="Doble afiliación"    value={d?.doble_afiliacion ?? '—'} color={C.blue} />
-        <StatCard label="No se encuentra"     value={d?.no_encontrado    ?? '—'} color={C.red} />
-        <StatCard label="En espera activac."  value={d?.en_espera        ?? '—'} color={C.amber} />
-        <StatCard label="Total afiliados"     value={d?.total_afiliados  ?? '—'} color={C.primary} />
+        <StatCard label="Activos"             value={d?.activos          ?? '—'} color={C.green}   icon="👥" />
+        <StatCard label="Suspendidos"         value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
+        <StatCard label="Doble afiliación"    value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
+        <StatCard label="No se encuentra"     value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
+        <StatCard label="En espera activac."  value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" />
+        <StatCard label="Total afiliados"     value={d?.total_afiliados  ?? '—'} color={C.primary} icon="📊" />
       </div>
 
       {/* Métricas financieras */}
       <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap' }}>
-        <StatCard label="Ingresos"                  value={fmt(d?.ingresos)}              color={C.primary} />
-        <StatCard label={`Nóminas (×${d?.meses_factor??1} mes)`}     value={fmt(d?.nominas)}      color={C.red} />
-        <StatCard label={`Gastos fijos (×${d?.meses_factor??1} mes)`} value={fmt(d?.gastos_fijos)} color={C.red} />
+        <StatCard label="Ingresos"                  value={fmt(d?.ingresos)}              color={C.primary} icon="💰" />
+        <StatCard label={`Nóminas (×${d?.meses_factor??1} mes)`}     value={fmt(d?.nominas)}      color={C.red} icon="👔" />
+        <StatCard label={`Gastos fijos (×${d?.meses_factor??1} mes)`} value={fmt(d?.gastos_fijos)} color={C.red} icon="📝" />
         <StatCard label="Utilidad neta"             value={fmt(d?.utilidad_neta)}
-          color={(d?.utilidad_neta ?? 0) >= 0 ? C.green : C.red} />
+          color={(d?.utilidad_neta ?? 0) >= 0 ? C.green : C.red}
+          icon={(d?.utilidad_neta ?? 0) >= 0 ? '📈' : '📉'} />
       </div>
     </div>
   );
