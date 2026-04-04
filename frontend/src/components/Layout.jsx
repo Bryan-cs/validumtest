@@ -200,11 +200,11 @@ export default function Layout() {
       .btn-lift:hover:not(:disabled) { transform: translateY(-1px) !important; filter: brightness(1.06); }
       .btn-lift:active:not(:disabled) { transform: scale(.97) !important; }
 
-      .ui-input:focus {
+      .ui-input:focus,
+      input:focus, select:focus, textarea:focus {
         border-color: var(--c-primary) !important;
         box-shadow: 0 0 0 3px color-mix(in srgb, var(--c-primary) 15%, transparent) !important;
-        background: var(--c-surface) !important;
-        outline: none;
+        outline: none !important;
       }
 
       .tbl tbody tr { transition: background .1s; cursor: pointer; }
