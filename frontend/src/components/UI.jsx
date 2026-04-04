@@ -223,7 +223,13 @@ export function statusBadge(estado) {
   };
   const key = Object.keys(map).find(k => (estado||'').toUpperCase().includes(k.toUpperCase())) || '';
   const [color, bg] = map[key] || [C.text2, C.surface2];
-  return <Badge label={estado} color={color} bg={bg} />;
+  const isActivo = (estado||'').toUpperCase() === 'ACTIVO';
+  return (
+    <span style={{ display:'inline-flex', alignItems:'center', background:bg, color, borderRadius:100, padding:'2px 9px', fontSize:11, fontWeight:700, letterSpacing:'.3px', textTransform:'uppercase' }}>
+      {isActivo && <span className="status-dot-activo" />}
+      {estado}
+    </span>
+  );
 }
 
 export const fmt = (n) => n == null ? '$ 0' : '$ ' + Math.round(n).toLocaleString('es-CO');

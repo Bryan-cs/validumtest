@@ -168,6 +168,18 @@ export default function Layout() {
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
     <style>{`
+      @keyframes status-pulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50%       { opacity: .45; transform: scale(.7); }
+      }
+      .status-dot-activo {
+        display: inline-block;
+        width: 6px; height: 6px; border-radius: 50%;
+        background: var(--c-green);
+        margin-right: 5px;
+        vertical-align: middle;
+        animation: status-pulse 1.8s ease-in-out infinite;
+      }
       @keyframes chat-pulse-ring {
         0%   { box-shadow: 0 0 0 0 rgba(229,62,62,.55); }
         70%  { box-shadow: 0 0 0 6px rgba(229,62,62,0); }
