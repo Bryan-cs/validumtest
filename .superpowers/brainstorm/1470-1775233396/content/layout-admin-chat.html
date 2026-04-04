@@ -1,0 +1,83 @@
+<h2>Layout del chat para admin</h2>
+<p class="subtitle">¿Cómo navega el admin entre el chat interno y las conversaciones con clientes?</p>
+
+<div class="cards">
+
+  <div class="card" data-choice="sidebar-tabs" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:10px;background:#f8fafc;border-radius:8px;">
+      <div style="display:flex;height:160px;gap:0;font-size:10px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+        <!-- Panel izquierdo -->
+        <div style="width:110px;background:#f1f5f9;border-right:1px solid #e2e8f0;display:flex;flex-direction:column;">
+          <!-- Tabs -->
+          <div style="display:flex;border-bottom:1px solid #e2e8f0;">
+            <div style="flex:1;padding:5px 4px;text-align:center;font-size:9px;font-weight:700;color:#4f46e5;border-bottom:2px solid #4f46e5;background:white;">👥 Interno</div>
+            <div style="flex:1;padding:5px 4px;text-align:center;font-size:9px;color:#64748b;">💬 Clientes</div>
+          </div>
+          <div style="padding:6px 8px;font-size:8px;color:#64748b;flex:1;">
+            <div style="color:#475569;font-size:8px;margin-bottom:4px;">Canal grupal admin + empleados</div>
+            <div style="background:#e0e7ff;border-radius:4px;padding:4px 6px;font-size:8px;color:#4f46e5;font-weight:600;">🟢 Activo</div>
+          </div>
+        </div>
+        <!-- Panel derecho: chat -->
+        <div style="flex:1;background:white;display:flex;flex-direction:column;">
+          <div style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:9px;font-weight:700;color:#1e3a5f;">👥 Chat interno</div>
+          <div style="flex:1;padding:8px;display:flex;flex-direction:column;gap:4px;">
+            <div style="background:#f1f5f9;border-radius:8px;padding:4px 7px;font-size:8px;align-self:flex-start;max-width:70%;">
+              <span style="color:#64748b;font-size:7px;display:block;">María</span>
+              ¿Revisaron la planilla de marzo?
+            </div>
+            <div style="background:#e0e7ff;border-radius:8px;padding:4px 7px;font-size:8px;align-self:flex-end;max-width:70%;">Sí, lista ✓</div>
+          </div>
+          <div style="padding:5px 8px;border-top:1px solid #e2e8f0;display:flex;gap:4px;">
+            <div style="flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:3px 6px;font-size:8px;color:#94a3b8;">Escribe...</div>
+            <div style="background:#4f46e5;color:white;border-radius:4px;padding:3px 7px;font-size:9px;">➤</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>A — Panel lateral con tabs</h3>
+      <p>Panel izquierdo fijo con tabs "Interno" y "Clientes". Al entrar en Clientes aparece la lista de conversaciones en ese mismo panel.</p>
+    </div>
+  </div>
+
+  <div class="card" data-choice="3-columnas" onclick="toggleSelect(this)">
+    <div class="card-image" style="padding:10px;background:#f8fafc;border-radius:8px;">
+      <div style="display:flex;height:160px;gap:0;font-size:10px;border:1px solid #e2e8f0;border-radius:6px;overflow:hidden;">
+        <!-- Col 1: nav -->
+        <div style="width:70px;background:#1e3a5f;display:flex;flex-direction:column;padding:8px 6px;gap:4px;">
+          <div style="color:rgba(255,255,255,.5);font-size:7px;font-weight:600;margin-bottom:2px;">CANALES</div>
+          <div style="background:rgba(255,255,255,.15);border-radius:4px;padding:4px 5px;font-size:8px;color:white;font-weight:600;">👥 Interno</div>
+          <div style="padding:4px 5px;font-size:8px;color:rgba(255,255,255,.65);">─────</div>
+          <div style="color:rgba(255,255,255,.5);font-size:7px;font-weight:600;">CLIENTES</div>
+          <div style="padding:4px 5px;font-size:8px;color:rgba(255,255,255,.8);display:flex;justify-content:space-between;">
+            <span>Constructora A</span>
+            <span style="background:#e53e3e;border-radius:10px;padding:0 4px;font-size:7px;color:white;">2</span>
+          </div>
+          <div style="padding:4px 5px;font-size:8px;color:rgba(255,255,255,.65);">Clínica Sur</div>
+          <div style="padding:4px 5px;font-size:8px;color:rgba(255,255,255,.65);">Logística XY</div>
+        </div>
+        <!-- Col 2+3: chat area -->
+        <div style="flex:1;background:white;display:flex;flex-direction:column;">
+          <div style="padding:6px 10px;border-bottom:1px solid #e2e8f0;font-size:9px;font-weight:700;color:#1e3a5f;">👥 Chat interno</div>
+          <div style="flex:1;padding:8px;display:flex;flex-direction:column;gap:4px;">
+            <div style="background:#f1f5f9;border-radius:8px;padding:4px 7px;font-size:8px;align-self:flex-start;max-width:80%;">
+              <span style="color:#64748b;font-size:7px;display:block;">Juan</span>
+              Listo el reporte
+            </div>
+            <div style="background:#e0e7ff;border-radius:8px;padding:4px 7px;font-size:8px;align-self:flex-end;max-width:80%;">Perfecto</div>
+          </div>
+          <div style="padding:5px 8px;border-top:1px solid #e2e8f0;display:flex;gap:4px;">
+            <div style="flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:4px;padding:3px 6px;font-size:8px;color:#94a3b8;">Escribe...</div>
+            <div style="background:#4f46e5;color:white;border-radius:4px;padding:3px 7px;font-size:9px;">➤</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card-body">
+      <h3>B — Sidebar tipo Slack</h3>
+      <p>Panel izquierdo oscuro siempre visible con canal interno + lista de clientes. Clic directo en cualquier conversación sin tabs.</p>
+    </div>
+  </div>
+
+</div>

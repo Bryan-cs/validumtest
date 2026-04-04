@@ -5,8 +5,6 @@ import useAuthStore from '../hooks/useAuth';
 import api from '../utils/api';
 import { playBeep } from '../utils/audio';
 
-const _WS_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000')
-  .replace(/^https?/, m => m === 'https' ? 'wss' : 'ws');
 
 const SIDEBAR_MIN = 48;
 const SIDEBAR_MAX = 380;
@@ -25,7 +23,6 @@ const navItems = (rol) => [
   { to: '/afiliados',   label: '👥 Afiliados',            section: 'GESTIÓN' },
   { to: '/retiros',     label: '↪️ Retiros',               section: null },
   { to: '/tareas',      label: '✅ Tareas',                section: null },
-  { to: '/chat',        label: '💬 Chat',                  section: null },
   { to: '/facturacion', label: '🧾 Facturación',           section: 'FINANCIERO' },
   { to: '/cobro',       label: '💰 Módulo de cobro',       section: null },
   { to: '/planillas-ss', label: '📋 Planillas SS',          section: null },
@@ -41,7 +38,7 @@ const navItems = (rol) => [
 ];
 
 export default function Layout() {
-  const { user, logout, token } = useAuthStore();
+  const { user, logout } = useAuthStore();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [width, setWidth] = useState(SIDEBAR_DEFAULT);
@@ -79,52 +76,6 @@ export default function Layout() {
     prevNoLeidas.current = noLeidas;
   }, [noLeidas]);
 
-  const { data: chatBadge = { count: 0 } } = useQuery({
-    queryKey: ['chat-no-leidos'],
-    queryFn: () => api.get('/chat/no-leidos').then(r => r.data),
-    refetchInterval: 15_000,
-    enabled: user?.rol === 'admin',
-  });
-
-  // WS persistente para recibir alertas de mensajes privados nuevos en tiempo real
-  useEffect(() => {
-    if (user?.rol !== 'admin' || !token) return;
-    let ws;
-    let reconnectTimer;
-    let pingInterval;
-    let active = true;
-
-    const connect = () => {
-      if (!active) return;
-      ws = new WebSocket(`${_WS_BASE}/ws/chat-alertas?token=${token}`);
-      ws.onopen = () => {
-        // Keepalive ping cada 25 s para evitar que el proxy/balanceador cierre la conexión por inactividad
-        pingInterval = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send('ping');
-        }, 25000);
-      };
-      ws.onmessage = () => {
-        qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
-        qc.invalidateQueries({ queryKey: ['chat-clientes'] });
-        playBeep();
-      };
-      ws.onclose = () => {
-        clearInterval(pingInterval);
-        if (active) reconnectTimer = setTimeout(connect, 5000);
-      };
-      ws.onerror = () => {
-        // onerror siempre dispara antes de onclose; no se necesita acción extra
-      };
-    };
-    connect();
-
-    return () => {
-      active = false;
-      clearInterval(pingInterval);
-      clearTimeout(reconnectTimer);
-      ws?.close();
-    };
-  }, [user?.rol, token, qc]);
 
   const abrirNotifs = () => {
     setShowNotifs(v => !v);
@@ -184,18 +135,6 @@ export default function Layout() {
         vertical-align: middle;
         animation: status-pulse 1.8s ease-in-out infinite;
       }
-      @keyframes chat-pulse-ring {
-        0%   { box-shadow: 0 0 0 0 rgba(229,62,62,.55); }
-        70%  { box-shadow: 0 0 0 6px rgba(229,62,62,0); }
-        100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
-      }
-      .chat-badge-pulse { animation: chat-pulse-ring 1.6s ease-out infinite; }
-      @keyframes chat-nav-glow {
-        0%, 100% { background: rgba(229,62,62,.10); }
-        50%       { background: rgba(229,62,62,.18); }
-      }
-      .chat-nav-unread { animation: chat-nav-glow 2.4s ease-in-out infinite; }
-
       /* ── Global UI enhancements ── */
       .stat-card-lift { transition: transform .2s, box-shadow .2s; }
       .stat-card-lift:hover { transform: translateY(-3px); box-shadow: 0 8px 28px rgba(0,0,0,.1) !important; }
@@ -260,19 +199,14 @@ export default function Layout() {
               )}
               <NavLink to={item.to} end={item.to === '/'}
                 title={collapsed ? item.label : undefined}
-                className={({ isActive }) => {
-                  const cls = ['sb-item'];
-                  if (isActive) cls.push('active');
-                  if (item.to === '/chat' && chatBadge.count > 0 && !isActive) cls.push('chat-nav-unread');
-                  return cls.join(' ');
-                }}
+                className={({ isActive }) => ['sb-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
                 style={({ isActive }) => ({
                   display: 'flex', alignItems: 'center', position: 'relative',
                   padding: collapsed ? '10px 0' : '9px 10px',
                   margin: '1px 8px', borderRadius: 9, textDecoration: 'none', fontSize: 13,
-                  color: isActive ? 'var(--c-sidebar-active)' : item.to === '/chat' && chatBadge.count > 0 ? '#fff' : 'rgba(255,255,255,.55)',
+                  color: isActive ? 'var(--c-sidebar-active)' : 'rgba(255,255,255,.55)',
                   background: isActive ? 'linear-gradient(90deg,rgba(249,158,11,.16),rgba(249,158,11,.04))' : 'transparent',
-                  fontWeight: isActive ? 600 : item.to === '/chat' && chatBadge.count > 0 ? 600 : 400,
+                  fontWeight: isActive ? 600 : 400,
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   whiteSpace: 'nowrap', overflow: 'hidden',
                 })}>
@@ -280,18 +214,6 @@ export default function Layout() {
                   {item.label.split(' ')[0]}
                 </span>
                 {!collapsed && <span style={{ marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
-                {item.to === '/chat' && chatBadge.count > 0 && (
-                  <span className="chat-badge-pulse" style={{
-                    background: '#E53E3E', color: 'white', borderRadius: '50%',
-                    minWidth: 17, height: 17, fontSize: 10, fontWeight: 700,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    marginLeft: collapsed ? 0 : 'auto', flexShrink: 0,
-                    position: collapsed ? 'absolute' : 'static',
-                    top: collapsed ? 4 : 'auto', right: collapsed ? 4 : 'auto',
-                  }}>
-                    {chatBadge.count > 9 ? '9+' : chatBadge.count}
-                  </span>
-                )}
               </NavLink>
             </React.Fragment>
           ))}
