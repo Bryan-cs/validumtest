@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 import { C } from '../components/UI';
+import { playBeep } from '../utils/audio';
 
 const WS_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000')
   .replace(/^https?/, (m) => (m === 'https' ? 'wss' : 'ws'));
@@ -17,32 +18,6 @@ function fmtHora(iso) {
 function fmtFecha(iso) {
   if (!iso) return '';
   return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
-}
-
-let _audioCtx = null;
-function _getAudioCtx() {
-  if (!_audioCtx || _audioCtx.state === 'closed') {
-    _audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  }
-  return _audioCtx;
-}
-
-function _beep() {
-  try {
-    const ctx = _getAudioCtx();
-    ctx.resume().then(() => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1000, ctx.currentTime);
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.2);
-    }).catch(() => {});
-  } catch (_) {}
 }
 
 export default function Chat() {
@@ -90,9 +65,22 @@ export default function Chat() {
         const msg = JSON.parse(e.data);
         setMensajes(prev => [...prev, msg]);
         if (msg.remitente !== userRef.current?.username) {
-          _beep();
-          qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
-          qc.invalidateQueries({ queryKey: ['chat-clientes'] });
+          if (tipo === 'privado' && ref) {
+            // Admin está viendo esta conversación → marcar como leído
+            // para que el badge no muestre +1 fantasma
+            api.put(`/chat/mensajes/${ref}/leer`)
+              .then(() => {
+                qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
+                qc.invalidateQueries({ queryKey: ['chat-clientes'] });
+              })
+              .catch(() => {});
+            // NO reproducir sonido aquí — Layout.jsx alertas WS lo hace
+          } else {
+            // Grupal: reproducir sonido (no hay alerta WS para grupal)
+            playBeep();
+            qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
+            qc.invalidateQueries({ queryKey: ['chat-clientes'] });
+          }
         }
       } catch (_) {}
     };

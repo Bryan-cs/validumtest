@@ -3,28 +3,10 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../hooks/useAuth';
 import api from '../utils/api';
+import { playBeep } from '../utils/audio';
 
 const _WS_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000')
   .replace(/^https?/, m => m === 'https' ? 'wss' : 'ws');
-
-function _playBeep() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    ctx.resume().then(() => {
-      const osc  = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(1000, ctx.currentTime);
-      gain.gain.setValueAtTime(0.28, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
-      osc.start(ctx.currentTime);
-      osc.stop(ctx.currentTime + 0.25);
-      osc.addEventListener('ended', () => ctx.close());
-    }).catch(() => {});
-  } catch (_) {}
-}
 
 const SIDEBAR_MIN = 48;
 const SIDEBAR_MAX = 380;
@@ -93,22 +75,7 @@ export default function Layout() {
   const prevNoLeidas = useRef(noLeidas);
 
   useEffect(() => {
-    if (noLeidas > prevNoLeidas.current) {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(880, ctx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.15);
-        gain.gain.setValueAtTime(0.3, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.4);
-      } catch (_) {}
-    }
+    if (noLeidas > prevNoLeidas.current) playBeep(880, 0.4, 0.3);
     prevNoLeidas.current = noLeidas;
   }, [noLeidas]);
 
@@ -132,7 +99,7 @@ export default function Layout() {
       ws.onmessage = () => {
         qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
         qc.invalidateQueries({ queryKey: ['chat-clientes'] });
-        _playBeep();
+        playBeep();
       };
       ws.onclose = () => {
         if (active) reconnectTimer = setTimeout(connect, 5000);
