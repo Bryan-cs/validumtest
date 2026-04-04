@@ -58,9 +58,9 @@ export function StatCard({ label, value, color = C.primary, icon, trend, trendUp
         }}>{icon}</div>
       )}
       <div style={{
-        fontFamily: "'Syne', sans-serif",
-        fontSize: 26, fontWeight: 800,
-        letterSpacing: '-0.5px', lineHeight: 1,
+        fontFamily: "'DM Sans', sans-serif",
+        fontSize: 26, fontWeight: 700,
+        letterSpacing: '-0.3px', lineHeight: 1,
         color, marginBottom: 4, position: 'relative',
       }}>{value}</div>
       <div style={{
