@@ -546,7 +546,7 @@ export function Empleados() {
       <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 24 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
           <thead><tr style={{ background: C.surface2 }}>
-            {['Nombre', 'Cargo', 'Estado', 'Acciones'].map(h => (
+            {['Nombre', 'Documento', 'Cargo', 'Teléfono', 'Estado', 'Acciones'].map(h => (
               <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
             ))}
           </tr></thead>
@@ -554,7 +554,9 @@ export function Empleados() {
             {emps.map(e => (
               <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                 <td style={tdc}>{e.nombre}</td>
+                <td style={{ ...tdc, color: C.text2, fontFamily: 'monospace', fontSize: 12 }}>{e.doc || '—'}</td>
                 <td style={tdc}>{e.cargo}</td>
+                <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>{e.tel || '—'}</td>
                 <td style={tdc}><span style={{ background: e.activo ? C.greenBg : C.redBg, color: e.activo ? C.green : C.red, borderRadius: 10, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{e.activo ? 'Activo' : 'Inactivo'}</span></td>
                 <td style={tdc}>
                   <div style={{ display: 'flex', gap: 6 }}>
@@ -564,7 +566,7 @@ export function Empleados() {
                 </td>
               </tr>
             ))}
-            {emps.length === 0 && <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados</td></tr>}
+            {emps.length === 0 && <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados</td></tr>}
           </tbody>
         </table>
       </div>
@@ -576,23 +578,42 @@ export function Empleados() {
       <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 24 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
           <thead><tr style={{ background: C.surface2 }}>
-            {['Empleado', 'Cargo', 'Valor ($)'].map(h => (
+            {['Empleado', 'Cargo', 'Salario base ref.', 'Pago este mes'].map(h => (
               <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
-            {nomina.map(n => (
-              <tr key={n.empleado_id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                <td style={tdc}>{n.nombre}</td>
-                <td style={tdc}>{n.cargo}</td>
-                <td style={tdc}>
-                  <input type="number" style={{ ...inp, width: 140 }}
-                    defaultValue={n.valor}
-                    onBlur={e => updateNomina.mutate({ empleado_id: n.empleado_id, valor: +e.target.value })} />
-                </td>
+            {nomina.map(n => {
+              const emp = emps.find(e => e.id === n.empleado_id);
+              const base = emp?.nomina || 0;
+              const diff = n.valor - base;
+              return (
+                <tr key={n.empleado_id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <td style={tdc}>{n.nombre}</td>
+                  <td style={tdc}>{n.cargo}</td>
+                  <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>{base ? fmt(base) : '—'}</td>
+                  <td style={tdc}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <input type="number" style={{ ...inp, width: 130 }}
+                        defaultValue={n.valor}
+                        onBlur={e => updateNomina.mutate({ empleado_id: n.empleado_id, valor: +e.target.value })} />
+                      {base > 0 && diff !== 0 && (
+                        <span style={{ fontSize: 11, color: diff > 0 ? C.green : C.red, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          {diff > 0 ? '+' : ''}{fmt(diff)}
+                        </span>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+            {nomina.length === 0 && <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados activos</td></tr>}
+            {nomina.length > 0 && (
+              <tr style={{ background: C.surface2, fontWeight: 700 }}>
+                <td colSpan={3} style={{ ...tdc, textAlign: 'right', color: C.text2, fontSize: 12 }}>Total nómina:</td>
+                <td style={{ ...tdc, color: C.red }}>{fmt(nomTotal)}</td>
               </tr>
-            ))}
-            {nomina.length === 0 && <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados activos</td></tr>}
+            )}
           </tbody>
         </table>
       </div>
@@ -617,13 +638,20 @@ export function Empleados() {
             {gastos.map(g => (
               <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                 <td style={tdc}>{g.nombre}</td>
-                <td style={{ ...tdc, textAlign: 'right' }}>{fmt(g.valor)}</td>
+                <td style={{ ...tdc, textAlign: 'right', fontWeight: 600 }}>{fmt(g.valor)}</td>
                 <td style={tdc}>
                   <Btn size="sm" variant="danger" onClick={() => { if (window.confirm('¿Eliminar gasto?')) delGasto.mutate(g.id); }}>Eliminar</Btn>
                 </td>
               </tr>
             ))}
             {gastos.length === 0 && <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin gastos este mes</td></tr>}
+            {gastos.length > 0 && (
+              <tr style={{ background: C.surface2, fontWeight: 700 }}>
+                <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>Total gastos:</td>
+                <td style={{ ...tdc, textAlign: 'right', color: C.amber }}>{fmt(gasTotal)}</td>
+                <td style={tdc} />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

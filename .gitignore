@@ -5,8 +5,11 @@ backend/logs/
 # Env local frontend
 frontend/.env.local
 
-# Claude
+# Claude / Superpowers
 .claude/
+.superpowers/
+docs/superpowers/
+docs/ui-proposals.html
 
 # Python
 __pycache__/

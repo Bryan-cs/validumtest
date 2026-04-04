@@ -1049,6 +1049,55 @@ export default function PortalCliente() {
           onSuccess={() => qc.invalidateQueries({ queryKey: ['portal-novedades-afil'] })}
         />
       )}
+
+      {/* ── Redes sociales ── */}
+      {tab === 'afiliados' && <div style={{ marginTop:32, textAlign:'center', paddingBottom:24 }}>
+        <p style={{ fontSize:12, letterSpacing:2, textTransform:'uppercase', color:'#1877F2', fontWeight:600, margin:'0 0 12px' }}>
+          Síguenos en Facebook
+        </p>
+        <div style={{ display:'flex', justifyContent:'center', gap:10, flexWrap:'wrap' }}>
+          {[
+            { href:'https://www.facebook.com/TechPlanetEsal',                       label:'Techplanet' },
+            { href:'https://www.facebook.com/profile.php?id=61584899039203',        label:'Protsecoop' },
+            { href:'https://www.facebook.com/profile.php?id=61586640354662',        label:'Carsecoop'  },
+          ].map(({ href, label }) => (
+            <a key={label} href={href} target="_blank" rel="noreferrer"
+              style={{ position:'relative', width:108, height:44, overflow:'hidden',
+                background:'#fff', borderRadius:10, textDecoration:'none',
+                display:'inline-flex', alignItems:'center', justifyContent:'center',
+                boxShadow:'inset -6px 0 12px -8px rgba(0,0,0,.35), inset 6px 0 12px -8px rgba(0,0,0,.35)',
+                cursor:'pointer' }}
+              onMouseEnter={e => {
+                e.currentTarget.querySelectorAll('.p-fb-top').forEach(el => el.style.top='-50%');
+                e.currentTarget.querySelectorAll('.p-fb-bot').forEach(el => el.style.top='100%');
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.querySelectorAll('.p-fb-top').forEach(el => el.style.top='0');
+                e.currentTarget.querySelectorAll('.p-fb-bot').forEach(el => el.style.top='50%');
+              }}
+            >
+              <div className="p-fb-top" style={{ position:'absolute', left:0, top:0, width:'100%', height:'50%',
+                background:'#0D3B6E', overflow:'hidden', zIndex:2,
+                transition:'top 400ms ease-in-out' }}>
+                <img src="/facebook-f.svg" alt="" style={{ position:'absolute', height:22, width:'auto',
+                  left:'50%', transform:'translateX(-50%)', top:11, pointerEvents:'none' }} />
+              </div>
+              <div className="p-fb-bot" style={{ position:'absolute', left:0, top:'50%', width:'100%', height:'50%',
+                background:'#0D3B6E', overflow:'hidden', zIndex:2,
+                transition:'top 400ms ease-in-out' }}>
+                <img src="/facebook-f.svg" alt="" style={{ position:'absolute', height:22, width:'auto',
+                  left:'50%', transform:'translateX(-50%)', top:-11, pointerEvents:'none' }} />
+              </div>
+              <span style={{ position:'relative', zIndex:1, color:'#1877F2', fontSize:13,
+                fontWeight:700, letterSpacing:.3 }}>{label}</span>
+            </a>
+          ))}
+        </div>
+        <p style={{ marginTop:18, fontSize:13.5, color:'#1877F2', letterSpacing:.3 }}>
+          Copyright © 2026 — "BBC File" Todos los derechos reservados
+        </p>
+      </div>}
+
     </div>
     </div>
   );

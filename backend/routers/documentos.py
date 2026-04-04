@@ -11,7 +11,7 @@ import models
 
 CONTEXTOS_VALIDOS = Literal[
     "afiliado", "novedad_pago", "novedad_afil", "novedad_retiro",
-    "resp_pago", "resp_afil", "resp_retiro", "planilla_pago",
+    "resp_pago", "resp_afil", "resp_retiro", "planilla_pago", "tarea",
 ]
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -137,6 +137,11 @@ async def subir_documento(
             unique_name = f"afiliados/{safe_cliente}/{safe_doc}/{file_id}"
         else:
             unique_name = f"afiliados/{safe_doc}/{file_id}"
+    elif contexto == "tarea":
+        unique_name = f"tareas/{contexto_id}/{file_id}" if contexto_id else f"tareas/{file_id}"
+    elif contexto in ("novedad_pago", "novedad_afil", "novedad_retiro",
+                      "resp_pago", "resp_afil", "resp_retiro"):
+        unique_name = f"novedades/{contexto_id}/{file_id}" if contexto_id else f"novedades/{file_id}"
     else:
         unique_name = file_id
     _upload_file(unique_name, content)
