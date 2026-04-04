@@ -55,7 +55,7 @@ def portal_afiliados(q: str = "", db: Session = Depends(get_db), token=Depends(_
         query = query.filter(
             or_(models.Afiliado.nombre.ilike(f"%{q}%"), models.Afiliado.doc.ilike(f"%{q}%"))
         )
-    afiliados = query.order_by(models.Afiliado.nombre).all()
+    afiliados = query.order_by(models.Afiliado.nombre).limit(1000).all()
 
     result = []
     for a in afiliados:
@@ -170,7 +170,7 @@ def portal_list_novedades(db: Session = Depends(get_db), token=Depends(_require_
     query = db.query(models.NovedadPago)
     if token.get("rol") != "admin":
         query = query.filter_by(username_cliente=token.get("sub"))
-    rows = query.order_by(models.NovedadPago.id.desc()).all()
+    rows = query.order_by(models.NovedadPago.id.desc()).limit(500).all()
     return [{
         "id": r.id, "cliente_ref": r.cliente_ref, "username_cliente": r.username_cliente,
         "mes": r.mes, "anio": r.anio,
@@ -256,22 +256,20 @@ def exportar_novedad_pago_excel(id: int, db: Session = Depends(get_db), token=De
 
 @router.patch("/novedades-pago/{id}/estado")
 def portal_update_novedad_estado(
-    id: int, body: dict,
+    id: int, body: schemas.EstadoSolicitudBody,
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
-    from .deps import require_admin as _ra
     if token.get("rol") != "admin":
         raise HTTPException(403, "Solo administradores pueden actualizar el estado")
     nov = db.query(models.NovedadPago).filter_by(id=id).first()
     if not nov:
         raise HTTPException(404, "Novedad no encontrada")
-    nuevo_estado = body.get("estado", nov.estado)
-    nov.estado = nuevo_estado
-    if body.get("respuesta") is not None:
-        nov.respuesta = body["respuesta"]
+    nov.estado = body.estado
+    if body.respuesta is not None:
+        nov.respuesta = body.respuesta
     if nov.username_cliente:
-        msg = f"Tu novedad de pago ({nov.mes} {nov.anio}) fue marcada como '{nuevo_estado}'"
+        msg = f"Tu novedad de pago ({nov.mes} {nov.anio}) fue marcada como '{body.estado}'"
         if nov.respuesta:
             msg += f". Nota del administrador: {nov.respuesta}"
         db.add(models.Notificacion(usuario=nov.username_cliente, mensaje=msg))
@@ -339,7 +337,7 @@ def portal_list_solicitudes(db: Session = Depends(get_db), token=Depends(_requir
     query = db.query(models.SolicitudRetiro)
     if token.get("rol") != "admin":
         query = query.filter_by(username_cliente=token.get("sub"))
-    rows = query.order_by(models.SolicitudRetiro.id.desc()).all()
+    rows = query.order_by(models.SolicitudRetiro.id.desc()).limit(500).all()
     return [{
         "id": r.id, "cliente_ref": r.cliente_ref,
         "afiliado_doc": r.afiliado_doc, "afiliado_nombre": r.afiliado_nombre,
@@ -350,7 +348,7 @@ def portal_list_solicitudes(db: Session = Depends(get_db), token=Depends(_requir
 
 @router.patch("/solicitudes-retiro/{id}/estado")
 def portal_update_solicitud_estado(
-    id: int, body: dict,
+    id: int, body: schemas.EstadoSolicitudBody,
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
@@ -359,12 +357,11 @@ def portal_update_solicitud_estado(
     sol = db.query(models.SolicitudRetiro).filter_by(id=id).first()
     if not sol:
         raise HTTPException(404, "Solicitud no encontrada")
-    nuevo_estado = body.get("estado", sol.estado)
-    sol.estado = nuevo_estado
-    if body.get("respuesta") is not None:
-        sol.respuesta = body["respuesta"]
+    sol.estado = body.estado
+    if body.respuesta is not None:
+        sol.respuesta = body.respuesta
     if sol.username_cliente:
-        msg = f"Tu solicitud de retiro de '{sol.afiliado_nombre}' fue marcada como '{nuevo_estado}'"
+        msg = f"Tu solicitud de retiro de '{sol.afiliado_nombre}' fue marcada como '{body.estado}'"
         if sol.respuesta:
             msg += f". Nota del administrador: {sol.respuesta}"
         db.add(models.Notificacion(usuario=sol.username_cliente, mensaje=msg))
@@ -432,7 +429,7 @@ def portal_list_novedades_afil(db: Session = Depends(get_db), token=Depends(_req
     query = db.query(models.SolicitudNovedad)
     if token.get("rol") != "admin":
         query = query.filter_by(username_cliente=token.get("sub"))
-    rows = query.order_by(models.SolicitudNovedad.id.desc()).all()
+    rows = query.order_by(models.SolicitudNovedad.id.desc()).limit(500).all()
     return [{
         "id": r.id, "cliente_ref": r.cliente_ref,
         "afiliado_doc": r.afiliado_doc, "afiliado_nombre": r.afiliado_nombre,
@@ -516,7 +513,7 @@ def portal_exportar_excel(db: Session = Depends(get_db), token=Depends(_require_
 
 @router.patch("/solicitudes-novedad/{id}/estado")
 def portal_update_novedad_afil_estado(
-    id: int, body: dict,
+    id: int, body: schemas.EstadoSolicitudBody,
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
@@ -525,12 +522,11 @@ def portal_update_novedad_afil_estado(
     s = db.query(models.SolicitudNovedad).filter_by(id=id).first()
     if not s:
         raise HTTPException(404, "Solicitud no encontrada")
-    nuevo_estado = body.get("estado", s.estado)
-    s.estado = nuevo_estado
-    if body.get("respuesta") is not None:
-        s.respuesta = body["respuesta"]
+    s.estado = body.estado
+    if body.respuesta is not None:
+        s.respuesta = body.respuesta
     if s.username_cliente:
-        msg = f"Tu novedad '{s.tipo}' para '{s.afiliado_nombre}' fue marcada como '{nuevo_estado}'"
+        msg = f"Tu novedad '{s.tipo}' para '{s.afiliado_nombre}' fue marcada como '{body.estado}'"
         if s.respuesta:
             msg += f". Nota del administrador: {s.respuesta}"
         db.add(models.Notificacion(usuario=s.username_cliente, mensaje=msg))

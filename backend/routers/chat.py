@@ -258,6 +258,7 @@ async def ws_chat(
                     remitente_nombre=nombre,
                     destinatario=ref,
                     texto=texto,
+                    leido=(rol != 'cliente'),  # mensajes de admin/empleado ya son "leídos"
                 )
                 db.add(msg)
                 db.commit()

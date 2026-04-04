@@ -1,12 +1,18 @@
 import os
 import io
 import uuid
+from typing import Literal
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Query
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
 from routers.deps import verify_token
 import models
+
+CONTEXTOS_VALIDOS = Literal[
+    "afiliado", "novedad_pago", "novedad_afil", "novedad_retiro",
+    "resp_pago", "resp_afil", "resp_retiro", "planilla_pago",
+]
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
 
@@ -105,7 +111,7 @@ def _delete_file(unique_name: str):
 async def subir_documento(
     file: UploadFile = File(...),
     afiliado_doc: str = Form(''),
-    contexto: str = Form("afiliado"),
+    contexto: CONTEXTOS_VALIDOS = Form("afiliado"),
     contexto_id: int = Form(None),
     db: Session = Depends(get_db),
     token=Depends(verify_token),

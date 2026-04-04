@@ -186,8 +186,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
 _allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
 if _allowed_origins == ["*"] and (os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ENVIRONMENT") == "production"):
-    from logger import logger as _cors_log
-    _cors_log.warning("⚠️  SEGURIDAD: ALLOWED_ORIGINS no configurado — CORS permite cualquier origen en producción")
+    raise RuntimeError(
+        "SEGURIDAD: ALLOWED_ORIGINS no está configurado. "
+        "Define la variable de entorno con los orígenes permitidos (ej: https://tu-app.vercel.app)."
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -551,12 +553,10 @@ def health_check(db: Session = Depends(get_db)):
         storage_err = str(e)
     status = "ok" if db_ok else "degraded"
     code = 200 if db_ok else 503
-    result = {"status": status, "version": APP_VERSION, "db": "ok" if db_ok else "error"}
+    result = {"status": status, "db": "ok" if db_ok else "error"}
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"
     result["storage"] = "r2" if storage_ok else "local"
-    if storage_err:
-        result["_storage_err"] = storage_err
     if _start_time:
         uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
         result["uptime_seconds"] = int(uptime)

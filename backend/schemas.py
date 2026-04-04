@@ -1,5 +1,5 @@
 from pydantic import BaseModel, field_validator
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Literal
 from datetime import datetime
 
 class LoginRequest(BaseModel):
@@ -37,6 +37,13 @@ class AfiliadoCreate(BaseModel):
     detalle: str = ""
     ibc: Optional[float] = None
     fecha_ingreso: str = ""
+
+    @field_validator('ibc', mode='before')
+    @classmethod
+    def ibc_positivo(cls, v):
+        if v is not None and float(v) <= 0:
+            raise ValueError('IBC debe ser mayor a 0')
+        return v
     fecha_afiliacion: str = ""
     registrado_por: str = ""
 
@@ -245,3 +252,7 @@ class RefreshTokenRequest(BaseModel):
 class TareaComentarioCreate(BaseModel):
     texto: str
     usuario: str = ""
+
+class EstadoSolicitudBody(BaseModel):
+    estado: Literal["pendiente", "procesado", "atendido", "ejecutado", "rechazado"]
+    respuesta: Optional[str] = None

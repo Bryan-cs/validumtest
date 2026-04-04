@@ -124,8 +124,13 @@ def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Sessi
     if not user or not user.activo:
         raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")
 
-    new_access = create_token({"sub": payload["sub"], "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""})
-    return {"access_token": new_access, "token_type": "bearer"}
+    claims = {"sub": payload["sub"], "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
+    new_access = create_token(claims)
+    new_refresh = create_token(
+        {**claims, "type": "refresh"},
+        expires=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
+    )
+    return {"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"}
 
 
 @router.get("/me")
