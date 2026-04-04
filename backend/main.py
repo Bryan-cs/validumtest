@@ -332,8 +332,9 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(re
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
 @app.get("/retiros")
 def list_retiros(anio: str = "", mes: str = "", doc: str = "",
+                 skip: int = 0, limit: int = 500,
                  db: Session = Depends(get_db), token=Depends(verify_token)):
-    return crud.get_retiros(db, anio=anio, mes=mes, doc=doc)
+    return crud.get_retiros(db, anio=anio, mes=mes, doc=doc, skip=skip, limit=limit)
 
 
 @app.post("/retiros", status_code=201)

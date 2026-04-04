@@ -378,15 +378,19 @@ def delete_factura(db, id, user=""):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # invalidar caché al eliminar factura
 
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
-def get_retiros(db, anio="", mes="", doc=""):
+def get_retiros(db, anio="", mes="", doc="", skip: int = 0, limit: int = 500):
     q = db.query(models.Retiro)
     if doc:  q = q.filter(models.Retiro.doc == doc)
     if anio: q = q.filter_by(anio=anio)
     if mes:  q = q.filter_by(mes=mes)
-    rows = q.order_by(models.Retiro.id.desc()).all()
-    return [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
-             "fecha":r.fecha,"motivo":r.motivo,"obs":r.obs,"mes":r.mes,
-             "anio":r.anio,"registrado_por":r.registrado_por} for r in rows]
+    total = q.count()
+    rows = q.order_by(models.Retiro.id.desc()).offset(skip).limit(limit).all()
+    return {
+        "total": total,
+        "items": [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
+                   "fecha":r.fecha,"motivo":r.motivo,"obs":r.obs,"mes":r.mes,
+                   "anio":r.anio,"registrado_por":r.registrado_por} for r in rows],
+    }
 
 def create_retiro(db, data: schemas.RetiroCreate):
     from sqlalchemy.exc import IntegrityError
@@ -537,7 +541,7 @@ def get_config(db):
         "mes_inicio_cobro": c.mes_inicio_cobro,
         "anio_inicio_cobro": c.anio_inicio_cobro,
     }
-    _cache_set("config:global", result)
+    _cache_set("config:global", result, ttl=TTL_CONFIG)
     return result
 
 def update_config(db, data: schemas.ConfigUpdate, user="sistema"):
@@ -561,7 +565,7 @@ def get_listas(db):
     if cached is not None:
         return cached
     result = {l.nombre: json.loads(l.items or "[]") for l in db.query(models.Lista).all()}
-    _cache_set("listas:all", result)
+    _cache_set("listas:all", result, ttl=TTL_LISTAS)
     return result
 
 def update_lista(db, nombre, items, user="sistema"):
@@ -714,7 +718,7 @@ def get_dashboard(db, anio="", mes=""):
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "pendiente_cobro_total": float(pend_total), "meses_factor": meses_factor,
     }
-    _cache_set(cache_key, result)
+    _cache_set(cache_key, result, ttl=TTL_DASHBOARD)
     return result
 
 # ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
@@ -747,7 +751,12 @@ def get_dashboard_meses(db, anio=""):
 import time as _time
 import os as _os
 
-CACHE_TTL = 120  # segundos
+# TTL diferenciados según frecuencia de cambio
+TTL_COBRO     = 120    # 2 min  — cambia con cada factura/afiliado
+TTL_DASHBOARD = 120    # 2 min  — mismo ritmo que cobro
+TTL_AFILIADOS = 180    # 3 min  — consultas frecuentes durante jornada
+TTL_CONFIG    = 600    # 10 min — cambia solo cuando admin edita configuración
+TTL_LISTAS    = 1800   # 30 min — EPS, ARL, tipos de cotizante (casi estáticos)
 
 # Intentar conectar a Redis si REDIS_URL está disponible
 _redis_client = None
@@ -778,28 +787,28 @@ def _cache_get(key: str):
         except Exception:
             pass
         return None
-    # Fallback memoria
+    # Fallback memoria — usa el TTL guardado por entrada
     with _cache_lock:
         entry = _mem_cache.get(key)
-        if entry and (_time.time() - entry["ts"]) < CACHE_TTL:
+        if entry and (_time.time() - entry["ts"]) < entry["ttl"]:
             return entry["data"]
         return None
 
 
-def _cache_set(key: str, data):
-    """Guarda un valor en el caché con TTL automático."""
+def _cache_set(key: str, data, ttl: int = TTL_COBRO):
+    """Guarda un valor en el caché con TTL configurable."""
     if _redis_client:
         try:
-            _redis_client.setex(key, CACHE_TTL, json.dumps(data, default=str))
+            _redis_client.setex(key, ttl, json.dumps(data, default=str))
         except Exception:
             pass
         return
     # Fallback memoria
     with _cache_lock:
-        _mem_cache[key] = {"data": data, "ts": _time.time()}
+        _mem_cache[key] = {"data": data, "ts": _time.time(), "ttl": ttl}
         if len(_mem_cache) > 500:
             now = _time.time()
-            expired = [k for k, v in list(_mem_cache.items()) if (now - v["ts"]) >= CACHE_TTL]
+            expired = [k for k, v in list(_mem_cache.items()) if (now - v["ts"]) >= v["ttl"]]
             for k in expired:
                 _mem_cache.pop(k, None)
 
@@ -949,7 +958,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
 
     orden = {"VENCIDO": 0, "HOY": 1, "PROXIMO": 2, "COBRADO": 3}
     rows.sort(key=lambda r: (orden.get(r["estado"], 4), r["nombre"], r["anio"], r["mes"]))
-    _cache_set(cache_key, rows)
+    _cache_set(cache_key, rows, ttl=TTL_COBRO)
     return rows
 
 # ─── TAREAS ───────────────────────────────────────────────────────────────────
@@ -1001,16 +1010,20 @@ def create_tarea(db, data: schemas.TareaCreate):
         db.commit()
     return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
 
-def get_tareas(db, username: str, rol: str):
+def get_tareas(db, username: str, rol: str, skip: int = 0, limit: int = 200):
     from sqlalchemy import or_
     q = db.query(models.Tarea)
     if rol != "admin":
         q = q.filter_by(asignado_a=username)
     q = q.filter(or_(models.Tarea.privada == False, models.Tarea.creado_por == username))
-    tareas = q.order_by(models.Tarea.creado.desc()).all()
+    total = q.count()
+    tareas = q.order_by(models.Tarea.creado.desc()).offset(skip).limit(limit).all()
     # Batch load comments: 1 query instead of N
     cmap = _load_comments_map(db, [t.id for t in tareas])
-    return [_tarea_to_dict(t, cmap) for t in tareas]
+    return {
+        "total": total,
+        "items": [_tarea_to_dict(t, cmap) for t in tareas],
+    }
 
 def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, nota: str = "", rol: str = ""):
     """Empleado cambia estado (pendiente→en_proceso→completada). Notifica al admin."""

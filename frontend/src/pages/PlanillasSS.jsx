@@ -22,7 +22,7 @@ export default function PlanillasSS() {
 
   const { data: planillas = [], isLoading } = useQuery({
     queryKey: ['planillas', filtroCliente, filtroMes, filtroAnio],
-    queryFn: () => api.get('/planillas', { params: { cliente: filtroCliente, mes: filtroMes, anio: filtroAnio } }).then(r => r.data),
+    queryFn: () => api.get('/planillas', { params: { cliente: filtroCliente, mes: filtroMes, anio: filtroAnio } }).then(r => r.data.items || []),
   });
 
   const { data: listas = {} } = useQuery({

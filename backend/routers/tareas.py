@@ -9,8 +9,9 @@ router = APIRouter(prefix="/tareas", tags=["tareas"])
 
 
 @router.get("")
-def list_tareas(db: Session = Depends(get_db), token=Depends(verify_token)):
-    return crud.get_tareas(db, token["sub"], token["rol"])
+def list_tareas(skip: int = 0, limit: int = 200,
+                db: Session = Depends(get_db), token=Depends(verify_token)):
+    return crud.get_tareas(db, token["sub"], token["rol"], skip=skip, limit=limit)
 
 
 @router.post("", status_code=201)

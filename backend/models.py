@@ -25,6 +25,10 @@ class Usuario(Base):
 
 class Afiliado(Base):
     __tablename__ = "afiliados"
+    __table_args__ = (
+        Index('ix_afiliado_activo_estado_srv', 'activo', 'estado_srv'),  # cobro: activo=True + estado_srv
+        Index('ix_afiliado_cliente_estado',    'cliente_txt', 'estado'), # filtro cliente+estado
+    )
     id              = Column(Integer, primary_key=True, index=True)
     nombre          = Column(String(150), index=True)
     tipo_doc        = Column(String(10), default="CC")
@@ -133,6 +137,9 @@ class Empleado(Base):
 
 class Gasto(Base):
     __tablename__ = "gastos"
+    __table_args__ = (
+        Index('ix_gasto_anio_mes', 'anio', 'mes'),  # dashboard financiero
+    )
     id     = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(120))
     valor  = Column(Float, default=0)
@@ -142,6 +149,9 @@ class Gasto(Base):
 
 class NominaMensual(Base):
     __tablename__ = "nomina_mensual"
+    __table_args__ = (
+        Index('ix_nomina_empleado_anio_mes', 'empleado_id', 'anio', 'mes'),
+    )
     id          = Column(Integer, primary_key=True, index=True)
     empleado_id = Column(Integer, index=True)
     mes         = Column(Integer)
@@ -222,6 +232,9 @@ class Actividad(Base):
 
 class Tarea(Base):
     __tablename__ = "tareas"
+    __table_args__ = (
+        Index('ix_tarea_estado_asignado', 'estado', 'asignado_a'),  # tareas activas por usuario
+    )
     id            = Column(Integer, primary_key=True)
     titulo        = Column(String(200))
     descripcion   = Column(Text, default="")
@@ -252,6 +265,9 @@ class LoginAttempt(Base):
 
 class Notificacion(Base):
     __tablename__ = "notificaciones"
+    __table_args__ = (
+        Index('ix_notificacion_usuario_leida', 'usuario', 'leida'),  # no leídas por usuario
+    )
     id       = Column(Integer, primary_key=True)
     usuario  = Column(String(60), index=True)
     mensaje  = Column(String(300))
@@ -261,6 +277,9 @@ class Notificacion(Base):
 
 class PlanillaPago(Base):
     __tablename__ = "planillas_pago"
+    __table_args__ = (
+        Index('ix_planilla_cliente_anio_mes', 'cliente_ref', 'anio', 'mes'),
+    )
     id           = Column(Integer, primary_key=True, index=True)
     cliente_ref  = Column(String(150), index=True)     # cliente_txt del afiliado
     mes          = Column(String(20))                   # "Enero", "Febrero"...
