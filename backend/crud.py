@@ -378,15 +378,19 @@ def delete_factura(db, id, user=""):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # invalidar caché al eliminar factura
 
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
-def get_retiros(db, anio="", mes="", doc=""):
+def get_retiros(db, anio="", mes="", doc="", skip: int = 0, limit: int = 500):
     q = db.query(models.Retiro)
     if doc:  q = q.filter(models.Retiro.doc == doc)
     if anio: q = q.filter_by(anio=anio)
     if mes:  q = q.filter_by(mes=mes)
-    rows = q.order_by(models.Retiro.id.desc()).all()
-    return [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
-             "fecha":r.fecha,"motivo":r.motivo,"obs":r.obs,"mes":r.mes,
-             "anio":r.anio,"registrado_por":r.registrado_por} for r in rows]
+    total = q.count()
+    rows = q.order_by(models.Retiro.id.desc()).offset(skip).limit(limit).all()
+    return {
+        "total": total,
+        "items": [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
+                   "fecha":r.fecha,"motivo":r.motivo,"obs":r.obs,"mes":r.mes,
+                   "anio":r.anio,"registrado_por":r.registrado_por} for r in rows],
+    }
 
 def create_retiro(db, data: schemas.RetiroCreate):
     from sqlalchemy.exc import IntegrityError
@@ -1006,16 +1010,20 @@ def create_tarea(db, data: schemas.TareaCreate):
         db.commit()
     return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
 
-def get_tareas(db, username: str, rol: str):
+def get_tareas(db, username: str, rol: str, skip: int = 0, limit: int = 200):
     from sqlalchemy import or_
     q = db.query(models.Tarea)
     if rol != "admin":
         q = q.filter_by(asignado_a=username)
     q = q.filter(or_(models.Tarea.privada == False, models.Tarea.creado_por == username))
-    tareas = q.order_by(models.Tarea.creado.desc()).all()
+    total = q.count()
+    tareas = q.order_by(models.Tarea.creado.desc()).offset(skip).limit(limit).all()
     # Batch load comments: 1 query instead of N
     cmap = _load_comments_map(db, [t.id for t in tareas])
-    return [_tarea_to_dict(t, cmap) for t in tareas]
+    return {
+        "total": total,
+        "items": [_tarea_to_dict(t, cmap) for t in tareas],
+    }
 
 def cambiar_estado_tarea(db, tarea_id: int, nuevo_estado: str, usuario: str, nota: str = "", rol: str = ""):
     """Empleado cambia estado (pendiente→en_proceso→completada). Notifica al admin."""

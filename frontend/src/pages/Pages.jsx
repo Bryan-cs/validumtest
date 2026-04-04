@@ -131,7 +131,7 @@ export function Retiros() {
 
   const { data: rows=[], isLoading } = useQuery({
     queryKey:['retiros',anio,mes],
-    queryFn:()=>api.get('/retiros',{params:{anio,mes}}).then(r=>r.data),
+    queryFn:()=>api.get('/retiros',{params:{anio,mes}}).then(r=>r.data.items||[]),
   });
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
 
@@ -157,7 +157,7 @@ export function Retiros() {
 
   const { data: resultadoConsulta=[], isLoading: loadConsulta, isFetched: consultaHecha } = useQuery({
     queryKey: ['retiro_consulta', docConsulta],
-    queryFn: () => api.get('/retiros', { params: { doc: docConsulta } }).then(r => r.data),
+    queryFn: () => api.get('/retiros', { params: { doc: docConsulta } }).then(r => r.data.items||[]),
     enabled: !!docConsulta,
   });
 

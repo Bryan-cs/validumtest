@@ -14,14 +14,16 @@ router = APIRouter(prefix="/planillas", tags=["planillas"])
 
 @router.get("")
 def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
+                     skip: int = 0, limit: int = 300,
                      db: Session = Depends(get_db), token=Depends(require_admin)):
     q = db.query(models.PlanillaPago).order_by(models.PlanillaPago.id.desc())
     if cliente: q = q.filter(models.PlanillaPago.cliente_ref == cliente)
     if mes:     q = q.filter(models.PlanillaPago.mes == mes)
     if anio:    q = q.filter(models.PlanillaPago.anio == anio)
-    rows = q.all()
+    total = q.count()
+    rows = q.offset(skip).limit(limit).all()
     if not rows:
-        return []
+        return {"total": 0, "items": []}
     # Batch load all documents (avoid N+1)
     planilla_ids = [p.id for p in rows]
     all_docs = db.query(models.Documento).filter(
@@ -31,7 +33,7 @@ def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
     docs_by_planilla = {}
     for d in all_docs:
         docs_by_planilla.setdefault(d.contexto_id, []).append(d)
-    return [
+    items = [
         {
             "id": p.id, "cliente_ref": p.cliente_ref, "mes": p.mes, "anio": p.anio,
             "observaciones": p.observaciones, "subido_por": p.subido_por,
@@ -40,6 +42,7 @@ def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
         }
         for p in rows
     ]
+    return {"total": total, "items": items}
 
 
 @router.post("")
