@@ -19,9 +19,10 @@ REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 security = HTTPBearer()
 
-# Cache en memoria para verificación de usuario activo (TTL 5 min)
+# Cache en memoria para verificación de usuario activo (TTL 5 min, máx 500 entradas)
 _user_active_cache = {}  # {username: (is_active, timestamp)}
-_USER_CACHE_TTL = 300  # 5 minutos
+_USER_CACHE_TTL  = 300   # 5 minutos
+_USER_CACHE_MAX  = 500   # entradas máximas
 
 
 def _is_user_active(username: str) -> bool:
@@ -39,6 +40,8 @@ def _is_user_active(username: str) -> bool:
         active = bool(user and user.activo)
     finally:
         db.close()
+    if len(_user_active_cache) >= _USER_CACHE_MAX:
+        _user_active_cache.clear()
     _user_active_cache[username] = (active, now)
     return active
 
