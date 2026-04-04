@@ -87,7 +87,11 @@ export default function Chat() {
       try {
         const msg = JSON.parse(e.data);
         setMensajes(prev => [...prev, msg]);
-        if (msg.remitente !== userRef.current?.username) _beep();
+        if (msg.remitente !== userRef.current?.username) {
+          _beep();
+          qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
+          qc.invalidateQueries({ queryKey: ['chat-clientes'] });
+        }
       } catch (_) {}
     };
     wsRef.current = ws;
@@ -104,7 +108,10 @@ export default function Chat() {
       cargarHistorial('privado', clienteActivo);
       ws = conectarWS('privado', clienteActivo);
       api.put(`/chat/mensajes/${clienteActivo}/leer`)
-        .then(() => qc.invalidateQueries({ queryKey: ['chat-clientes'] }))
+        .then(() => {
+          qc.invalidateQueries({ queryKey: ['chat-clientes'] });
+          qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
+        })
         .catch(() => {});
     }
     return () => { if (ws) { ws.close(); wsRef.current = null; } };

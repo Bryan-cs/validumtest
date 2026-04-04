@@ -103,10 +103,11 @@ export function Btn({ children, onClick, variant='primary', size='md', disabled,
 }
 
 export function Input({ label, value, onChange, placeholder, type='text', style }) {
+  const uid = label ? `ui-input-${label.replace(/\s+/g,'-').toLowerCase()}` : undefined;
   return (
     <div style={{ marginBottom: 12, ...style }}>
-      {label && <label style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
-      <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      {label && <label htmlFor={uid} style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
+      <input id={uid} type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
         className="ui-input"
         style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.border}`,
           borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box', color:C.text, background:C.surface,
@@ -116,10 +117,11 @@ export function Input({ label, value, onChange, placeholder, type='text', style 
 }
 
 export function Select({ label, value, onChange, options = [], style }) {
+  const uid = label ? `ui-select-${label.replace(/\s+/g,'-').toLowerCase()}` : undefined;
   return (
     <div style={{ marginBottom: 12, ...style }}>
-      {label && <label style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
-      <select value={value} onChange={e=>onChange(e.target.value)}
+      {label && <label htmlFor={uid} style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
+      <select id={uid} value={value} onChange={e=>onChange(e.target.value)}
         className="ui-input"
         style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.border}`,
           borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box',
