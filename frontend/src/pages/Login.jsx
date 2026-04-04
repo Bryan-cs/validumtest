@@ -291,19 +291,22 @@ export default function Login() {
         .fb-door-top    { top: 0; }
         .fb-door-bottom { top: 50%; }
 
-        /* logo Facebook split entre las dos mitades de la puerta */
+        /* logo Facebook split entre las dos mitades de la puerta.
+           El ícono mide 22px de alto, centrado en los 44px totales:
+           offset = (44 - 22) / 2 = 11px
+           Top door:    image.top = 11px  → visible 11–22px (top half)
+           Bottom door: image.top = -11px → visible 0–11px  (bottom half) */
         .fb-f-img {
           position: absolute;
-          width: 13px;
-          height: 44px;
-          object-fit: contain;
-          object-position: top center;
+          height: 22px;
+          width: auto;
+          display: block;
           left: 50%;
           transform: translateX(-50%);
-          top: 0;
+          top: 11px;
           pointer-events: none;
         }
-        .fb-door-bottom .fb-f-img { top: -22px; }
+        .fb-door-bottom .fb-f-img { top: -11px; }
 
         /* nombre revelado cuando las puertas abren */
         .fb-icon {

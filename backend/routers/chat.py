@@ -100,7 +100,7 @@ def _to_dict(m: models.Mensaje) -> dict:
         "remitente_nombre": m.remitente_nombre,
         "destinatario":     m.destinatario,
         "texto":            m.texto,
-        "creado":           m.creado.isoformat() if m.creado else None,
+        "creado":           m.creado.isoformat() + 'Z' if m.creado else None,
         "leido":            m.leido,
     }
 
