@@ -86,7 +86,8 @@ def detener_listener():
         _pubsub_task = None
 
 # ─── HELPERS ────────────────────────────────────────────────────────────────
-CANAL_GRUPAL = "chat:grupal"
+CANAL_GRUPAL        = "chat:grupal"
+CANAL_ALERTAS_ADMIN = "chat:alertas-admin"
 
 def _canal_privado(cliente_ref: str) -> str:
     return f"chat:privado:{cliente_ref}"
@@ -271,6 +272,9 @@ async def ws_chat(
                 db.close()
 
             await _publicar(canal, msg_dict)
+            # Notificar a admins en tiempo real cuando un cliente envía mensaje privado
+            if tipo == "privado" and rol == "cliente":
+                await _publicar(CANAL_ALERTAS_ADMIN, {"tipo": "alerta", "cliente_ref": ref})
 
     except WebSocketDisconnect:
         manager.disconnect(ws, canal)
@@ -278,3 +282,27 @@ async def ws_chat(
         from logger import logger as _log
         _log.error(f"ws_chat error (canal={canal}, user={username}): {exc}", exc_info=True)
         manager.disconnect(ws, canal)
+
+
+@router.websocket("/ws/chat-alertas")
+async def ws_chat_alertas(ws: WebSocket, token: str = Query(...)):
+    """WebSocket de solo lectura para admins — recibe alertas cuando llega un mensaje privado nuevo."""
+    try:
+        payload = _decode_token(token)
+    except Exception:
+        await ws.close(code=1008)
+        return
+
+    if payload.get("rol") != "admin":
+        await ws.close(code=1008)
+        return
+
+    await manager.connect(ws, CANAL_ALERTAS_ADMIN)
+    try:
+        # Solo recibe pings del cliente para mantener viva la conexión
+        while True:
+            await ws.receive_text()
+    except WebSocketDisconnect:
+        manager.disconnect(ws, CANAL_ALERTAS_ADMIN)
+    except Exception:
+        manager.disconnect(ws, CANAL_ALERTAS_ADMIN)

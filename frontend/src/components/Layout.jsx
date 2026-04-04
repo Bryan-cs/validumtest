@@ -4,6 +4,28 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../hooks/useAuth';
 import api from '../utils/api';
 
+const _WS_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000')
+  .replace(/^https?/, m => m === 'https' ? 'wss' : 'ws');
+
+function _playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    ctx.resume().then(() => {
+      const osc  = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(1000, ctx.currentTime);
+      gain.gain.setValueAtTime(0.28, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+      osc.start(ctx.currentTime);
+      osc.stop(ctx.currentTime + 0.25);
+      osc.addEventListener('ended', () => ctx.close());
+    }).catch(() => {});
+  } catch (_) {}
+}
+
 const SIDEBAR_MIN = 48;
 const SIDEBAR_MAX = 380;
 const SIDEBAR_DEFAULT = 220;
@@ -37,7 +59,7 @@ const navItems = (rol) => [
 ];
 
 export default function Layout() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, token } = useAuthStore();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [width, setWidth] = useState(SIDEBAR_DEFAULT);
@@ -93,34 +115,37 @@ export default function Layout() {
   const { data: chatBadge = { count: 0 } } = useQuery({
     queryKey: ['chat-no-leidos'],
     queryFn: () => api.get('/chat/no-leidos').then(r => r.data),
-    refetchInterval: 30_000,
+    refetchInterval: 15_000,
     enabled: user?.rol === 'admin',
   });
-  const prevChatCount = useRef(null);
 
+  // WS persistente para recibir alertas de mensajes privados nuevos en tiempo real
   useEffect(() => {
-    if (prevChatCount.current === null) {
-      prevChatCount.current = chatBadge.count;
-      return;
-    }
-    if (chatBadge.count > prevChatCount.current) {
-      try {
-        const ctx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(1000, ctx.currentTime);
-        gain.gain.setValueAtTime(0.25, ctx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.2);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.2);
-        osc.addEventListener('ended', () => ctx.close());
-      } catch (_) {}
-    }
-    prevChatCount.current = chatBadge.count;
-  }, [chatBadge.count]);
+    if (user?.rol !== 'admin' || !token) return;
+    let ws;
+    let reconnectTimer;
+    let active = true;
+
+    const connect = () => {
+      if (!active) return;
+      ws = new WebSocket(`${_WS_BASE}/ws/chat-alertas?token=${token}`);
+      ws.onmessage = () => {
+        qc.invalidateQueries({ queryKey: ['chat-no-leidos'] });
+        qc.invalidateQueries({ queryKey: ['chat-clientes'] });
+        _playBeep();
+      };
+      ws.onclose = () => {
+        if (active) reconnectTimer = setTimeout(connect, 5000);
+      };
+    };
+    connect();
+
+    return () => {
+      active = false;
+      clearTimeout(reconnectTimer);
+      ws?.close();
+    };
+  }, [user?.rol, token, qc]);
 
   const abrirNotifs = () => {
     setShowNotifs(v => !v);
