@@ -12,12 +12,12 @@ const WS_BASE = (process.env.REACT_APP_API_URL || 'http://localhost:8000')
 
 function fmtHora(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
+  return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Bogota' });
 }
 
 function fmtFecha(iso) {
   if (!iso) return '';
-  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('es-CO', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'America/Bogota' });
 }
 
 export default function Chat() {

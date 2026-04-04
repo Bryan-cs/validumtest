@@ -291,21 +291,19 @@ export default function Login() {
         .fb-door-top    { top: 0; }
         .fb-door-bottom { top: 50%; }
 
-        /* "f" split entre las dos mitades de la puerta */
-        .fb-door::before {
-          content: "f";
+        /* logo Facebook split entre las dos mitades de la puerta */
+        .fb-f-img {
           position: absolute;
-          font-family: Georgia, serif;
-          font-weight: 900;
-          font-size: 22px;
-          color: rgba(255,255,255,.9);
+          width: 13px;
+          height: 44px;
+          object-fit: contain;
+          object-position: top center;
           left: 50%;
           transform: translateX(-50%);
-          line-height: 44px;
-          height: 44px;
+          top: 0;
+          pointer-events: none;
         }
-        .fb-door-top::before    { top: 0; }
-        .fb-door-bottom::before { top: -22px; }
+        .fb-door-bottom .fb-f-img { top: -22px; }
 
         /* nombre revelado cuando las puertas abren */
         .fb-icon {
@@ -406,18 +404,18 @@ export default function Login() {
               <p className="lr-social-label">Síguenos en Facebook</p>
               <div className="lr-social-row">
                 <a href="https://www.facebook.com/TechPlanetEsal" target="_blank" rel="noreferrer" className="fb-trapdoor">
-                  <div className="fb-door fb-door-top" />
-                  <div className="fb-door fb-door-bottom" />
+                  <div className="fb-door fb-door-top"><img src="/facebook-f.svg" className="fb-f-img" alt="" /></div>
+                  <div className="fb-door fb-door-bottom"><img src="/facebook-f.svg" className="fb-f-img" alt="" /></div>
                   <span className="fb-icon">Techplanet</span>
                 </a>
                 <a href="https://www.facebook.com/profile.php?id=61584899039203" target="_blank" rel="noreferrer" className="fb-trapdoor">
-                  <div className="fb-door fb-door-top" />
-                  <div className="fb-door fb-door-bottom" />
+                  <div className="fb-door fb-door-top"><img src="/facebook-f.svg" className="fb-f-img" alt="" /></div>
+                  <div className="fb-door fb-door-bottom"><img src="/facebook-f.svg" className="fb-f-img" alt="" /></div>
                   <span className="fb-icon">Protsecoop</span>
                 </a>
                 <a href="https://www.facebook.com/profile.php?id=61586640354662" target="_blank" rel="noreferrer" className="fb-trapdoor">
-                  <div className="fb-door fb-door-top" />
-                  <div className="fb-door fb-door-bottom" />
+                  <div className="fb-door fb-door-top"><img src="/facebook-f.svg" className="fb-f-img" alt="" /></div>
+                  <div className="fb-door fb-door-bottom"><img src="/facebook-f.svg" className="fb-f-img" alt="" /></div>
                   <span className="fb-icon">Carsecoop</span>
                 </a>
               </div>
