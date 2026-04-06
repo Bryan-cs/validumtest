@@ -638,7 +638,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                         window.open(`https://wa.me/${phone}?text=${msg}`, '_blank');
                       }}>💬 WhatsApp</Btn>
                       <Btn size="sm" variant="secondary"
-                        onClick={(e)=>{e.stopPropagation();dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.codigo}.pdf`);}}>📄 PDF</Btn>
+                        onClick={(e)=>{e.stopPropagation();dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.nombre_afiliado?.replace(/ /g,'_')}_${f.codigo}.pdf`);}}>📄 PDF</Btn>
                       <Btn size="sm" variant="danger"
                         onClick={(e)=>{ e.stopPropagation(); if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
                     </div>

@@ -319,7 +319,7 @@ export default function Afiliados() {
       {tab === 'activos' && (
         <>
           <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
-            value={busqueda} onChange={e=>handleBusqueda(e.target.value)}
+            value={busqueda} onChange={e=>setBusqueda(e.target.value)}
             style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
               fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
           <BarraFiltros
