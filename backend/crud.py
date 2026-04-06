@@ -21,6 +21,9 @@ MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
 def _log(db: Session, usuario: str, accion: str, modulo: str, detalle: str = ""):
+    u = db.query(models.Usuario).filter_by(username=usuario).first()
+    if u and u.rol == "admin":
+        return
     db.add(models.Actividad(usuario=usuario, accion=accion, modulo=modulo, detalle=detalle))
 
 def _get_ibc(db: Session, afiliado: models.Afiliado = None) -> float:

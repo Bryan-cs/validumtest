@@ -288,7 +288,7 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
         lista_bancos = db.query(models.Lista).filter_by(nombre='bancos').first()
         if lista_bancos:
             bancos_lista = [b for b in json.loads(lista_bancos.items or "[]")
-                            if b.strip().lower() not in ('efectivo', 'cash')]
+                            if b.strip().lower() not in ('efectivo', 'cash', 'otro', 'other')]
     except Exception:
         pass
 

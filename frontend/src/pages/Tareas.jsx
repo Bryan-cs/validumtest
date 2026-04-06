@@ -116,15 +116,17 @@ export default function Tareas() {
   const qc = useQueryClient();
   const isAdmin = user?.rol === 'admin';
 
-  const [tab, setTab]               = useState('pendiente');
+  const [tab, setTab]               = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_tareas_filtros'))?.tab ?? 'pendiente'; } catch { return 'pendiente'; } });
   const [modalNueva, setModalNueva] = useState(false);
   const [form, setForm]             = useState({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
   const [expandida, setExpandida]   = useState(null);
   const [notaEstado, setNotaEstado] = useState({});
   const [txtComent, setTxtComent]   = useState({});
   const [confirm, setConfirm]       = useState(null);
-  const [fechaDesde, setFechaDesde] = useState('');
-  const [fechaHasta, setFechaHasta] = useState('');
+  const [fechaDesde, setFechaDesde] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_tareas_filtros'))?.fechaDesde ?? ''; } catch { return ''; } });
+  const [fechaHasta, setFechaHasta] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_tareas_filtros'))?.fechaHasta ?? ''; } catch { return ''; } });
+
+  useEffect(() => { try { localStorage.setItem('bbc_tareas_filtros', JSON.stringify({ tab, fechaDesde, fechaHasta })); } catch {} }, [tab, fechaDesde, fechaHasta]);
 
   // Selección múltiple (solo en tab completada)
   const [seleccionadas, setSeleccionadas] = useState(new Set());

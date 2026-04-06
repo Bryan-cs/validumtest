@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -14,9 +14,11 @@ const sel = { padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius
 
 export default function PlanillasSS() {
   const qc = useQueryClient();
-  const [filtroCliente, setFiltroCliente] = useState('');
-  const [filtroMes, setFiltroMes] = useState('');
-  const [filtroAnio, setFiltroAnio] = useState('');
+  const [filtroCliente, setFiltroCliente] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroCliente ?? ''; } catch { return ''; } });
+  const [filtroMes, setFiltroMes] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroMes ?? ''; } catch { return ''; } });
+  const [filtroAnio, setFiltroAnio] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroAnio ?? ''; } catch { return ''; } });
+
+  useEffect(() => { try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente, filtroMes, filtroAnio })); } catch {} }, [filtroCliente, filtroMes, filtroAnio]);
   const [showModal, setShowModal] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
 

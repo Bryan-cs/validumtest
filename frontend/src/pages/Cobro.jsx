@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
 import { C, Btn, PageHeader, StatCard, fmt } from '../components/UI';
@@ -33,14 +33,16 @@ const ANIOS = [String(new Date().getFullYear()), String(new Date().getFullYear()
 const POR_PAG = 50;
 
 export default function Cobro() {
-  const [filtros, setFiltros] = useState({ empresa:[], cliente:[], estado:[], subtipo:[] });
+  const [filtros, setFiltros] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.filtros ?? { empresa:[], cliente:[], estado:[], subtipo:[] }; } catch { return { empresa:[], cliente:[], estado:[], subtipo:[] }; } });
   const [expanded, setExp] = useState(null);
   const [novedadModal, setNovedadModal] = useState(null);
-  const [mesFiltro,  setMesFiltro]  = useState('');
-  const [anioFiltro, setAnioFiltro] = useState('');
-  const [docBuscar, setDocBuscar] = useState('');
-  const [docFiltro, setDocFiltro] = useState('');
+  const [mesFiltro,  setMesFiltro]  = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.mesFiltro ?? ''; } catch { return ''; } });
+  const [anioFiltro, setAnioFiltro] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.anioFiltro ?? ''; } catch { return ''; } });
+  const [docBuscar, setDocBuscar] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.docBuscar ?? ''; } catch { return ''; } });
+  const [docFiltro, setDocFiltro] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.docFiltro ?? ''; } catch { return ''; } });
   const [pagina, setPagina] = useState(1);
+
+  useEffect(() => { try { localStorage.setItem('bbc_cobro_filtros', JSON.stringify({ filtros, mesFiltro, anioFiltro, docBuscar, docFiltro })); } catch {} }, [filtros, mesFiltro, anioFiltro, docBuscar, docFiltro]);
 
   const setFiltro = (key, vals) => { setFiltros(f => ({ ...f, [key]: vals })); setPagina(1); };
   const limpiar   = () => { setFiltros({ empresa:[], cliente:[], estado:[], subtipo:[] }); setDocBuscar(''); setDocFiltro(''); setPagina(1); };

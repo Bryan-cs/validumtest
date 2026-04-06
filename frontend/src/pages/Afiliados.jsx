@@ -57,8 +57,12 @@ export default function Afiliados() {
   const { user } = useAuthStore();
   const esAdmin = user?.rol === 'admin';
   const [tab, setTab]           = useState('activos');
-  const [busqueda, setBusqueda] = useState('');
-  const [filtros,  setFiltros]  = useState({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
+  const [busqueda, setBusqueda] = useState(() => {
+    try { return localStorage.getItem('bbc_afil_busqueda') || ''; } catch { return ''; }
+  });
+  const [filtros,  setFiltros]  = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bbc_afil_filtros')) || { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] }; } catch { return { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] }; }
+  });
   const [modal,    setModal]    = useState(null);
   const [confirm,  setConfirm]  = useState(null);  // { title, message, onConfirm }
   const [form,     setForm]     = useState({});
@@ -77,7 +81,10 @@ export default function Afiliados() {
   const [pendingFiles, setPendingFiles] = useState([]);
 
   const setFiltro = (key,vals) => setFiltros(f=>({...f,[key]:vals}));
-  const limpiar   = () => setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] });
+  const limpiar = () => { setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] }); setBusqueda(''); };
+
+  useEffect(() => { try { localStorage.setItem('bbc_afil_filtros', JSON.stringify(filtros)); } catch {} }, [filtros]);
+  useEffect(() => { try { localStorage.setItem('bbc_afil_busqueda', busqueda); } catch {} }, [busqueda]);
 
   const [pagina, setPagina] = useState(1);
   const POR_PAG = 50;
@@ -312,7 +319,7 @@ export default function Afiliados() {
       {tab === 'activos' && (
         <>
           <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
-            value={busqueda} onChange={e=>setBusqueda(e.target.value)}
+            value={busqueda} onChange={e=>handleBusqueda(e.target.value)}
             style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
               fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
           <BarraFiltros

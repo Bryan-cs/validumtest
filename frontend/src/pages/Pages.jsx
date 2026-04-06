@@ -1,5 +1,5 @@
 // ─── COBRO PAGE ───────────────────────────────────────────────────────────────
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import api from '../utils/api';
@@ -118,9 +118,6 @@ export function Cobro() {
 // ─── RETIROS ──────────────────────────────────────────────────────────────────
 export function Retiros() {
   const qc = useQueryClient();
-  const [tab,      setTab]     = useState('retiros');
-  const [anio,     setAnio]    = useState('');
-  const [mes,      setMes]     = useState('');
   const [buscarH,  setBuscarH] = useState('');
   const [docConsulta, setDocConsulta] = useState('');
   const [modal, setModal] = useState(false);
@@ -129,10 +126,6 @@ export function Retiros() {
   const [motivo,setMotivo]=useState('Renuncia');
   const [obs,   setObs]  = useState('');
 
-  const { data: rows=[], isLoading } = useQuery({
-    queryKey:['retiros',anio,mes],
-    queryFn:()=>api.get('/retiros',{params:{anio,mes}}).then(r=>r.data.items||[]),
-  });
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
 
   const aplicar = useMutation({
@@ -147,14 +140,6 @@ export function Retiros() {
     onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Afiliado no encontrado')); },
   });
 
-  const eliminar = useMutation({
-    mutationFn:(id)=>api.delete(`/retiros/${id}`),
-    onSuccess:()=>{ toast.success('Retiro eliminado. Afiliado movido a Eliminados.'); qc.invalidateQueries({queryKey:['retiros']}); qc.invalidateQueries({queryKey:['eliminados']}); },
-    onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
-  });
-
-  const anios = [...new Set(rows.map(r=>r.anio).filter(Boolean))];
-
   const { data: resultadoConsulta=[], isLoading: loadConsulta, isFetched: consultaHecha } = useQuery({
     queryKey: ['retiro_consulta', docConsulta],
     queryFn: () => api.get('/retiros', { params: { doc: docConsulta } }).then(r => r.data.items||[]),
@@ -163,69 +148,15 @@ export function Retiros() {
 
   return (
     <div>
-      <PageHeader title="↪️ Retiros" subtitle={`${rows.length} retiros`}
+      <PageHeader title="📋 Historial de retirados"
         action={
           <div style={{ display:'flex', gap:8 }}>
-            <Btn variant="secondary" onClick={()=>dlExcel(`/reportes/retiros?anio=${anio}&mes=${mes}`,`retiros${anio?'_'+anio:''}${mes?'_'+mes:''}.xlsx`)}>📊 Exportar Excel</Btn>
+            <Btn variant="secondary" onClick={()=>dlExcel(`/reportes/retiros`,`retiros.xlsx`)}>📊 Exportar Excel</Btn>
             <Btn variant="accent" onClick={()=>setModal(true)}>+ Aplicar retiro</Btn>
           </div>
         } />
-      {/* Pestañas */}
-      <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:`2px solid ${C.border}` }}>
-        {[
-          { key:'retiros',   label:`↪️ Retiros (${rows.length})` },
-          { key:'historial', label:'📋 Historial de retirados' },
-        ].map(t=>(
-          <button key={t.key} onClick={()=>setTab(t.key)} style={{
-            padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
-            background: tab===t.key ? C.primary : 'transparent',
-            color: tab===t.key ? '#fff' : C.text2,
-            fontWeight: tab===t.key ? 700 : 400, fontSize:13, cursor:'pointer',
-          }}>{t.label}</button>
-        ))}
-      </div>
 
-      {tab === 'retiros' && (<>
-        <div style={{ display:'flex', gap:8, marginBottom:14 }}>
-          <select style={sel} value={anio} onChange={e=>setAnio(e.target.value)}>
-            {['', ...anios].map(a=><option key={a} value={a}>{a||'Todos los años'}</option>)}
-          </select>
-          <select style={sel} value={mes} onChange={e=>setMes(e.target.value)}>
-            {['', ...MESES].map(m=><option key={m} value={m}>{m||'Todos los meses'}</option>)}
-          </select>
-        </div>
-        <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-          <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
-            <thead>
-              <tr style={{ background:C.surface2 }}>
-                {['#','Nombre','Empresa','Documento','Fecha','Motivo','Registrado por','Acciones'].map(h=>(
-                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {isLoading && <tr><td colSpan={8} style={{ padding:20, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>}
-              {rows.map((r,i)=>(
-                <tr key={r.id} style={{ borderBottom:`1px solid ${C.border}` }}>
-                  <td style={tdc}>{i+1}</td>
-                  <td style={tdc}>{r.nombre}</td>
-                  <td style={tdc}>{r.empresa}</td>
-                  <td style={tdc}>{r.doc}</td>
-                  <td style={tdc}>{r.fecha}</td>
-                  <td style={tdc}>{r.motivo}</td>
-                  <td style={tdc}>{r.registrado_por}</td>
-                  <td style={tdc}>
-                    <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar retiro?')) eliminar.mutate(r.id); }}>Eliminar</Btn>
-                  </td>
-                </tr>
-              ))}
-              {!isLoading&&rows.length===0&&<tr><td colSpan={8} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin retiros</td></tr>}
-            </tbody>
-          </table>
-        </div>
-      </>)}
-
-      {tab === 'historial' && (<>
+      <>
         <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:20 }}>
           <div style={{ position:'relative' }}>
             <input
@@ -300,7 +231,7 @@ export function Retiros() {
             </div>
           ))
         )}
-      </>)}
+      </>
       {modal && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
           <div style={{ background:C.surface,borderRadius:14,padding:28,width:420,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
@@ -331,10 +262,12 @@ export function Retiros() {
 // ─── FACTURACIÓN ──────────────────────────────────────────────────────────────
 export function Facturacion() {
   const qc = useQueryClient();
-  const [anio, setAnio] = useState(new Date().getFullYear().toString());
-  const [mes,  setMes]  = useState('');
-  const [cliente,setCli]= useState('');
-  const [estado,setEst] = useState('');
+  const [anio, setAnio] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_fact_filtros'))?.anio ?? new Date().getFullYear().toString(); } catch { return new Date().getFullYear().toString(); } });
+  const [mes,  setMes]  = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_fact_filtros'))?.mes ?? ''; } catch { return ''; } });
+  const [cliente,setCli]= useState(() => { try { return JSON.parse(localStorage.getItem('bbc_fact_filtros'))?.cliente ?? ''; } catch { return ''; } });
+  const [estado,setEst] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_fact_filtros'))?.estado ?? ''; } catch { return ''; } });
+
+  useEffect(() => { try { localStorage.setItem('bbc_fact_filtros', JSON.stringify({ anio, mes, cliente, estado })); } catch {} }, [anio, mes, cliente, estado]);
 
   const { data: rows=[], isLoading } = useQuery({
     queryKey:['facturas',anio,mes,cliente,estado],
@@ -442,8 +375,10 @@ export function Empleados() {
   const [modal, setModal] = useState(null);
   const [form, setForm] = useState({});
   const sf = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const [mes, setMes] = useState(MES_ACTUAL);
-  const [anio, setAnio] = useState(ANIO_ACTUAL);
+  const [mes, setMes] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_emp_filtros'))?.mes ?? MES_ACTUAL; } catch { return MES_ACTUAL; } });
+  const [anio, setAnio] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_emp_filtros'))?.anio ?? ANIO_ACTUAL; } catch { return ANIO_ACTUAL; } });
+
+  useEffect(() => { try { localStorage.setItem('bbc_emp_filtros', JSON.stringify({ mes, anio })); } catch {} }, [mes, anio]);
 
   const { data: emps = [] } = useQuery({ queryKey: ['empleados'], queryFn: () => api.get('/empleados').then(r => r.data) });
   const { data: usuarios = [] } = useQuery({ queryKey: ['usuarios'], queryFn: () => api.get('/usuarios').then(r => r.data) });
@@ -1010,10 +945,12 @@ const inp = { width:'100%', padding:'9px 12px', border:`1px solid ${C.border}`, 
 export function NovedadesClientes() {
   const qc = useQueryClient();
   const [tabNov, setTabNov] = useState('novedades');
-  const [filtroCliente, setFiltroCliente] = useState('');
-  const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroCliente, setFiltroCliente] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_nov_filtros'))?.filtroCliente ?? ''; } catch { return ''; } });
+  const [filtroEstado, setFiltroEstado] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_nov_filtros'))?.filtroEstado ?? ''; } catch { return ''; } });
   const hoy = new Date().toISOString().slice(0,10);
-  const [filtroFecha, setFiltroFecha] = useState('');
+  const [filtroFecha, setFiltroFecha] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_nov_filtros'))?.filtroFecha ?? ''; } catch { return ''; } });
+
+  useEffect(() => { try { localStorage.setItem('bbc_nov_filtros', JSON.stringify({ filtroCliente, filtroEstado, filtroFecha })); } catch {} }, [filtroCliente, filtroEstado, filtroFecha]);
 
   // Modal para responder al resolver
   const [modalResp, setModalResp] = useState(null); // { tipo, id, estado, label }

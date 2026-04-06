@@ -37,16 +37,17 @@ def init_db():
     import models
     # Crear tablas que no existan (primera ejecución)
     Base.metadata.create_all(bind=engine)
-    # Ejecutar migraciones Alembic pendientes
-    try:
-        from alembic.config import Config as AlembicConfig
-        from alembic import command
-        alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-        alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
-        command.upgrade(alembic_cfg, "head")
-    except Exception as e:
-        import logging
-        logging.getLogger("bbcfile").warning(f"Alembic upgrade falló (create_all ya creó las tablas): {e}")
+    # Ejecutar migraciones Alembic pendientes (solo en PostgreSQL; SQLite usa create_all)
+    if not _is_sqlite:
+        try:
+            from alembic.config import Config as AlembicConfig
+            from alembic import command
+            alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+            alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+            command.upgrade(alembic_cfg, "head")
+        except Exception as e:
+            import logging
+            logging.getLogger("bbcfile").warning(f"Alembic upgrade falló (create_all ya creó las tablas): {e}")
     # Safety net: agregar columnas nuevas si Alembic no las creó
     _ensure_columns()
     # Seed data inicial si la DB está vacía
@@ -177,7 +178,13 @@ def _seed(db):
         "ccf": ["N/A","Compensar","Colsubsidio","Cafam","Comfandi","Comfamiliar Huila",
                 "Combarranquilla","Comfenalco Antioquia","Comfenalco Valle"],
         "afp": ["N/A","Porvenir","Colpensiones","Colfondos","Skandia"],
-        "bancos": ["Nequi","DaviPlata","Bancolombia","Banco de Bogotá","Efectivo","Otro"],
+        "bancos": [
+            "Nequi / Daviplata - 3170296773",
+            "Davivienda (Ahorros) - 0550108900642357",
+            "Banco de Bogotá (Ahorros) - 462547688",
+            "Llave Banco Bogotá - @BBJMF23103",
+            "Bancolombia (Ahorros) - 91270274485",
+        ],
         "subtipos": ["0","3","4","20","22"],
         "estados_srv": ["ACTIVO","SUSPENDIDO","DOBLE AFILIACION","EN ESPERA DE ACTIVACION",
                         "RETIRADO","EN MORA","NO AFILIADO","PENDIENTE"],
