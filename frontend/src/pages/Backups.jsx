@@ -102,7 +102,7 @@ export default function Backups() {
         border: `1px solid ${C.border}`, fontSize: 13, color: C.text2, lineHeight: 1.6,
       }}>
         <strong style={{ color: C.text }}>Horario automático (hora Colombia):</strong><br/>
-        2:00 AM — Cierre del día &nbsp;&bull;&nbsp;
+        5:00 PM — Cierre del día &nbsp;&bull;&nbsp;
         12:00 PM — Mediodía &nbsp;&bull;&nbsp;
         9:00 PM — Cierre jornada<br/>
         <span style={{ fontSize: 12 }}>Los backups se eliminan automáticamente después de 30 días.</span>
