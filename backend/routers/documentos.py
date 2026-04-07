@@ -71,6 +71,25 @@ def _upload_file(unique_name: str, content: bytes):
         f.write(content)
 
 
+def _get_presigned_url(unique_name: str, filename: str, expires: int = 300) -> str | None:
+    """Genera URL firmada de R2 para descarga directa (evita proxying por el backend)."""
+    s3 = _get_s3()
+    if not s3:
+        return None
+    try:
+        return s3.generate_presigned_url(
+            'get_object',
+            Params={
+                'Bucket': _R2_BUCKET,
+                'Key': unique_name,
+                'ResponseContentDisposition': f'attachment; filename="{filename}"',
+            },
+            ExpiresIn=expires,
+        )
+    except Exception:
+        return None
+
+
 def _download_file(unique_name: str):
     """Descarga archivo de R2 o disco local. Retorna (bytes, found)."""
     s3 = _get_s3()
@@ -213,6 +232,12 @@ def descargar_documento(
         else:
             raise HTTPException(403, "No tienes acceso a este documento")
 
+    # R2: URL presignada → descarga directa desde Cloudflare, sin proxying por backend
+    presigned = _get_presigned_url(doc.ruta, doc.nombre)
+    if presigned:
+        return {"url": presigned, "nombre": doc.nombre}
+
+    # Fallback: disco local (dev)
     content, found = _download_file(doc.ruta)
     if not found:
         raise HTTPException(404, "Archivo no encontrado")

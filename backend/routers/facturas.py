@@ -55,6 +55,17 @@ def pagar_factura(id: int, banco: str = "", db: Session = Depends(get_db), token
     return crud.pagar_factura(db, id, banco=banco, user=token.get("sub", "sistema"))
 
 
+@router.patch("/{id}/planilla-pagada")
+def planilla_pagada(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+    f = crud.get_factura(db, id)
+    if not f:
+        raise HTTPException(404, "Factura no encontrada")
+    result = crud.marcar_planilla_pagada(db, id, user=token.get("sub", "sistema"))
+    if isinstance(result, dict) and "error" in result:
+        raise HTTPException(400, result["error"])
+    return result
+
+
 @router.delete("/{id}")
 def delete_factura(id: int, force: bool = False,
                    db: Session = Depends(get_db), token=Depends(verify_token)):
@@ -63,7 +74,7 @@ def delete_factura(id: int, force: bool = False,
         raise HTTPException(404, "Factura no encontrada")
     if force and token.get("rol") != "admin":
         raise HTTPException(403, "Solo un administrador puede forzar la eliminación")
-    if f.estado == "pagado" and not force:
+    if f.estado in ("pagado", "planilla_pagada") and not force:
         raise HTTPException(400,
             "No se puede eliminar una factura pagada. "
             "Use force=true si realmente desea eliminarla.")

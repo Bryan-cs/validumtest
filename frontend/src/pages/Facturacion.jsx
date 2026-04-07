@@ -463,6 +463,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     if (prefillAfiliado) { setPrefill(prefillAfiliado); setModalNueva(true); }
   }, [prefillAfiliado]);
 
+  const [tabActivo, setTabActivo] = useState('facturas');
   const [paginaF, setPaginaF] = useState(1);
   const POR_PAG_F = 50;
 
@@ -471,7 +472,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const mesB     = filtros.mes.length     === 1 ? filtros.mes[0]     : '';
   const clienteB = filtros.cliente.length === 1 ? filtros.cliente[0] : '';
   const estadoB  = filtros.estado.length  === 1
-    ? (filtros.estado[0] === 'Pagada' ? 'pagado' : 'pendiente') : '';
+    ? (filtros.estado[0] === 'Pagada' ? 'pagado' : filtros.estado[0] === 'Planilla Pagada' ? 'planilla_pagada' : 'pendiente') : '';
   const hayFiltros = anioB || mesB || clienteB || estadoB || busqueda ||
     filtros.anio.length > 1 || filtros.mes.length > 1 ||
     filtros.cliente.length > 1 || filtros.estado.length > 1;
@@ -508,12 +509,54 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     if (filtros.anio.length    && !filtros.anio.includes(f.anio))                    return false;
     if (filtros.mes.length     && !filtros.mes.includes(f.mes))                      return false;
     if (filtros.cliente.length && !filtros.cliente.includes(f.cliente))              return false;
-    if (filtros.estado.length  && !filtros.estado.includes(f.estado==='pagado'?'Pagada':'Pendiente')) return false;
+    if (filtros.estado.length  && !filtros.estado.includes(
+      f.estado==='pagado' ? 'Pagada' : f.estado==='planilla_pagada' ? 'Planilla Pagada' : 'Pendiente'
+    )) return false;
     return true;
   });
 
-  const [modalPagar, setModalPagar] = useState(null); // { id, codigo, nombre }
+  const [modalPagar, setModalPagar] = useState(null);
   const [bancoPago, setBancoPago] = useState('');
+
+  // Ingresos adicionales
+  const MESES_NUM = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+  const hoyMes  = new Date().getMonth() + 1;
+  const hoyAnio = new Date().getFullYear();
+  const [modalIngAd, setModalIngAd] = useState(false);
+  const [formIngAd, setFormIngAd]   = useState({ concepto:'Comisión', descripcion:'', valor:'', mes: hoyMes, anio: hoyAnio });
+
+  const iaParams = {};
+  if (anioB) iaParams.anio = parseInt(anioB);
+  if (mesB)  iaParams.mes  = MESES_NUM.indexOf(mesB) + 1;
+
+  const { data: ingAdList = [] } = useQuery({
+    queryKey: ['ingresos-adicionales', iaParams.mes, iaParams.anio],
+    queryFn: () => api.get('/ingresos-adicionales', { params: iaParams }).then(r => r.data),
+  });
+
+  const totIngAd = ingAdList.reduce((s, i) => s + (i.valor || 0), 0);
+
+  const crearIngAd = useMutation({
+    mutationFn: data => api.post('/ingresos-adicionales', data),
+    onSuccess: () => {
+      toast.success('Ingreso adicional agregado');
+      qc.invalidateQueries({ queryKey: ['ingresos-adicionales'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      setModalIngAd(false);
+      setFormIngAd({ concepto:'Comisión', descripcion:'', valor:'', mes: hoyMes, anio: hoyAnio });
+    },
+    onError: e => toast.error(e.response?.data?.detail || 'Error'),
+  });
+
+  const elimIngAd = useMutation({
+    mutationFn: id => api.delete(`/ingresos-adicionales/${id}`),
+    onSuccess: () => {
+      toast.success('Ingreso adicional eliminado');
+      qc.invalidateQueries({ queryKey: ['ingresos-adicionales'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: e => toast.error(e.response?.data?.detail || 'Error'),
+  });
 
   const pagar = useMutation({
     mutationFn: ({ id, banco }) => api.patch(`/facturas/${id}/pagar`, null, { params: { banco } }),
@@ -526,8 +569,15 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al eliminar factura'),
   });
 
-  const totIng  = rowsFiltradas.reduce((s,f)=>s+(f.ingresos||0),0);
-  const totUtil = rowsFiltradas.reduce((s,f)=>s+(f.utilidad||0),0);
+  const planillaPagada = useMutation({
+    mutationFn: id => api.patch(`/facturas/${id}/planilla-pagada`),
+    onSuccess: (res) => { toast.success('Planilla marcada como pagada'); qc.setQueryData(['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros], prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar planilla'),
+  });
+
+  const esPagada = f => f.estado === 'pagado' || f.estado === 'planilla_pagada';
+  const totIng  = rowsFiltradas.filter(esPagada).reduce((s,f)=>s+(f.ingresos||0),0) + totIngAd;
+  const totUtil = rowsFiltradas.filter(esPagada).reduce((s,f)=>s+(f.utilidad||0),0) + totIngAd;
   const totPend = rowsFiltradas.filter(f=>f.estado==='pendiente').reduce((s,f)=>s+(f.ingresos||0),0);
 
   return (
@@ -554,6 +604,76 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         <StatCard label="Facturas pendientes" value={rowsFiltradas.filter(f=>f.estado==='pendiente').length} color={C.red} />
       </div>
 
+      {/* Tabs */}
+      <div style={{ display:'flex', gap:4, marginBottom:16, background:C.surface2, borderRadius:10, padding:4, border:`1px solid ${C.border}` }}>
+        {[
+          { key:'facturas',  label:`🧾 Facturas (${rowsFiltradas.length})` },
+          { key:'ingresos',  label:`➕ Ingresos adicionales${ingAdList.length > 0 ? ` (${ingAdList.length})` : ''}` },
+        ].map(t => (
+          <button key={t.key} onClick={()=>setTabActivo(t.key)} style={{
+            flex:1, padding:'8px 4px', border:'none', borderRadius:7, cursor:'pointer', fontSize:13,
+            fontWeight: tabActivo===t.key ? 700 : 400,
+            background: tabActivo===t.key ? C.primary : 'transparent',
+            color: tabActivo===t.key ? '#fff' : C.text2,
+            transition:'all .15s',
+          }}>{t.label}</button>
+        ))}
+      </div>
+
+      {tabActivo === 'ingresos' && (
+        <div>
+          <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:12 }}>
+            <Btn variant="accent" onClick={()=>setModalIngAd(true)}>➕ Agregar ingreso</Btn>
+          </div>
+          {ingAdList.length === 0 ? (
+            <div style={{ background:C.surface, borderRadius:10, padding:32, textAlign:'center', border:`1px solid ${C.border}` }}>
+              <p style={{ color:C.text2, fontSize:14, margin:0 }}>Sin ingresos adicionales{anioB||mesB ? ` para ${mesB||''} ${anioB||''}`.trim() : ''}</p>
+            </div>
+          ) : (
+            <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+              <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+                <thead>
+                  <tr style={{ background:C.surface2 }}>
+                    {['Concepto','Descripción','Valor','Mes','Año','Registrado por','Fecha',''].map(h => (
+                      <th key={h} style={{ padding:'10px 12px', fontSize:12, fontWeight:600, color:C.text2, textAlign:'left', borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {ingAdList.map(i => (
+                    <tr key={i.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                      <td style={tdc}>
+                        <span style={{ fontWeight:600, color:C.primary }}>{i.concepto}</span>
+                      </td>
+                      <td style={{ ...tdc, color:C.text2 }}>{i.descripcion || '—'}</td>
+                      <td style={{ ...tdc, fontWeight:700, color:C.green }}>{fmt(i.valor)}</td>
+                      <td style={tdc}>{MESES_NUM[i.mes-1]}</td>
+                      <td style={tdc}>{i.anio}</td>
+                      <td style={{ ...tdc, color:C.text2 }}>{i.creado_por || '—'}</td>
+                      <td style={{ ...tdc, color:C.text2, fontSize:12 }}>{i.creado ? new Date(i.creado).toLocaleDateString('es-CO') : '—'}</td>
+                      <td style={tdc}>
+                        <Btn size="sm" variant="danger" disabled={elimIngAd.isPending}
+                          onClick={()=>{ if(window.confirm('¿Eliminar este ingreso?')) elimIngAd.mutate(i.id); }}>
+                          🗑️
+                        </Btn>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ background:C.surface2, borderTop:`2px solid ${C.border}` }}>
+                    <td colSpan={2} style={{ ...tdc, fontWeight:700, color:C.text }}>Total</td>
+                    <td style={{ ...tdc, fontWeight:700, color:C.green }}>{fmt(totIngAd)}</td>
+                    <td colSpan={5} />
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {tabActivo === 'facturas' && (<div>
       <input placeholder="🔍 Buscar código, afiliado, documento, cliente..."
         value={busqueda} onChange={e=>setBusqueda(e.target.value)}
         style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
@@ -563,7 +683,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           { key:'anio',    label:'Año',     icon:'📅', options: aniosUnicos },
           { key:'mes',     label:'Mes',     icon:'🗓️', options: mesesOrd },
           { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
-          { key:'estado',  label:'Estado',  icon:'📌', options: ['Pendiente','Pagada'] },
+          { key:'estado',  label:'Estado',  icon:'📌', options: ['Pendiente','Pagada','Planilla Pagada'] },
         ]}
         valores={filtros}
         onChange={setFiltro}
@@ -601,10 +721,11 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   <td style={{ ...tdc,textAlign:'right',fontWeight:700,color:(f.utilidad>=0)?C.green:C.red }}>{fmt(f.utilidad)}</td>
                   <td style={tdc}>{f.banco||'—'}</td>
                   <td style={tdc}>
-                    <span style={{ background:f.estado==='pagado'?C.greenBg:C.amberBg,
-                      color:f.estado==='pagado'?C.green:C.amber,
+                    <span style={{
+                      background: f.estado==='planilla_pagada' ? '#DCFCE7' : f.estado==='pagado' ? C.greenBg : C.amberBg,
+                      color: f.estado==='planilla_pagada' ? '#166534' : f.estado==='pagado' ? C.green : C.amber,
                       borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>
-                      {f.estado==='pagado'?'Pagada':'Pendiente'}
+                      {f.estado==='planilla_pagada' ? '📋 Planilla Pagada' : f.estado==='pagado' ? 'Pagada' : 'Pendiente'}
                     </span>
                   </td>
                   <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
@@ -614,6 +735,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
                       <Btn size="sm" variant="secondary" onClick={(e)=>{e.stopPropagation();setModalEditar(f);}}>✏️ Editar</Btn>
                       {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
+                      {f.estado==='pagado' && <Btn size="sm" variant="secondary" disabled={planillaPagada.isPending} onClick={(e)=>{e.stopPropagation();planillaPagada.mutate(f.id);}}>📋 Planilla Pagada</Btn>}
                       <Btn size="sm" variant="secondary" onClick={(e)=>{
                         e.stopPropagation();
                         const tel = (f.tel||'').replace(/\D/g,'');
@@ -673,11 +795,58 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           </tbody>
         </table>
       </div>
+      </div>)}
 
       <NuevaFacturaModal open={modalNueva} onClose={()=>{setModalNueva(false);setPrefill(null);}}
         config={config} listas={listas} prefill={prefill} />
       <EditarFacturaModal open={!!modalEditar} onClose={()=>setModalEditar(null)}
         factura={modalEditar} config={config} listas={listas} />
+
+      {/* Modal ingreso adicional */}
+      <Modal open={modalIngAd} onClose={()=>setModalIngAd(false)} width={440} title="➕ Ingreso adicional">
+        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+          <div>
+            <label style={lbl}>Concepto *</label>
+            <select style={sel} value={formIngAd.concepto} onChange={e=>setFormIngAd(f=>({...f,concepto:e.target.value}))}>
+              <option>Comisión</option>
+              <option>Planilla verificable</option>
+              <option>Otro</option>
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Descripción</label>
+            <input style={sel} placeholder="Detalle opcional..." value={formIngAd.descripcion}
+              onChange={e=>setFormIngAd(f=>({...f,descripcion:e.target.value}))} />
+          </div>
+          <div>
+            <label style={lbl}>Valor *</label>
+            <input type="number" style={sel} placeholder="0" min="0" value={formIngAd.valor}
+              onChange={e=>setFormIngAd(f=>({...f,valor:e.target.value}))} />
+          </div>
+          <div style={{ display:'flex', gap:10 }}>
+            <div style={{ flex:1 }}>
+              <label style={lbl}>Mes *</label>
+              <select style={sel} value={formIngAd.mes} onChange={e=>setFormIngAd(f=>({...f,mes:parseInt(e.target.value)}))}>
+                {MESES_NUM.map((m,i)=><option key={m} value={i+1}>{m}</option>)}
+              </select>
+            </div>
+            <div style={{ flex:1 }}>
+              <label style={lbl}>Año *</label>
+              <input type="number" style={sel} value={formIngAd.anio} min="2020" max="2099"
+                onChange={e=>setFormIngAd(f=>({...f,anio:parseInt(e.target.value)}))} />
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:4 }}>
+            <Btn variant="secondary" onClick={()=>setModalIngAd(false)}>Cancelar</Btn>
+            <Btn variant="accent"
+              disabled={!formIngAd.valor || parseFloat(formIngAd.valor) <= 0 || crearIngAd.isPending}
+              onClick={()=>crearIngAd.mutate({ concepto:formIngAd.concepto, descripcion:formIngAd.descripcion,
+                valor:parseFloat(formIngAd.valor), mes:formIngAd.mes, anio:formIngAd.anio })}>
+              {crearIngAd.isPending ? 'Guardando...' : 'Agregar'}
+            </Btn>
+          </div>
+        </div>
+      </Modal>
 
       {/* Mini modal: seleccionar banco al marcar pagada */}
       <Modal open={!!modalPagar} onClose={()=>setModalPagar(null)} width={400} title="✓ Marcar como pagada">

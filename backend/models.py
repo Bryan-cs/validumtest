@@ -147,6 +147,21 @@ class Gasto(Base):
     anio   = Column(Integer)
     creado = Column(DateTime, default=_utcnow)
 
+class IngresoAdicional(Base):
+    __tablename__ = "ingresos_adicionales"
+    __table_args__ = (
+        Index('ix_ingreso_adicional_anio_mes', 'anio', 'mes'),
+    )
+    id          = Column(Integer, primary_key=True, index=True)
+    concepto    = Column(String(60))   # Comisión | Planilla verificable | Otro
+    descripcion = Column(String(200), default="")
+    valor       = Column(Float, default=0)
+    mes         = Column(Integer)
+    anio        = Column(Integer)
+    creado_por  = Column(String(60), default="")
+    creado      = Column(DateTime, default=_utcnow)
+
+
 class NominaMensual(Base):
     __tablename__ = "nomina_mensual"
     __table_args__ = (

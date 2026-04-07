@@ -424,6 +424,27 @@ def delete_gasto(id: int, db: Session = Depends(get_db), token=Depends(require_a
     return {"ok": True}
 
 
+# ─── INGRESOS ADICIONALES ────────────────────────────────────────────────────
+
+@app.get("/ingresos-adicionales")
+def list_ingresos_adicionales(mes: int = None, anio: int = None,
+                               db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.get_ingresos_adicionales(db, mes=mes, anio=anio)
+
+
+@app.post("/ingresos-adicionales", status_code=201)
+def create_ingreso_adicional(data: schemas.IngresoAdicionalCreate,
+                              db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.create_ingreso_adicional(db, data, user=token.get("sub", "sistema"))
+
+
+@app.delete("/ingresos-adicionales/{id}")
+def delete_ingreso_adicional(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+    ok = crud.delete_ingreso_adicional(db, id, user=token.get("sub", "sistema"))
+    if not ok: raise HTTPException(404, "Ingreso adicional no encontrado")
+    return {"ok": True}
+
+
 # ─── NÓMINA MENSUAL ───────────────────────────────────────────────────────────
 @app.get("/nomina")
 def get_nomina(mes: int, anio: int,
