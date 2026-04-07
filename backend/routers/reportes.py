@@ -124,15 +124,16 @@ def reporte_financiero(
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Facturación"
-    cols = ["#", "Código", "Afiliado", "Documento", "Empresa", "Subtipo", "Cliente",
-            "Mes", "Año", "Período (días)", "Ingresos", "Planilla", "Costo Adm.",
+    cols = ["#", "Código", "Afiliado", "Documento", "Empresa", "Subtipo", "Servicios",
+            "Cliente", "Mes", "Año", "Período (días)", "Ingresos", "Planilla", "Costo Adm.",
             "Utilidad", "Banco", "Estado"]
     _hdr_style(ws, cols)
     tot_ing = tot_plan = tot_util = 0
     for i, f in enumerate(items, 1):
         emp, sub = afil_map.get(f.get("doc"), ("", ""))
+        servicios_txt = ", ".join(s["servicio"] for s in (f.get("servicios_detalle") or []) if s.get("servicio"))
         ws.append([i, f.get("codigo"), f.get("nombre_afiliado"), f.get("doc"),
-                   emp, sub,
+                   emp, sub, servicios_txt,
                    f.get("cliente"), f.get("mes"), f.get("anio"), f.get("periodo"),
                    f.get("ingresos", 0), f.get("costos", 0), f.get("costo_adm", 0),
                    f.get("utilidad", 0), f.get("banco"), f.get("estado")])
@@ -142,9 +143,9 @@ def reporte_financiero(
     last = ws.max_row + 1
     ws.cell(last, 1, "TOTAL")
     ws.cell(last, 1).font = Font(bold=True)
-    ws.cell(last, 11, tot_ing).font = Font(bold=True)
-    ws.cell(last, 12, tot_plan).font = Font(bold=True)
-    ws.cell(last, 14, tot_util).font = Font(bold=True)
+    ws.cell(last, 12, tot_ing).font = Font(bold=True)
+    ws.cell(last, 13, tot_plan).font = Font(bold=True)
+    ws.cell(last, 15, tot_util).font = Font(bold=True)
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
     return _xlsx_response(wb, f"financiero{'_'+anio if anio else ''}{'_'+mes if mes else ''}.xlsx")
