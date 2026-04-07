@@ -150,6 +150,14 @@ class EmpleadoCreate(BaseModel):
     activo: bool = True
     fecha_ingreso: str = ""
 
+class IngresoAdicionalCreate(BaseModel):
+    concepto: str
+    descripcion: str = ""
+    valor: float
+    mes: int
+    anio: int
+
+
 class GastoCreate(BaseModel):
     nombre: str
     valor: float

@@ -362,13 +362,25 @@ def pagar_factura(db, id, banco="", user=""):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     f = db.query(models.Factura).filter_by(id=id).with_for_update().first()
     if not f: return None
-    if f.estado == "pagado":
-        return _factura_to_dict(f)  # idempotente: ya está pagado
+    if f.estado in ("pagado", "planilla_pagada"):
+        return _factura_to_dict(f)  # idempotente
     f.estado = "pagado"
     f.pagado_en = datetime.now(timezone.utc)
     if banco:
         f.banco = banco
     _log(db, user, "marcó factura como pagada", "Facturación", f.codigo)
+    db.commit(); db.refresh(f); return _factura_to_dict(f)
+
+def marcar_planilla_pagada(db, id, user=""):
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
+    f = db.query(models.Factura).filter_by(id=id).with_for_update().first()
+    if not f: return None
+    if f.estado == "planilla_pagada":
+        return _factura_to_dict(f)  # idempotente
+    if f.estado != "pagado":
+        return {"error": "La factura debe estar en estado 'Pagada' antes de marcar planilla como pagada"}
+    f.estado = "planilla_pagada"
+    _log(db, user, "marcó planilla como pagada", "Facturación", f.codigo)
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
 def delete_factura(db, id, user=""):
@@ -414,7 +426,18 @@ def create_retiro(db, data: schemas.RetiroCreate):
         fecha=data.fecha, motivo=data.motivo, obs=data.obs,
         mes=mes_actual, anio=anio_actual, registrado_por=data.registrado_por,
     )
-    db.add(r); _log(db, data.registrado_por, "aplicó un retiro", "Retiros", afil.nombre)
+    db.add(r)
+    # Mover afiliado a eliminados al aplicar el retiro
+    elim_existente = db.query(models.Eliminado).filter_by(doc=afil.doc).first()
+    if not elim_existente:
+        db.add(models.Eliminado(
+            nombre=afil.nombre, doc=afil.doc, empresa=afil.empresa,
+            datos_completos=json.dumps(_afiliado_to_dict(afil)),
+            fecha_eliminacion=datetime.now(COL_TZ).strftime("%Y-%m-%d"),
+            mes=mes_actual, eliminado_por=data.registrado_por,
+        ))
+    afil.activo = False
+    _log(db, data.registrado_por, "aplicó un retiro y movió a eliminados", "Retiros", afil.nombre)
     try:
         db.commit()
     except IntegrityError:
@@ -497,6 +520,33 @@ def delete_empleado(db, id, user=""):
         db.commit()
 
 # ─── GASTOS MENSUALES ─────────────────────────────────────────────────────────
+def get_ingresos_adicionales(db, mes: int = None, anio: int = None):
+    q = db.query(models.IngresoAdicional)
+    if mes:  q = q.filter_by(mes=mes)
+    if anio: q = q.filter_by(anio=anio)
+    return [{"id": i.id, "concepto": i.concepto, "descripcion": i.descripcion,
+             "valor": i.valor, "mes": i.mes, "anio": i.anio, "creado_por": i.creado_por,
+             "creado": i.creado.isoformat() if i.creado else None}
+            for i in q.order_by(models.IngresoAdicional.creado.desc()).all()]
+
+def create_ingreso_adicional(db, data, user=""):
+    cache_invalidar("dashboard:")
+    i = models.IngresoAdicional(concepto=data.concepto, descripcion=data.descripcion,
+                                 valor=data.valor, mes=data.mes, anio=data.anio, creado_por=user)
+    db.add(i); db.commit(); db.refresh(i)
+    _log(db, user, "agregó ingreso adicional", "Facturación", f"{data.concepto} ${data.valor:,.0f}")
+    return {"id": i.id, "concepto": i.concepto, "descripcion": i.descripcion,
+            "valor": i.valor, "mes": i.mes, "anio": i.anio, "creado_por": i.creado_por,
+            "creado": i.creado.isoformat() if i.creado else None}
+
+def delete_ingreso_adicional(db, id, user=""):
+    cache_invalidar("dashboard:")
+    i = db.query(models.IngresoAdicional).filter_by(id=id).first()
+    if not i: return False
+    _log(db, user, "eliminó ingreso adicional", "Facturación", f"{i.concepto} ${i.valor:,.0f}")
+    db.delete(i); db.commit(); return True
+
+
 def get_gastos(db, mes: int, anio: int):
     return [{"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio}
             for g in db.query(models.Gasto).filter_by(mes=mes, anio=anio).order_by(models.Gasto.nombre).all()]
@@ -667,8 +717,8 @@ def get_dashboard(db, anio="", mes=""):
 
     fq = db.query(
         func.count(models.Factura.id).label("n"),
-        func.coalesce(func.sum(models.Factura.ingresos), 0).label("ingresos"),
-        func.coalesce(func.sum(models.Factura.utilidad), 0).label("utilidad"),
+        func.coalesce(func.sum(case((models.Factura.estado.in_(["pagado","planilla_pagada"]), models.Factura.ingresos), else_=0)), 0).label("ingresos"),
+        func.coalesce(func.sum(case((models.Factura.estado.in_(["pagado","planilla_pagada"]), models.Factura.utilidad), else_=0)), 0).label("utilidad"),
         func.coalesce(func.sum(case((models.Factura.estado=="pendiente", models.Factura.ingresos), else_=0)), 0).label("pendiente"),
         func.sum(case((models.Factura.estado=="pendiente", 1), else_=0)).label("n_pend"),
     )
@@ -685,11 +735,15 @@ def get_dashboard(db, anio="", mes=""):
             mes=_mes_ref, anio=_anio_ref).scalar()
         gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
             mes=_mes_ref, anio=_anio_ref).scalar()
+        ing_adic = db.query(func.coalesce(func.sum(models.IngresoAdicional.valor), 0)).filter_by(
+            mes=_mes_ref, anio=_anio_ref).scalar()
     elif anio:
         # Año completo: sumar todos los meses registrados de ese año
         nominas = db.query(func.coalesce(func.sum(models.NominaMensual.valor), 0)).filter_by(
             anio=_anio_ref).scalar()
         gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
+            anio=_anio_ref).scalar()
+        ing_adic = db.query(func.coalesce(func.sum(models.IngresoAdicional.valor), 0)).filter_by(
             anio=_anio_ref).scalar()
     else:
         # Sin filtro → mes actual
@@ -698,8 +752,11 @@ def get_dashboard(db, anio="", mes=""):
             mes=_mes_ref, anio=_anio_ref).scalar()
         gastos  = db.query(func.coalesce(func.sum(models.Gasto.valor), 0)).filter_by(
             mes=_mes_ref, anio=_anio_ref).scalar()
+        ing_adic = db.query(func.coalesce(func.sum(models.IngresoAdicional.valor), 0)).filter_by(
+            mes=_mes_ref, anio=_anio_ref).scalar()
 
-    util_neta = float(facts.utilidad) - float(nominas) - float(gastos)
+    ing_adic = float(ing_adic)
+    util_neta = float(facts.utilidad) + ing_adic - float(nominas) - float(gastos)
 
     # Pendiente total siempre (sin filtro de periodo)
     pend_total = db.query(
@@ -715,9 +772,9 @@ def get_dashboard(db, anio="", mes=""):
         "no_encontrado": int(stats.no_encontrado or 0),
         "en_espera": int(stats.en_espera or 0),
         "total_afiliados": int(stats.total or 0),
-        "facturas": int(facts.n or 0), "ingresos": float(facts.ingresos),
-        "utilidad_bruta": float(facts.utilidad), "nominas": float(nominas),
-        "gastos_fijos": float(gastos), "utilidad_neta": util_neta,
+        "facturas": int(facts.n or 0), "ingresos": float(facts.ingresos) + ing_adic,
+        "utilidad_bruta": float(facts.utilidad) + ing_adic, "nominas": float(nominas),
+        "gastos_fijos": float(gastos), "utilidad_neta": util_neta, "ingresos_adicionales": ing_adic,
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "pendiente_cobro_total": float(pend_total), "meses_factor": meses_factor,
     }

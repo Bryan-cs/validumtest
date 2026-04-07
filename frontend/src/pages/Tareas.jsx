@@ -153,35 +153,33 @@ export default function Tareas() {
   });
 
   const crear = useMutation({
-    mutationFn: async () => {
-      const payload = { ...form };
-      if (payload.privada && !isAdmin) {
-        payload.asignado_a = user?.username || '';
-      }
-      const res = await api.post('/tareas', payload);
-      const tareaId = res.data?.id;
-      if (tareaId && nuevaFiles.length > 0) {
-        try {
-          for (const file of nuevaFiles) {
-            const fd = new FormData();
-            fd.append('file', file);
-            fd.append('afiliado_doc', '');
-            fd.append('contexto', 'tarea');
-            fd.append('contexto_id', String(tareaId));
-            await api.post('/documentos', fd);
-          }
-        } catch(err) {
-          toast.error('Error al subir archivo: ' + (err?.response?.data?.detail || err.message));
-        }
-      }
-      return res;
-    },
+    mutationFn: (payload) => api.post('/tareas', payload),
     onSuccess: (res) => {
+      const tareaId = res.data?.id;
       toast.success('Tarea creada');
       qc.setQueryData(['tareas'], prev => [res.data, ...(prev || [])]);
       setModalNueva(false);
       setForm({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
-      setNuevaFiles([]);
+
+      // Subir archivos en background (no bloquea el modal)
+      if (tareaId && nuevaFiles.length > 0) {
+        const filesToUpload = [...nuevaFiles];
+        setNuevaFiles([]);
+        Promise.all(filesToUpload.map(file => {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('afiliado_doc', '');
+          fd.append('contexto', 'tarea');
+          fd.append('contexto_id', String(tareaId));
+          return api.post('/documentos', fd);
+        })).then(() => {
+          qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
+        }).catch(err => {
+          toast.error('Error al subir adjunto: ' + (err?.response?.data?.detail || err.message));
+        });
+      } else {
+        setNuevaFiles([]);
+      }
     },
     onError: e => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
   });
@@ -628,7 +626,11 @@ export default function Tareas() {
               <Btn variant="secondary" onClick={() => { setModalNueva(false); setNuevaFiles([]); }}>Cancelar</Btn>
               <Btn variant="accent"
                 disabled={!form.titulo.trim() || (!form.privada && !form.asignado_a && isAdmin) || crear.isPending}
-                onClick={() => crear.mutate()}>
+                onClick={() => {
+                  const payload = { ...form };
+                  if (payload.privada && !isAdmin) payload.asignado_a = user?.username || '';
+                  crear.mutate(payload);
+                }}>
                 {crear.isPending ? 'Creando...' : 'Crear tarea'}
               </Btn>
             </div>
@@ -691,13 +693,27 @@ function TareaDocumentos({ tareaId }) {
 
   const handleDownload = async (doc) => {
     try {
-      const res = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
-      const url = URL.createObjectURL(res.data);
+      const res = await api.get(`/documentos/${doc.id}/descargar`);
+      if (res.data?.url) {
+        // URL presignada R2 — descarga directa desde Cloudflare
+        const a = document.createElement('a');
+        a.href = res.data.url;
+        a.download = res.data.nombre || doc.nombre;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        return;
+      }
+      // Fallback local (dev): blob
+      const blobRes = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
+      const url = URL.createObjectURL(blobRes.data);
       const a = document.createElement('a');
       a.href = url;
       a.download = doc.nombre;
+      document.body.appendChild(a);
       a.click();
-      URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch { alert('Error descargando'); }
   };
 
