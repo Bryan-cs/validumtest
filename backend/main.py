@@ -247,8 +247,19 @@ def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(requi
     e = db.query(models.Eliminado).filter_by(id=id).first()
     if not e: raise HTTPException(404, "No encontrado")
     nombre = e.nombre
+    doc = e.doc
+    # Borrar cualquier registro del afiliado (activo o no)
+    db.query(models.Afiliado).filter_by(doc=doc).delete()
+    # Borrar facturas del afiliado
+    db.query(models.Factura).filter_by(doc=doc).delete()
+    # Borrar documentos del afiliado
+    db.query(models.Documento).filter_by(afiliado_doc=doc).delete()
+    # Borrar solicitudes de novedad y retiro del portal
+    db.query(models.SolicitudNovedad).filter_by(afiliado_doc=doc).delete()
+    db.query(models.SolicitudRetiro).filter_by(afiliado_doc=doc).delete()
+    # Borrar el registro de eliminado
     db.delete(e)
-    crud._log(db, token.get("sub","sistema"), "eliminó permanentemente un afiliado", "Afiliados", nombre)
+    crud._log(db, token.get("sub","sistema"), "eliminó permanentemente un afiliado y todos sus registros", "Afiliados", nombre)
     db.commit()
     return {"ok": True}
 

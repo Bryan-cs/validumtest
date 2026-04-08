@@ -383,20 +383,21 @@ def get_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_to
 @router.post("", status_code=201)
 def create_afiliado(data: schemas.AfiliadoCreate,
                     db: Session = Depends(get_db), token=Depends(verify_token)):
-    existing = crud.get_afiliado_by_doc(db, data.doc)
-    if existing:
-        raise HTTPException(400, f"Ya existe un afiliado con documento {data.doc}: {existing.nombre}")
-    # Verificar si existe un afiliado inactivo (eliminado) con el mismo doc
-    inactivo = db.query(models.Afiliado).filter_by(doc=data.doc, activo=False).first()
-    if inactivo:
-        eliminado = db.query(models.Eliminado).filter_by(doc=data.doc).first()
-        if eliminado:
-            raise HTTPException(400,
-                f"Existe un afiliado eliminado con documento {data.doc} ({inactivo.nombre}). "
-                "Restáurelo desde la sección de eliminados en lugar de crear uno nuevo.")
-        # Si no hay registro en Eliminado, reactivar el inactivo
-        inactivo.activo = False  # será tratado por create_afiliado
-    data.registrado_por = token.get("sub", "sistema")
+    registrado_por = token.get("sub", "sistema")
+    # Si existe un afiliado activo sin registro de eliminado → bloquear (afiliado real)
+    activo = crud.get_afiliado_by_doc(db, data.doc)
+    eliminado_reg = db.query(models.Eliminado).filter_by(doc=data.doc).first()
+    if activo and not eliminado_reg:
+        raise HTTPException(400, f"Ya existe un afiliado activo con documento {data.doc}: {activo.nombre}")
+    # Limpiar cualquier rastro anterior del doc (fila inactiva, eliminado, retiro, facturas)
+    db.query(models.Afiliado).filter_by(doc=data.doc).delete()
+    db.query(models.Factura).filter_by(doc=data.doc).delete()
+    db.query(models.Retiro).filter_by(doc=data.doc).delete()
+    if eliminado_reg:
+        db.delete(eliminado_reg)
+    db.flush()
+    crud._log(db, registrado_por, "reingresó un afiliado (historial limpiado)", "Afiliados", data.nombre)
+    data.registrado_por = registrado_por
     return crud.create_afiliado(db, data)
 
 
