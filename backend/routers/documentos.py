@@ -11,7 +11,7 @@ import models
 
 CONTEXTOS_VALIDOS = Literal[
     "afiliado", "novedad_pago", "novedad_afil", "novedad_retiro",
-    "resp_pago", "resp_afil", "resp_retiro", "planilla_pago", "tarea",
+    "resp_pago", "resp_afil", "resp_retiro", "planilla_pago", "tarea", "aviso",
 ]
 
 router = APIRouter(prefix="/documentos", tags=["documentos"])
@@ -59,11 +59,22 @@ def _get_s3():
 
 
 def _upload_file(unique_name: str, content: bytes):
-    """Sube archivo a R2 o disco local."""
+    """Sube archivo a R2 (con reintentos) o disco local como fallback."""
+    import time as _t
     s3 = _get_s3()
     if s3:
-        s3.put_object(Bucket=_R2_BUCKET, Key=unique_name, Body=content)
-        return
+        last_err = None
+        for intento in range(3):
+            try:
+                s3.put_object(Bucket=_R2_BUCKET, Key=unique_name, Body=content)
+                return
+            except Exception as e:
+                last_err = e
+                if intento < 2:
+                    _t.sleep(0.5 * (intento + 1))  # 0.5s, luego 1s
+        from logger import logger
+        logger.error(f"R2 upload falló tras 3 intentos ({unique_name}): {last_err}")
+        raise RuntimeError(f"No se pudo subir el archivo a R2 tras 3 intentos")
     # Fallback: disco local
     dest = os.path.join(UPLOAD_DIR, unique_name)
     os.makedirs(os.path.dirname(dest), exist_ok=True)
@@ -158,6 +169,8 @@ async def subir_documento(
             unique_name = f"afiliados/{safe_doc}/{file_id}"
     elif contexto == "tarea":
         unique_name = f"tareas/{contexto_id}/{file_id}" if contexto_id else f"tareas/{file_id}"
+    elif contexto == "aviso":
+        unique_name = f"avisos/{contexto_id}/{file_id}" if contexto_id else f"avisos/{file_id}"
     elif contexto in ("novedad_pago", "novedad_afil", "novedad_retiro",
                       "resp_pago", "resp_afil", "resp_retiro"):
         unique_name = f"novedades/{contexto_id}/{file_id}" if contexto_id else f"novedades/{file_id}"
@@ -223,7 +236,12 @@ def descargar_documento(
         cliente_ref = token.get("cliente_ref", "")
         _ctx_cliente = ('novedad_pago', 'novedad_afil', 'novedad_retiro',
                         'resp_pago', 'resp_afil', 'resp_retiro', 'planilla_pago')
-        if doc.contexto in _ctx_cliente or doc.subido_por == token["sub"]:
+        if doc.contexto == "aviso":
+            # Verificar que el aviso pertenece al cliente
+            aviso = db.query(models.AvisoCliente).filter_by(id=doc.contexto_id, cliente_ref=cliente_ref).first()
+            if not aviso:
+                raise HTTPException(403, "No tienes acceso a este documento")
+        elif doc.contexto in _ctx_cliente or doc.subido_por == token["sub"]:
             pass  # Permitido: novedades del portal o archivos propios
         elif doc.afiliado_doc:
             afil = db.query(models.Afiliado).filter_by(doc=doc.afiliado_doc, cliente_txt=cliente_ref).first()

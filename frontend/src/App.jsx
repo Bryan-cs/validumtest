@@ -27,7 +27,7 @@ const PlanillasSS         = lazy(() => import('./pages/PlanillasSS'));
 
 const qc = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 60_000, refetchOnWindowFocus: 'always' },
+    queries: { retry: 1, staleTime: 60_000, refetchOnWindowFocus: false },
     mutations: {
       onError: (err) => {
         const msg = err?.response?.data?.detail || err?.message || 'Error inesperado';

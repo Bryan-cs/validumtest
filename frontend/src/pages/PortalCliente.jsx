@@ -689,6 +689,106 @@ function TabPlanillas() {
   );
 }
 
+// ─── TAB AVISOS DEL ADMIN ─────────────────────────────────────────────────────
+function TabAvisos() {
+  const qc = useQueryClient();
+
+  const { data: avisos=[], isLoading } = useQuery({
+    queryKey: ['portal-avisos'],
+    queryFn: () => api.get('/portal/avisos').then(r => r.data),
+    refetchInterval: 60_000,
+  });
+
+  const marcarLeido = useMutation({
+    mutationFn: (id) => api.patch(`/portal/avisos/${id}/leer`),
+    onSuccess: (_, id) => qc.setQueryData(['portal-avisos'], prev => prev?.map(a => a.id === id ? { ...a, leido: true } : a)),
+  });
+
+  const noLeidos = avisos.filter(a => !a.leido);
+  const leidos   = avisos.filter(a =>  a.leido);
+
+  return (
+    <div>
+      {isLoading && <p style={{ color:C.text2 }}>Cargando avisos...</p>}
+      {!isLoading && avisos.length === 0 && (
+        <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades de tu administrador.</p>
+      )}
+      {noLeidos.length > 0 && (
+        <div style={{ marginBottom:20 }}>
+          <h4 style={{ margin:'0 0 10px', fontSize:13, fontWeight:700, color:C.text2, textTransform:'uppercase', letterSpacing:'0.05em' }}>Nuevos ({noLeidos.length})</h4>
+          {noLeidos.map(a => (
+            <div key={a.id} style={{ background:C.blueBg, border:`1px solid ${C.blue}`, borderRadius:10, padding:'14px 18px', marginBottom:10 }}>
+              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:12 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:4 }}>📢 {a.titulo}</div>
+                  <div style={{ fontSize:13, color:C.text2, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{a.mensaje}</div>
+                  {(a.documentos||[]).length > 0 && (
+                    <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
+                      {(a.documentos||[]).map(d => (
+                        <button key={d.id}
+                          onClick={async () => {
+                            try {
+                              const res = await api.get(`/documentos/${d.id}/descargar`, { responseType: 'blob' });
+                              if (res.data?.url) { window.open(res.data.url, '_blank'); return; }
+                              const u = URL.createObjectURL(res.data);
+                              const el = document.createElement('a'); el.href = u; el.download = d.nombre; el.click();
+                              URL.revokeObjectURL(u);
+                            } catch { toast.error('Error al descargar'); }
+                          }}
+                          style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', background:'rgba(255,255,255,.6)', border:`1px solid ${C.blue}`, borderRadius:6, fontSize:12, color:C.blue, cursor:'pointer', fontWeight:600 }}>
+                          📄 {d.nombre}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div style={{ fontSize:11, color:C.text2, marginTop:8 }}>{new Date(a.creado).toLocaleString('es-CO')}</div>
+                </div>
+                <button
+                  onClick={() => marcarLeido.mutate(a.id)}
+                  disabled={marcarLeido.isPending}
+                  style={{ flexShrink:0, padding:'5px 12px', background:C.primary, border:'none', borderRadius:6, color:'#fff', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                  Marcar leído
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {leidos.length > 0 && (
+        <div>
+          <h4 style={{ margin:'0 0 10px', fontSize:13, fontWeight:700, color:C.text2, textTransform:'uppercase', letterSpacing:'0.05em' }}>Anteriores</h4>
+          {leidos.map(a => (
+            <div key={a.id} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 16px', marginBottom:8, opacity:0.75 }}>
+              <div style={{ fontWeight:600, fontSize:13, color:C.text, marginBottom:3 }}>📢 {a.titulo}</div>
+              <div style={{ fontSize:12, color:C.text2, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{a.mensaje}</div>
+              {(a.documentos||[]).length > 0 && (
+                <div style={{ marginTop:8, display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {(a.documentos||[]).map(d => (
+                    <button key={d.id}
+                      onClick={async () => {
+                        try {
+                          const res = await api.get(`/documentos/${d.id}/descargar`, { responseType: 'blob' });
+                          if (res.data?.url) { window.open(res.data.url, '_blank'); return; }
+                          const u = URL.createObjectURL(res.data);
+                          const el = document.createElement('a'); el.href = u; el.download = d.nombre; el.click();
+                          URL.revokeObjectURL(u);
+                        } catch { toast.error('Error al descargar'); }
+                      }}
+                      style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, color:C.text2, cursor:'pointer' }}>
+                      📄 {d.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div style={{ fontSize:11, color:C.text2, marginTop:6 }}>{new Date(a.creado).toLocaleString('es-CO')}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── CAMPANA DE NOTIFICACIONES ─────────────────────────────────────────────────
 function CampanaNotif() {
   const qc = useQueryClient();
@@ -789,6 +889,14 @@ export default function PortalCliente() {
     queryFn: () => api.get('/portal/afiliados').then(r => r.data),
     refetchInterval: 120_000,
   });
+
+  // Avisos no leídos (para badge en tab)
+  const { data: _avisosCount=[] } = useQuery({
+    queryKey: ['portal-avisos'],
+    queryFn: () => api.get('/portal/avisos').then(r => r.data),
+    refetchInterval: 120_000,
+  });
+  const avisosNoLeidos = _avisosCount.filter(a => !a.leido).length;
 
   const empresasUnicas = useMemo(() => [...new Set(afiliados.map(a => a.empresa).filter(Boolean))].sort(), [afiliados]);
   const estadosUnicos  = useMemo(() => [...new Set(afiliados.map(a => a.estado).filter(Boolean))].sort(), [afiliados]);
@@ -892,7 +1000,7 @@ export default function PortalCliente() {
     <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
-        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas']].map(([id, label]) => (
+        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas'],['avisos','📩 Novedades']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding:'9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
             borderBottom: tab===id?`2px solid ${C.primary}`:'none',
@@ -900,8 +1008,14 @@ export default function PortalCliente() {
             background: tab===id ? C.surface : 'transparent',
             color: tab===id ? C.primary : C.text2,
             marginBottom: tab===id ? -2 : 0,
+            position:'relative',
           }}>
             {label}
+            {id==='avisos' && avisosNoLeidos > 0 && (
+              <span style={{ position:'absolute', top:4, right:4, background:C.red, color:'#fff', borderRadius:'50%', width:16, height:16, fontSize:9, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                {avisosNoLeidos > 9 ? '9+' : avisosNoLeidos}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -961,7 +1075,7 @@ export default function PortalCliente() {
                     <th style={{ padding:'10px 12px', borderBottom:`1px solid ${C.border}` }}>
                       <input type="checkbox" checked={seleccionados.length===filtrados.length&&filtrados.length>0} onChange={toggleTodos} />
                     </th>
-                    {['Nombre','Documento','Empresa','EPS','AFP','Estado','Detalle','Novedades','Acciones'].map(h => (
+                    {['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle','Acciones'].map(h => (
                       <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
                     ))}
                   </tr>
@@ -978,15 +1092,11 @@ export default function PortalCliente() {
                         <td style={tdc}>{a.empresa}</td>
                         <td style={tdc}>{a.eps||'—'}</td>
                         <td style={tdc}>{a.afp||'—'}</td>
+                        <td style={tdc}>{a.ccf||'—'}</td>
                         <td style={tdc}><Badge color={ec.color} bg={ec.bg}>{a.estado}</Badge></td>
                         <td style={{ ...tdc, maxWidth:200 }}>
                           {a.detalle
                             ? <span style={{ color:C.blue, fontSize:12 }}>{a.detalle}</span>
-                            : <span style={{ color:C.text2, fontSize:12 }}>—</span>}
-                        </td>
-                        <td style={tdc}>
-                          {a.novedades
-                            ? <span style={{ color:C.amber, fontSize:12, fontWeight:600 }}>{a.novedades}</span>
                             : <span style={{ color:C.text2, fontSize:12 }}>—</span>}
                         </td>
                         <td style={tdc}>
@@ -1018,6 +1128,7 @@ export default function PortalCliente() {
 
       {tab === 'planillas' && <TabPlanillas />}
 
+      {tab === 'avisos' && <TabAvisos />}
 
       {/* Modales */}
       {resumenDoc && <ModalResumen doc={resumenDoc} onClose={() => setResumenDoc(null)} />}

@@ -633,7 +633,7 @@ export function Usuarios() {
   const [pwErr,setPwErr]=useState('');
 
   const { data: users=[] } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data) });
-  const { data: clientes=[] } = useQuery({ queryKey:['clientes'], queryFn:()=>api.get('/clientes').then(r=>r.data) });
+  const { data: clientes=[] } = useQuery({ queryKey:['clientes-lista'], queryFn:()=>api.get('/clientes').then(r=>r.data) });
 
   const crear = useMutation({
     mutationFn:()=>{
@@ -952,6 +952,43 @@ export function NovedadesClientes() {
 
   useEffect(() => { try { localStorage.setItem('bbc_nov_filtros', JSON.stringify({ filtroCliente, filtroEstado, filtroFecha })); } catch {} }, [filtroCliente, filtroEstado, filtroFecha]);
 
+  // ── Avisos (admin → cliente) ──
+  const [avisoForm, setAvisoForm] = useState({ cliente_ref:'', titulo:'', mensaje:'' });
+  const [avisoFiles, setAvisoFiles] = useState([]);
+  const { data: avisos=[], isLoading: loadAvisos } = useQuery({
+    queryKey:['admin-avisos'],
+    queryFn:()=>api.get('/portal/avisos').then(r=>r.data),
+    enabled: tabNov==='avisos',
+    refetchInterval:60_000,
+  });
+  const { data: usuariosCliente=[] } = useQuery({
+    queryKey:['usuarios-portal-clientes'],
+    queryFn:()=>api.get('/usuarios').then(r=>r.data.filter(u=>u.rol==='cliente'&&u.activo!==false)),
+  });
+  const crearAviso = useMutation({
+    mutationFn: async (body) => {
+      const { data } = await api.post('/portal/avisos', body);
+      if (avisoFiles.length > 0) {
+        for (const file of avisoFiles) {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('afiliado_doc', '');
+          fd.append('contexto', 'aviso');
+          fd.append('contexto_id', String(data.id));
+          await api.post('/documentos', fd);
+        }
+      }
+      return data;
+    },
+    onSuccess: ()=>{ toast.success('Aviso enviado'); setAvisoForm({ cliente_ref:'', titulo:'', mensaje:'' }); setAvisoFiles([]); qc.invalidateQueries(['admin-avisos']); },
+    onError: ()=>toast.error('Error al enviar aviso'),
+  });
+  const delAviso = useMutation({
+    mutationFn:(id)=>api.delete(`/portal/avisos/${id}`),
+    onSuccess:(_, id)=>{ toast.success('Aviso eliminado'); qc.setQueryData(['admin-avisos'], prev=>prev?.filter(a=>a.id!==id)); },
+    onError:()=>toast.error('Error al eliminar'),
+  });
+
   // Modal para responder al resolver
   const [modalResp, setModalResp] = useState(null); // { tipo, id, estado, label }
   const [respTexto, setRespTexto] = useState('');
@@ -1076,8 +1113,13 @@ export function NovedadesClientes() {
       <PageHeader title="📬 Novedades de Clientes" />
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:4, marginBottom:16 }}>
-        {[['novedades',`Novedades de Pago (${novedades.filter(n=>n.estado==='pendiente').length} pendientes)`],['solicitudes',`Solicitudes de Retiro (${solicitudes.filter(s=>s.estado==='pendiente').length} pendientes)`],['novedades-afil',`Novedades Afiliados (${novedadesAfil.filter(n=>n.estado==='pendiente').length} pendientes)`]].map(([id,label])=>(
+      <div style={{ display:'flex', gap:4, marginBottom:16, flexWrap:'wrap' }}>
+        {[
+          ['novedades',`Novedades de Pago (${novedades.filter(n=>n.estado==='pendiente').length} pendientes)`],
+          ['solicitudes',`Solicitudes de Retiro (${solicitudes.filter(s=>s.estado==='pendiente').length} pendientes)`],
+          ['novedades-afil',`Novedades Afiliados (${novedadesAfil.filter(n=>n.estado==='pendiente').length} pendientes)`],
+          ['avisos','📩 Novedades a Clientes'],
+        ].map(([id,label])=>(
           <button key={id} onClick={()=>{ setTabNov(id); limpiar(); }}
             style={{ padding:'8px 18px', borderRadius:8, border:'none', fontSize:13, fontWeight:600,
               cursor:'pointer', background:tabNov===id?C.primary:'#fff',
@@ -1245,6 +1287,109 @@ export function NovedadesClientes() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Avisos a Clientes ── */}
+      {tabNov==='avisos'&&(
+        <div>
+          {/* Formulario crear aviso */}
+          <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:'16px 20px', marginBottom:20 }}>
+            <h4 style={{ margin:'0 0 12px', fontSize:14, fontWeight:700, color:C.text }}>Nueva Novedad al Cliente</h4>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+              <div>
+                <label style={lbl}>Cliente destinatario</label>
+                <select style={inp} value={avisoForm.cliente_ref} onChange={e=>setAvisoForm(p=>({...p,cliente_ref:e.target.value}))}>
+                  <option value="">Seleccionar cliente...</option>
+                  {usuariosCliente.filter(u=>u.cliente_ref).map(u=>(
+                    <option key={u.id} value={u.cliente_ref}>{u.nombre} — {u.cliente_ref}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Título</label>
+                <input style={inp} placeholder="Ej: Actualización de tarifas" value={avisoForm.titulo} onChange={e=>setAvisoForm(p=>({...p,titulo:e.target.value}))} maxLength={200} />
+              </div>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <label style={lbl}>Mensaje</label>
+              <textarea style={{...inp,height:80,resize:'vertical'}} placeholder="Contenido de la novedad para el cliente..." value={avisoForm.mensaje} onChange={e=>setAvisoForm(p=>({...p,mensaje:e.target.value}))} />
+            </div>
+            {/* Adjuntos */}
+            <div style={{ marginBottom:12 }}>
+              <label style={{ display:'block', padding:'7px 12px', border:`2px dashed ${C.border}`, borderRadius:7,
+                textAlign:'center', cursor:'pointer', color:C.text2, fontSize:12, background:C.surface2 }}>
+                📎 {avisoFiles.length > 0 ? `${avisoFiles.length} archivo(s) adjunto(s)` : 'Adjuntar documentos (opcional)'}
+                <input type="file" multiple style={{ display:'none' }} accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  onChange={e => setAvisoFiles(p => [...p, ...Array.from(e.target.files)])} />
+              </label>
+              {avisoFiles.length > 0 && (
+                <div style={{ marginTop:6, display:'flex', flexWrap:'wrap', gap:4 }}>
+                  {avisoFiles.map((f, i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px',
+                      background:C.blueBg, border:`1px solid ${C.blue}`, borderRadius:5, fontSize:11 }}>
+                      <span style={{ color:C.blue }}>{f.name}</span>
+                      <span style={{ cursor:'pointer', color:C.red, fontWeight:700 }} onClick={() => setAvisoFiles(p => p.filter((_,j) => j !== i))}>×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Btn variant="primary"
+              onClick={()=>{ if(!avisoForm.cliente_ref||!avisoForm.titulo.trim()||!avisoForm.mensaje.trim()){ toast.error('Completa todos los campos'); return; } crearAviso.mutate(avisoForm); }}
+              disabled={crearAviso.isPending}>
+              {crearAviso.isPending ? 'Enviando...' : '📩 Enviar Novedad'}
+            </Btn>
+          </div>
+
+          {/* Tabla avisos enviados */}
+          {loadAvisos ? <p style={{ color:C.text2 }}>Cargando...</p> :
+           avisos.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades enviadas aún.</p> :
+          <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+              <thead><tr style={{ background:C.surface2 }}>
+                {['Cliente','Título','Mensaje','Adjuntos','Estado','Enviado por','Fecha','Acción'].map(h=>(
+                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {avisos.map(a=>(
+                  <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                    <td style={tdc}><strong>{a.cliente_ref}</strong></td>
+                    <td style={tdc}><span style={{ fontWeight:600, fontSize:13 }}>{a.titulo}</span></td>
+                    <td style={{ ...tdc, maxWidth:220 }}><span style={{ fontSize:12, color:C.text2, whiteSpace:'pre-wrap' }}>{a.mensaje}</span></td>
+                    <td style={tdc}>
+                      {(a.documentos||[]).length === 0
+                        ? <span style={{ color:C.text2, fontSize:11 }}>—</span>
+                        : (a.documentos||[]).map(d=>(
+                          <div key={d.id} style={{ fontSize:11, color:C.blue, cursor:'pointer', textDecoration:'underline', marginBottom:2 }}
+                            onClick={async()=>{
+                              const res = await api.get(`/documentos/${d.id}/descargar`, { responseType:'blob' }).catch(()=>null);
+                              if(!res) return toast.error('Error al descargar');
+                              if(res.data?.url) { window.open(res.data.url,'_blank'); return; }
+                              const u=URL.createObjectURL(res.data); const a2=document.createElement('a'); a2.href=u; a2.download=d.nombre; a2.click(); URL.revokeObjectURL(u);
+                            }}>
+                            📄 {d.nombre}
+                          </div>
+                        ))
+                      }
+                    </td>
+                    <td style={tdc}>
+                      {a.leido
+                        ? <span style={{ background:C.greenBg, color:C.green, borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600 }}>Leído</span>
+                        : <span style={{ background:'#FEF3C7', color:'#92400E', borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600 }}>No leído</span>
+                      }
+                    </td>
+                    <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{a.creado_por}</span></td>
+                    <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(a.creado).toLocaleString('es-CO')}</span></td>
+                    <td style={tdc}>
+                      <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar esta novedad y sus adjuntos?')) delAviso.mutate(a.id); }} disabled={delAviso.isPending}>×</Btn>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>}
         </div>
       )}
 

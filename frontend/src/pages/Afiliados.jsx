@@ -239,6 +239,31 @@ export default function Afiliados() {
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const confirmarBorradoPermanente = async (e) => {
+    try {
+      const preview = await api.get(`/eliminados/${e.id}/preview`).then(r => r.data);
+      const detalles = [
+        preview.facturas    > 0 ? `${preview.facturas} factura(s)`             : null,
+        preview.documentos  > 0 ? `${preview.documentos} documento(s)`         : null,
+        preview.solicitudes > 0 ? `${preview.solicitudes} solicitud(es) portal`: null,
+      ].filter(Boolean);
+      const detalleTxt = detalles.length > 0 ? ` Se borrarán también: ${detalles.join(', ')}.` : '';
+      setConfirm({
+        title: '⚠️ Eliminar permanentemente',
+        message: `¿Eliminar PERMANENTEMENTE a ${e.nombre} (${e.doc})?${detalleTxt} Esta acción NO se puede deshacer.`,
+        confirmLabel: 'Sí, eliminar todo',
+        onConfirm: () => borrarPermanente.mutate(e.id),
+      });
+    } catch {
+      setConfirm({
+        title: 'Eliminar permanentemente',
+        message: `¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`,
+        confirmLabel: 'Eliminar para siempre',
+        onConfirm: () => borrarPermanente.mutate(e.id),
+      });
+    }
+  };
+
 
   // Seguimiento state
   const [segBusqueda, setSegBusqueda] = useState('');
@@ -439,7 +464,7 @@ export default function Afiliados() {
                         </Btn>
 
                         <Btn size="sm" variant="danger"
-                          onClick={() => setConfirm({ title:'Eliminar permanentemente', message:`¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`, confirmLabel:'Eliminar para siempre', onConfirm:()=>borrarPermanente.mutate(e.id) })}
+                          onClick={() => confirmarBorradoPermanente(e)}
                           disabled={borrarPermanente.isPending}>
                           🗑️ Borrar
                         </Btn>
@@ -892,20 +917,21 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
   const handleUpload = async (files) => {
     if (!docDocSel || !files.length) return;
     setUploading(true);
-    try {
-      for (const file of files) {
+    const resultados = await Promise.allSettled(
+      files.map(file => {
         const fd = new FormData();
         fd.append('file', file);
         fd.append('afiliado_doc', docDocSel);
         fd.append('contexto', 'afiliado');
-        await api.post('/documentos', fd);
-      }
-      qc.invalidateQueries({ queryKey: ['documentos', docDocSel] });
-    } catch (e) {
-      alert(e.response?.data?.detail || 'Error subiendo archivo');
-    } finally {
-      setUploading(false);
-    }
+        return api.post('/documentos', fd);
+      })
+    );
+    await qc.refetchQueries({ queryKey: ['documentos', docDocSel] });
+    setUploading(false);
+    const errores = resultados
+      .map((r, i) => r.status === 'rejected' ? `${files[i].name}: ${r.reason?.response?.data?.detail || 'Error'}` : null)
+      .filter(Boolean);
+    if (errores.length) alert(`Error al subir:\n${errores.join('\n')}`);
   };
 
   const handleDelete = async (id) => {
@@ -920,8 +946,14 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
 
   const handleDownload = async (doc) => {
     try {
-      const res = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
-      const objUrl = URL.createObjectURL(res.data);
+      const res = await api.get(`/documentos/${doc.id}/descargar`);
+      if (res.data?.url) {
+        window.open(res.data.url, '_blank');
+        return;
+      }
+      // Fallback local (dev): refetch como blob
+      const res2 = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
+      const objUrl = URL.createObjectURL(res2.data);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = doc.nombre;
