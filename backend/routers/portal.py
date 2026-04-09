@@ -649,6 +649,19 @@ def listar_avisos(db: Session = Depends(get_db), token=Depends(_require_portal))
         q = q.filter(models.AvisoCliente.cliente_ref == cliente_ref)
 
     rows = q.all()
+    if not rows:
+        return []
+    # Batch load documents (avoid N+1)
+    aviso_ids = [a.id for a in rows]
+    all_docs = db.query(models.Documento).filter(
+        models.Documento.contexto == "aviso",
+        models.Documento.contexto_id.in_(aviso_ids),
+    ).all()
+    docs_by_aviso = {}
+    for d in all_docs:
+        docs_by_aviso.setdefault(d.contexto_id, []).append(
+            {"id": d.id, "nombre": d.nombre, "tipo": d.tipo, "tamano": d.tamano}
+        )
     return [
         {
             "id": a.id,
@@ -658,6 +671,7 @@ def listar_avisos(db: Session = Depends(get_db), token=Depends(_require_portal))
             "leido": a.leido,
             "creado_por": a.creado_por,
             "creado": a.creado.isoformat() if a.creado else None,
+            "documentos": docs_by_aviso.get(a.id, []),
         }
         for a in rows
     ]
@@ -682,12 +696,13 @@ def marcar_aviso_leido(aviso_id: int, db: Session = Depends(get_db), token=Depen
 
 @router.delete("/avisos/{aviso_id}")
 def eliminar_aviso(aviso_id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    """Admin elimina un aviso."""
+    """Admin elimina un aviso y sus documentos adjuntos."""
     if token.get("rol") != "admin":
         raise HTTPException(status_code=403, detail="Solo administradores pueden eliminar avisos")
     aviso = db.query(models.AvisoCliente).filter_by(id=aviso_id).first()
     if not aviso:
         raise HTTPException(404, "Aviso no encontrado")
+    _borrar_docs_asociados(db, ["aviso"], aviso_id)
     db.delete(aviso)
     db.commit()
     return {"ok": True}

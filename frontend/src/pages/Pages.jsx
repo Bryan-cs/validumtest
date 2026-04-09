@@ -954,6 +954,7 @@ export function NovedadesClientes() {
 
   // ── Avisos (admin → cliente) ──
   const [avisoForm, setAvisoForm] = useState({ cliente_ref:'', titulo:'', mensaje:'' });
+  const [avisoFiles, setAvisoFiles] = useState([]);
   const { data: avisos=[], isLoading: loadAvisos } = useQuery({
     queryKey:['admin-avisos'],
     queryFn:()=>api.get('/portal/avisos').then(r=>r.data),
@@ -966,8 +967,21 @@ export function NovedadesClientes() {
     enabled: tabNov==='avisos',
   });
   const crearAviso = useMutation({
-    mutationFn: (body)=>api.post('/portal/avisos', body),
-    onSuccess: ()=>{ toast.success('Aviso enviado'); setAvisoForm({ cliente_ref:'', titulo:'', mensaje:'' }); qc.invalidateQueries(['admin-avisos']); },
+    mutationFn: async (body) => {
+      const { data } = await api.post('/portal/avisos', body);
+      if (avisoFiles.length > 0) {
+        for (const file of avisoFiles) {
+          const fd = new FormData();
+          fd.append('file', file);
+          fd.append('afiliado_doc', '');
+          fd.append('contexto', 'aviso');
+          fd.append('contexto_id', String(data.id));
+          await api.post('/documentos', fd);
+        }
+      }
+      return data;
+    },
+    onSuccess: ()=>{ toast.success('Aviso enviado'); setAvisoForm({ cliente_ref:'', titulo:'', mensaje:'' }); setAvisoFiles([]); qc.invalidateQueries(['admin-avisos']); },
     onError: ()=>toast.error('Error al enviar aviso'),
   });
   const delAviso = useMutation({
@@ -1300,6 +1314,26 @@ export function NovedadesClientes() {
               <label style={lbl}>Mensaje</label>
               <textarea style={{...inp,height:80,resize:'vertical'}} placeholder="Contenido del aviso para el cliente..." value={avisoForm.mensaje} onChange={e=>setAvisoForm(p=>({...p,mensaje:e.target.value}))} />
             </div>
+            {/* Adjuntos */}
+            <div style={{ marginBottom:12 }}>
+              <label style={{ display:'block', padding:'7px 12px', border:`2px dashed ${C.border}`, borderRadius:7,
+                textAlign:'center', cursor:'pointer', color:C.text2, fontSize:12, background:C.surface2 }}>
+                📎 {avisoFiles.length > 0 ? `${avisoFiles.length} archivo(s) adjunto(s)` : 'Adjuntar documentos (opcional)'}
+                <input type="file" multiple style={{ display:'none' }} accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
+                  onChange={e => setAvisoFiles(p => [...p, ...Array.from(e.target.files)])} />
+              </label>
+              {avisoFiles.length > 0 && (
+                <div style={{ marginTop:6, display:'flex', flexWrap:'wrap', gap:4 }}>
+                  {avisoFiles.map((f, i) => (
+                    <div key={i} style={{ display:'flex', alignItems:'center', gap:4, padding:'3px 8px',
+                      background:C.blueBg, border:`1px solid ${C.blue}`, borderRadius:5, fontSize:11 }}>
+                      <span style={{ color:C.blue }}>{f.name}</span>
+                      <span style={{ cursor:'pointer', color:C.red, fontWeight:700 }} onClick={() => setAvisoFiles(p => p.filter((_,j) => j !== i))}>×</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
             <Btn variant="primary"
               onClick={()=>{ if(!avisoForm.cliente_ref||!avisoForm.titulo.trim()||!avisoForm.mensaje.trim()){ toast.error('Completa todos los campos'); return; } crearAviso.mutate(avisoForm); }}
               disabled={crearAviso.isPending}>
@@ -1313,7 +1347,7 @@ export function NovedadesClientes() {
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead><tr style={{ background:C.surface2 }}>
-                {['Cliente','Título','Mensaje','Estado','Enviado por','Fecha','Acción'].map(h=>(
+                {['Cliente','Título','Mensaje','Adjuntos','Estado','Enviado por','Fecha','Acción'].map(h=>(
                   <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
                 ))}
               </tr></thead>
@@ -1322,7 +1356,23 @@ export function NovedadesClientes() {
                   <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}` }}>
                     <td style={tdc}><strong>{a.cliente_ref}</strong></td>
                     <td style={tdc}><span style={{ fontWeight:600, fontSize:13 }}>{a.titulo}</span></td>
-                    <td style={{ ...tdc, maxWidth:260 }}><span style={{ fontSize:12, color:C.text2, whiteSpace:'pre-wrap' }}>{a.mensaje}</span></td>
+                    <td style={{ ...tdc, maxWidth:220 }}><span style={{ fontSize:12, color:C.text2, whiteSpace:'pre-wrap' }}>{a.mensaje}</span></td>
+                    <td style={tdc}>
+                      {(a.documentos||[]).length === 0
+                        ? <span style={{ color:C.text2, fontSize:11 }}>—</span>
+                        : (a.documentos||[]).map(d=>(
+                          <div key={d.id} style={{ fontSize:11, color:C.blue, cursor:'pointer', textDecoration:'underline', marginBottom:2 }}
+                            onClick={async()=>{
+                              const res = await api.get(`/documentos/${d.id}/descargar`, { responseType:'blob' }).catch(()=>null);
+                              if(!res) return toast.error('Error al descargar');
+                              if(res.data?.url) { window.open(res.data.url,'_blank'); return; }
+                              const u=URL.createObjectURL(res.data); const a2=document.createElement('a'); a2.href=u; a2.download=d.nombre; a2.click(); URL.revokeObjectURL(u);
+                            }}>
+                            📄 {d.nombre}
+                          </div>
+                        ))
+                      }
+                    </td>
                     <td style={tdc}>
                       {a.leido
                         ? <span style={{ background:C.greenBg, color:C.green, borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600 }}>Leído</span>
@@ -1332,7 +1382,7 @@ export function NovedadesClientes() {
                     <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{a.creado_por}</span></td>
                     <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(a.creado).toLocaleString('es-CO')}</span></td>
                     <td style={tdc}>
-                      <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar este aviso?')) delAviso.mutate(a.id); }} disabled={delAviso.isPending}>×</Btn>
+                      <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar este aviso y sus adjuntos?')) delAviso.mutate(a.id); }} disabled={delAviso.isPending}>×</Btn>
                     </td>
                   </tr>
                 ))}

@@ -722,6 +722,25 @@ function TabAvisos() {
                 <div style={{ flex:1 }}>
                   <div style={{ fontWeight:700, fontSize:14, color:C.text, marginBottom:4 }}>📢 {a.titulo}</div>
                   <div style={{ fontSize:13, color:C.text2, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{a.mensaje}</div>
+                  {(a.documentos||[]).length > 0 && (
+                    <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
+                      {(a.documentos||[]).map(d => (
+                        <button key={d.id}
+                          onClick={async () => {
+                            try {
+                              const res = await api.get(`/documentos/${d.id}/descargar`, { responseType: 'blob' });
+                              if (res.data?.url) { window.open(res.data.url, '_blank'); return; }
+                              const u = URL.createObjectURL(res.data);
+                              const el = document.createElement('a'); el.href = u; el.download = d.nombre; el.click();
+                              URL.revokeObjectURL(u);
+                            } catch { toast.error('Error al descargar'); }
+                          }}
+                          style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', background:'rgba(255,255,255,.6)', border:`1px solid ${C.blue}`, borderRadius:6, fontSize:12, color:C.blue, cursor:'pointer', fontWeight:600 }}>
+                          📄 {d.nombre}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                   <div style={{ fontSize:11, color:C.text2, marginTop:8 }}>{new Date(a.creado).toLocaleString('es-CO')}</div>
                 </div>
                 <button
@@ -742,6 +761,25 @@ function TabAvisos() {
             <div key={a.id} style={{ background:C.surface, border:`1px solid ${C.border}`, borderRadius:10, padding:'12px 16px', marginBottom:8, opacity:0.75 }}>
               <div style={{ fontWeight:600, fontSize:13, color:C.text, marginBottom:3 }}>📢 {a.titulo}</div>
               <div style={{ fontSize:12, color:C.text2, whiteSpace:'pre-wrap', lineHeight:1.5 }}>{a.mensaje}</div>
+              {(a.documentos||[]).length > 0 && (
+                <div style={{ marginTop:8, display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {(a.documentos||[]).map(d => (
+                    <button key={d.id}
+                      onClick={async () => {
+                        try {
+                          const res = await api.get(`/documentos/${d.id}/descargar`, { responseType: 'blob' });
+                          if (res.data?.url) { window.open(res.data.url, '_blank'); return; }
+                          const u = URL.createObjectURL(res.data);
+                          const el = document.createElement('a'); el.href = u; el.download = d.nombre; el.click();
+                          URL.revokeObjectURL(u);
+                        } catch { toast.error('Error al descargar'); }
+                      }}
+                      style={{ display:'flex', alignItems:'center', gap:4, padding:'4px 10px', background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, color:C.text2, cursor:'pointer' }}>
+                      📄 {d.nombre}
+                    </button>
+                  ))}
+                </div>
+              )}
               <div style={{ fontSize:11, color:C.text2, marginTop:6 }}>{new Date(a.creado).toLocaleString('es-CO')}</div>
             </div>
           ))}
