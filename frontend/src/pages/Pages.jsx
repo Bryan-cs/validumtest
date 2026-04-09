@@ -633,7 +633,7 @@ export function Usuarios() {
   const [pwErr,setPwErr]=useState('');
 
   const { data: users=[] } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data) });
-  const { data: clientes=[] } = useQuery({ queryKey:['clientes'], queryFn:()=>api.get('/clientes').then(r=>r.data) });
+  const { data: clientes=[] } = useQuery({ queryKey:['clientes-lista'], queryFn:()=>api.get('/clientes').then(r=>r.data) });
 
   const crear = useMutation({
     mutationFn:()=>{
