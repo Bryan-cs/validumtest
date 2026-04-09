@@ -964,7 +964,6 @@ export function NovedadesClientes() {
   const { data: usuariosCliente=[] } = useQuery({
     queryKey:['usuarios-portal-clientes'],
     queryFn:()=>api.get('/usuarios').then(r=>r.data.filter(u=>u.rol==='cliente'&&u.activo!==false)),
-    enabled: tabNov==='avisos',
   });
   const crearAviso = useMutation({
     mutationFn: async (body) => {
