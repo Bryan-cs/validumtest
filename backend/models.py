@@ -335,6 +335,21 @@ class Mensaje(Base):
     leido            = Column(Boolean, default=False)      # solo aplica a mensajes privados
 
 
+class AvisoCliente(Base):
+    """Avisos/comunicados que el admin envía a un cliente específico."""
+    __tablename__ = "avisos_clientes"
+    __table_args__ = (
+        Index('ix_aviso_cliente_ref', 'cliente_ref'),
+    )
+    id          = Column(Integer, primary_key=True, index=True)
+    cliente_ref = Column(String(120), index=True)   # destinatario (cliente_txt / cliente_ref)
+    titulo      = Column(String(200))
+    mensaje     = Column(Text)
+    leido       = Column(Boolean, default=False)
+    creado_por  = Column(String(60))
+    creado      = Column(DateTime, default=_utcnow)
+
+
 class TokenBlacklist(Base):
     """Refresh tokens invalidados explícitamente (logout)."""
     __tablename__ = "token_blacklist"

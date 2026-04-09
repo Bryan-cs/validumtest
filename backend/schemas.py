@@ -264,3 +264,8 @@ class TareaComentarioCreate(BaseModel):
 class EstadoSolicitudBody(BaseModel):
     estado: Literal["pendiente", "procesado", "atendido", "ejecutado", "rechazado"]
     respuesta: Optional[str] = None
+
+class AvisoClienteCreate(BaseModel):
+    cliente_ref: str
+    titulo: str
+    mensaje: str

@@ -605,3 +605,89 @@ def portal_planillas(mes: str = "", anio: str = "",
             "archivos": [{"id": d.id, "nombre": d.nombre, "tamano": d.tamano} for d in docs],
         })
     return result
+
+
+# ─── AVISOS (admin → cliente) ─────────────────────────────────────────────────
+
+@router.post("/avisos", status_code=201)
+def crear_aviso(body: schemas.AvisoClienteCreate, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Admin crea un aviso dirigido a un cliente específico."""
+    if token.get("rol") != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden crear avisos")
+    aviso = models.AvisoCliente(
+        cliente_ref=body.cliente_ref.strip(),
+        titulo=body.titulo.strip(),
+        mensaje=body.mensaje.strip(),
+        creado_por=token.get("sub", ""),
+    )
+    db.add(aviso)
+    db.flush()  # get aviso.id before commit
+    # Notificar a todos los usuarios del cliente
+    usuarios_cliente = db.query(models.Usuario).filter_by(
+        cliente_ref=body.cliente_ref.strip(), activo=True
+    ).all()
+    for u in usuarios_cliente:
+        db.add(models.Notificacion(
+            usuario=u.username,
+            mensaje=f"Nuevo aviso: {body.titulo[:80]}",
+            tarea_id=None,
+        ))
+    db.commit()
+    return {"id": aviso.id, "ok": True}
+
+
+@router.get("/avisos")
+def listar_avisos(db: Session = Depends(get_db), token=Depends(_require_portal)):
+    """Admin ve todos los avisos; cliente ve solo los suyos."""
+    rol = token.get("rol", "")
+    cliente_ref = (token.get("cliente_ref") or "").strip()
+
+    q = db.query(models.AvisoCliente).order_by(models.AvisoCliente.id.desc())
+    if rol != "admin":
+        if not cliente_ref:
+            raise HTTPException(400, "Usuario sin cliente asociado")
+        q = q.filter(models.AvisoCliente.cliente_ref == cliente_ref)
+
+    rows = q.all()
+    return [
+        {
+            "id": a.id,
+            "cliente_ref": a.cliente_ref,
+            "titulo": a.titulo,
+            "mensaje": a.mensaje,
+            "leido": a.leido,
+            "creado_por": a.creado_por,
+            "creado": a.creado.isoformat() if a.creado else None,
+        }
+        for a in rows
+    ]
+
+
+@router.patch("/avisos/{aviso_id}/leer")
+def marcar_aviso_leido(aviso_id: int, db: Session = Depends(get_db), token=Depends(_require_portal)):
+    """Cliente marca un aviso como leído."""
+    rol = token.get("rol", "")
+    cliente_ref = (token.get("cliente_ref") or "").strip()
+
+    aviso = db.query(models.AvisoCliente).filter_by(id=aviso_id).first()
+    if not aviso:
+        raise HTTPException(404, "Aviso no encontrado")
+    if rol != "admin" and aviso.cliente_ref != cliente_ref:
+        raise HTTPException(403, "Sin acceso a este aviso")
+
+    aviso.leido = True
+    db.commit()
+    return {"ok": True}
+
+
+@router.delete("/avisos/{aviso_id}")
+def eliminar_aviso(aviso_id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Admin elimina un aviso."""
+    if token.get("rol") != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden eliminar avisos")
+    aviso = db.query(models.AvisoCliente).filter_by(id=aviso_id).first()
+    if not aviso:
+        raise HTTPException(404, "Aviso no encontrado")
+    db.delete(aviso)
+    db.commit()
+    return {"ok": True}

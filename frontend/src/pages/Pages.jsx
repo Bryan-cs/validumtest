@@ -952,6 +952,30 @@ export function NovedadesClientes() {
 
   useEffect(() => { try { localStorage.setItem('bbc_nov_filtros', JSON.stringify({ filtroCliente, filtroEstado, filtroFecha })); } catch {} }, [filtroCliente, filtroEstado, filtroFecha]);
 
+  // ── Avisos (admin → cliente) ──
+  const [avisoForm, setAvisoForm] = useState({ cliente_ref:'', titulo:'', mensaje:'' });
+  const { data: avisos=[], isLoading: loadAvisos } = useQuery({
+    queryKey:['admin-avisos'],
+    queryFn:()=>api.get('/portal/avisos').then(r=>r.data),
+    enabled: tabNov==='avisos',
+    refetchInterval:60_000,
+  });
+  const { data: usuariosCliente=[] } = useQuery({
+    queryKey:['usuarios-clientes'],
+    queryFn:()=>api.get('/usuarios').then(r=>r.data.filter(u=>u.rol==='cliente'&&u.activo!==false)),
+    enabled: tabNov==='avisos',
+  });
+  const crearAviso = useMutation({
+    mutationFn: (body)=>api.post('/portal/avisos', body),
+    onSuccess: ()=>{ toast.success('Aviso enviado'); setAvisoForm({ cliente_ref:'', titulo:'', mensaje:'' }); qc.invalidateQueries(['admin-avisos']); },
+    onError: ()=>toast.error('Error al enviar aviso'),
+  });
+  const delAviso = useMutation({
+    mutationFn:(id)=>api.delete(`/portal/avisos/${id}`),
+    onSuccess:(_, id)=>{ toast.success('Aviso eliminado'); qc.setQueryData(['admin-avisos'], prev=>prev?.filter(a=>a.id!==id)); },
+    onError:()=>toast.error('Error al eliminar'),
+  });
+
   // Modal para responder al resolver
   const [modalResp, setModalResp] = useState(null); // { tipo, id, estado, label }
   const [respTexto, setRespTexto] = useState('');
@@ -1076,8 +1100,13 @@ export function NovedadesClientes() {
       <PageHeader title="📬 Novedades de Clientes" />
 
       {/* Tabs */}
-      <div style={{ display:'flex', gap:4, marginBottom:16 }}>
-        {[['novedades',`Novedades de Pago (${novedades.filter(n=>n.estado==='pendiente').length} pendientes)`],['solicitudes',`Solicitudes de Retiro (${solicitudes.filter(s=>s.estado==='pendiente').length} pendientes)`],['novedades-afil',`Novedades Afiliados (${novedadesAfil.filter(n=>n.estado==='pendiente').length} pendientes)`]].map(([id,label])=>(
+      <div style={{ display:'flex', gap:4, marginBottom:16, flexWrap:'wrap' }}>
+        {[
+          ['novedades',`Novedades de Pago (${novedades.filter(n=>n.estado==='pendiente').length} pendientes)`],
+          ['solicitudes',`Solicitudes de Retiro (${solicitudes.filter(s=>s.estado==='pendiente').length} pendientes)`],
+          ['novedades-afil',`Novedades Afiliados (${novedadesAfil.filter(n=>n.estado==='pendiente').length} pendientes)`],
+          ['avisos','📢 Avisos a Clientes'],
+        ].map(([id,label])=>(
           <button key={id} onClick={()=>{ setTabNov(id); limpiar(); }}
             style={{ padding:'8px 18px', borderRadius:8, border:'none', fontSize:13, fontWeight:600,
               cursor:'pointer', background:tabNov===id?C.primary:'#fff',
@@ -1245,6 +1274,71 @@ export function NovedadesClientes() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* ── Avisos a Clientes ── */}
+      {tabNov==='avisos'&&(
+        <div>
+          {/* Formulario crear aviso */}
+          <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:'16px 20px', marginBottom:20 }}>
+            <h4 style={{ margin:'0 0 12px', fontSize:14, fontWeight:700, color:C.text }}>Nuevo Aviso</h4>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+              <div>
+                <label style={lbl}>Cliente destinatario</label>
+                <select style={sel} value={avisoForm.cliente_ref} onChange={e=>setAvisoForm(p=>({...p,cliente_ref:e.target.value}))}>
+                  <option value="">Seleccionar cliente...</option>
+                  {usuariosCliente.map(u=><option key={u.id} value={u.cliente_ref||u.username}>{u.nombre} ({u.cliente_ref||u.username})</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lbl}>Título</label>
+                <input style={inp} placeholder="Ej: Actualización de tarifas" value={avisoForm.titulo} onChange={e=>setAvisoForm(p=>({...p,titulo:e.target.value}))} maxLength={200} />
+              </div>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <label style={lbl}>Mensaje</label>
+              <textarea style={{...inp,height:80,resize:'vertical'}} placeholder="Contenido del aviso para el cliente..." value={avisoForm.mensaje} onChange={e=>setAvisoForm(p=>({...p,mensaje:e.target.value}))} />
+            </div>
+            <Btn variant="primary"
+              onClick={()=>{ if(!avisoForm.cliente_ref||!avisoForm.titulo.trim()||!avisoForm.mensaje.trim()){ toast.error('Completa todos los campos'); return; } crearAviso.mutate(avisoForm); }}
+              disabled={crearAviso.isPending}>
+              {crearAviso.isPending ? 'Enviando...' : '📢 Enviar Aviso'}
+            </Btn>
+          </div>
+
+          {/* Tabla avisos enviados */}
+          {loadAvisos ? <p style={{ color:C.text2 }}>Cargando...</p> :
+           avisos.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin avisos enviados aún.</p> :
+          <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+              <thead><tr style={{ background:C.surface2 }}>
+                {['Cliente','Título','Mensaje','Estado','Enviado por','Fecha','Acción'].map(h=>(
+                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {avisos.map(a=>(
+                  <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}` }}>
+                    <td style={tdc}><strong>{a.cliente_ref}</strong></td>
+                    <td style={tdc}><span style={{ fontWeight:600, fontSize:13 }}>{a.titulo}</span></td>
+                    <td style={{ ...tdc, maxWidth:260 }}><span style={{ fontSize:12, color:C.text2, whiteSpace:'pre-wrap' }}>{a.mensaje}</span></td>
+                    <td style={tdc}>
+                      {a.leido
+                        ? <span style={{ background:C.greenBg, color:C.green, borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600 }}>Leído</span>
+                        : <span style={{ background:'#FEF3C7', color:'#92400E', borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600 }}>No leído</span>
+                      }
+                    </td>
+                    <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{a.creado_por}</span></td>
+                    <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(a.creado).toLocaleString('es-CO')}</span></td>
+                    <td style={tdc}>
+                      <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar este aviso?')) delAviso.mutate(a.id); }} disabled={delAviso.isPending}>×</Btn>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>}
         </div>
       )}
 
