@@ -1118,7 +1118,7 @@ export function NovedadesClientes() {
           ['novedades',`Novedades de Pago (${novedades.filter(n=>n.estado==='pendiente').length} pendientes)`],
           ['solicitudes',`Solicitudes de Retiro (${solicitudes.filter(s=>s.estado==='pendiente').length} pendientes)`],
           ['novedades-afil',`Novedades Afiliados (${novedadesAfil.filter(n=>n.estado==='pendiente').length} pendientes)`],
-          ['avisos','📢 Avisos a Clientes'],
+          ['avisos','📩 Novedades a Clientes'],
         ].map(([id,label])=>(
           <button key={id} onClick={()=>{ setTabNov(id); limpiar(); }}
             style={{ padding:'8px 18px', borderRadius:8, border:'none', fontSize:13, fontWeight:600,
@@ -1295,7 +1295,7 @@ export function NovedadesClientes() {
         <div>
           {/* Formulario crear aviso */}
           <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:'16px 20px', marginBottom:20 }}>
-            <h4 style={{ margin:'0 0 12px', fontSize:14, fontWeight:700, color:C.text }}>Nuevo Aviso</h4>
+            <h4 style={{ margin:'0 0 12px', fontSize:14, fontWeight:700, color:C.text }}>Nueva Novedad al Cliente</h4>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
               <div>
                 <label style={lbl}>Cliente destinatario</label>
@@ -1313,7 +1313,7 @@ export function NovedadesClientes() {
             </div>
             <div style={{ marginBottom:12 }}>
               <label style={lbl}>Mensaje</label>
-              <textarea style={{...inp,height:80,resize:'vertical'}} placeholder="Contenido del aviso para el cliente..." value={avisoForm.mensaje} onChange={e=>setAvisoForm(p=>({...p,mensaje:e.target.value}))} />
+              <textarea style={{...inp,height:80,resize:'vertical'}} placeholder="Contenido de la novedad para el cliente..." value={avisoForm.mensaje} onChange={e=>setAvisoForm(p=>({...p,mensaje:e.target.value}))} />
             </div>
             {/* Adjuntos */}
             <div style={{ marginBottom:12 }}>
@@ -1338,13 +1338,13 @@ export function NovedadesClientes() {
             <Btn variant="primary"
               onClick={()=>{ if(!avisoForm.cliente_ref||!avisoForm.titulo.trim()||!avisoForm.mensaje.trim()){ toast.error('Completa todos los campos'); return; } crearAviso.mutate(avisoForm); }}
               disabled={crearAviso.isPending}>
-              {crearAviso.isPending ? 'Enviando...' : '📢 Enviar Aviso'}
+              {crearAviso.isPending ? 'Enviando...' : '📩 Enviar Novedad'}
             </Btn>
           </div>
 
           {/* Tabla avisos enviados */}
           {loadAvisos ? <p style={{ color:C.text2 }}>Cargando...</p> :
-           avisos.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin avisos enviados aún.</p> :
+           avisos.length===0 ? <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades enviadas aún.</p> :
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead><tr style={{ background:C.surface2 }}>
@@ -1383,7 +1383,7 @@ export function NovedadesClientes() {
                     <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{a.creado_por}</span></td>
                     <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(a.creado).toLocaleString('es-CO')}</span></td>
                     <td style={tdc}>
-                      <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar este aviso y sus adjuntos?')) delAviso.mutate(a.id); }} disabled={delAviso.isPending}>×</Btn>
+                      <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar esta novedad y sus adjuntos?')) delAviso.mutate(a.id); }} disabled={delAviso.isPending}>×</Btn>
                     </td>
                   </tr>
                 ))}

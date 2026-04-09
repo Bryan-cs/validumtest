@@ -711,7 +711,7 @@ function TabAvisos() {
     <div>
       {isLoading && <p style={{ color:C.text2 }}>Cargando avisos...</p>}
       {!isLoading && avisos.length === 0 && (
-        <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin avisos de tu administrador.</p>
+        <p style={{ color:C.text2, padding:20, textAlign:'center' }}>Sin novedades de tu administrador.</p>
       )}
       {noLeidos.length > 0 && (
         <div style={{ marginBottom:20 }}>
@@ -1000,7 +1000,7 @@ export default function PortalCliente() {
     <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
-        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas'],['avisos','📢 Avisos']].map(([id, label]) => (
+        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas'],['avisos','📩 Novedades']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding:'9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
             borderBottom: tab===id?`2px solid ${C.primary}`:'none',
