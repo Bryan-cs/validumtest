@@ -917,20 +917,21 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
   const handleUpload = async (files) => {
     if (!docDocSel || !files.length) return;
     setUploading(true);
-    try {
-      for (const file of files) {
+    const errores = [];
+    for (const file of files) {
+      try {
         const fd = new FormData();
         fd.append('file', file);
         fd.append('afiliado_doc', docDocSel);
         fd.append('contexto', 'afiliado');
         await api.post('/documentos', fd);
+      } catch (e) {
+        errores.push(`${file.name}: ${e.response?.data?.detail || 'Error'}`);
       }
-      qc.invalidateQueries({ queryKey: ['documentos', docDocSel] });
-    } catch (e) {
-      alert(e.response?.data?.detail || 'Error subiendo archivo');
-    } finally {
-      setUploading(false);
     }
+    await qc.refetchQueries({ queryKey: ['documentos', docDocSel] });
+    setUploading(false);
+    if (errores.length) alert(`Error al subir:\n${errores.join('\n')}`);
   };
 
   const handleDelete = async (id) => {
@@ -945,8 +946,14 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
 
   const handleDownload = async (doc) => {
     try {
-      const res = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
-      const objUrl = URL.createObjectURL(res.data);
+      const res = await api.get(`/documentos/${doc.id}/descargar`);
+      if (res.data?.url) {
+        window.open(res.data.url, '_blank');
+        return;
+      }
+      // Fallback local (dev): refetch como blob
+      const res2 = await api.get(`/documentos/${doc.id}/descargar`, { responseType: 'blob' });
+      const objUrl = URL.createObjectURL(res2.data);
       const a = document.createElement('a');
       a.href = objUrl;
       a.download = doc.nombre;
