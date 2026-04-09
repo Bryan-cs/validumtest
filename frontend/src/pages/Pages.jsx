@@ -962,8 +962,8 @@ export function NovedadesClientes() {
     refetchInterval:60_000,
   });
   const { data: usuariosCliente=[] } = useQuery({
-    queryKey:['usuarios-clientes'],
-    queryFn:()=>api.get('/usuarios').then(r=>r.data.filter(u=>u.rol==='cliente'&&u.activo!==false)),
+    queryKey:['clientes'],
+    queryFn:()=>api.get('/clientes').then(r=>r.data),
     enabled: tabNov==='avisos',
   });
   const crearAviso = useMutation({
@@ -1302,7 +1302,7 @@ export function NovedadesClientes() {
                 <label style={lbl}>Cliente destinatario</label>
                 <select style={sel} value={avisoForm.cliente_ref} onChange={e=>setAvisoForm(p=>({...p,cliente_ref:e.target.value}))}>
                   <option value="">Seleccionar cliente...</option>
-                  {usuariosCliente.map(u=><option key={u.id} value={u.cliente_ref||u.username}>{u.nombre} ({u.cliente_ref||u.username})</option>)}
+                  {usuariosCliente.map(c=><option key={c} value={c}>{c}</option>)}
                 </select>
               </div>
               <div>
