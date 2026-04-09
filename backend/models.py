@@ -333,3 +333,12 @@ class Mensaje(Base):
     texto            = Column(Text)
     creado           = Column(DateTime, default=_utcnow, index=True)
     leido            = Column(Boolean, default=False)      # solo aplica a mensajes privados
+
+
+class TokenBlacklist(Base):
+    """Refresh tokens invalidados explícitamente (logout)."""
+    __tablename__ = "token_blacklist"
+    id         = Column(Integer, primary_key=True, index=True)
+    jti        = Column(String(64), unique=True, index=True)  # JWT ID único
+    expires_at = Column(DateTime)                              # para limpieza automática
+    creado     = Column(DateTime, default=_utcnow)

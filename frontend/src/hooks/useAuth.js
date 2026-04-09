@@ -54,7 +54,15 @@ const useAuthStore = create((set) => ({
     set({ token });
   },
 
-  logout: () => {
+  logout: async () => {
+    // Invalidar refresh token en el servidor (blacklist)
+    const rt = localStorage.getItem('refresh_token');
+    if (rt) {
+      try {
+        const { default: api } = await import('../utils/api');
+        await api.post('/auth/logout', { refresh_token: rt });
+      } catch { /* si falla el servidor, igual limpiar localmente */ }
+    }
     localStorage.removeItem('token');
     localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');

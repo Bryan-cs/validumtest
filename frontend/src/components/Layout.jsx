@@ -2,6 +2,7 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../hooks/useAuth';
+import useInactivity from '../hooks/useInactivity';
 import api from '../utils/api';
 import { playBeep } from '../utils/audio';
 
@@ -117,7 +118,8 @@ export default function Layout() {
     };
   }, []);
 
-  const handleLogout = () => { logout(); navigate('/login'); };
+  const handleLogout = useCallback(async () => { await logout(); navigate('/login'); }, [logout, navigate]);
+  const { showWarning, extender } = useInactivity(handleLogout);
   const items = navItems(user?.rol);
 
   return (
@@ -375,6 +377,38 @@ export default function Layout() {
       <main style={{ flex: 1, overflowY: 'auto', background: 'var(--c-bg)', padding: 24, minWidth: 0 }}>
         <Outlet />
       </main>
+
+      {/* Modal inactividad — aviso 2 min antes de cerrar sesión */}
+      {showWarning && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.55)', zIndex:3000,
+          display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
+          <div style={{ background:'#1e1e2e', borderRadius:16, maxWidth:380, width:'100%',
+            boxShadow:'0 32px 80px rgba(0,0,0,.4)', overflow:'hidden' }}>
+            <div style={{ height:4, background:'linear-gradient(90deg,#f59e0b,#ef4444)' }} />
+            <div style={{ padding:'22px 24px 24px' }}>
+              <h3 style={{ margin:'0 0 8px', color:'#f5f5f5', fontSize:17, fontWeight:800 }}>
+                ⏱️ Sesión por expirar
+              </h3>
+              <p style={{ margin:'0 0 20px', color:'#aaa', fontSize:14, lineHeight:1.6 }}>
+                Tu sesión se cerrará en <strong style={{color:'#f59e0b'}}>2 minutos</strong> por inactividad.
+                ¿Deseas continuar?
+              </p>
+              <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
+                <button onClick={handleLogout}
+                  style={{ padding:'8px 16px', borderRadius:8, border:'none', cursor:'pointer',
+                    background:'transparent', color:'#888', fontSize:14 }}>
+                  Cerrar sesión
+                </button>
+                <button onClick={extender}
+                  style={{ padding:'8px 20px', borderRadius:8, border:'none', cursor:'pointer',
+                    background:'#4F46E5', color:'#fff', fontWeight:700, fontSize:14 }}>
+                  Continuar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

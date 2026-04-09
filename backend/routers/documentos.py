@@ -59,11 +59,22 @@ def _get_s3():
 
 
 def _upload_file(unique_name: str, content: bytes):
-    """Sube archivo a R2 o disco local."""
+    """Sube archivo a R2 (con reintentos) o disco local como fallback."""
+    import time as _t
     s3 = _get_s3()
     if s3:
-        s3.put_object(Bucket=_R2_BUCKET, Key=unique_name, Body=content)
-        return
+        last_err = None
+        for intento in range(3):
+            try:
+                s3.put_object(Bucket=_R2_BUCKET, Key=unique_name, Body=content)
+                return
+            except Exception as e:
+                last_err = e
+                if intento < 2:
+                    _t.sleep(0.5 * (intento + 1))  # 0.5s, luego 1s
+        from logger import logger
+        logger.error(f"R2 upload falló tras 3 intentos ({unique_name}): {last_err}")
+        raise RuntimeError(f"No se pudo subir el archivo a R2 tras 3 intentos")
     # Fallback: disco local
     dest = os.path.join(UPLOAD_DIR, unique_name)
     os.makedirs(os.path.dirname(dest), exist_ok=True)

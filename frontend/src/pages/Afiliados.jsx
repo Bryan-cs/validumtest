@@ -239,6 +239,31 @@ export default function Afiliados() {
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const confirmarBorradoPermanente = async (e) => {
+    try {
+      const preview = await api.get(`/eliminados/${e.id}/preview`).then(r => r.data);
+      const detalles = [
+        preview.facturas    > 0 ? `${preview.facturas} factura(s)`             : null,
+        preview.documentos  > 0 ? `${preview.documentos} documento(s)`         : null,
+        preview.solicitudes > 0 ? `${preview.solicitudes} solicitud(es) portal`: null,
+      ].filter(Boolean);
+      const detalleTxt = detalles.length > 0 ? ` Se borrarán también: ${detalles.join(', ')}.` : '';
+      setConfirm({
+        title: '⚠️ Eliminar permanentemente',
+        message: `¿Eliminar PERMANENTEMENTE a ${e.nombre} (${e.doc})?${detalleTxt} Esta acción NO se puede deshacer.`,
+        confirmLabel: 'Sí, eliminar todo',
+        onConfirm: () => borrarPermanente.mutate(e.id),
+      });
+    } catch {
+      setConfirm({
+        title: 'Eliminar permanentemente',
+        message: `¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`,
+        confirmLabel: 'Eliminar para siempre',
+        onConfirm: () => borrarPermanente.mutate(e.id),
+      });
+    }
+  };
+
 
   // Seguimiento state
   const [segBusqueda, setSegBusqueda] = useState('');
@@ -439,7 +464,7 @@ export default function Afiliados() {
                         </Btn>
 
                         <Btn size="sm" variant="danger"
-                          onClick={() => setConfirm({ title:'Eliminar permanentemente', message:`¿Eliminar PERMANENTEMENTE a ${e.nombre}? Esta acción no se puede deshacer.`, confirmLabel:'Eliminar para siempre', onConfirm:()=>borrarPermanente.mutate(e.id) })}
+                          onClick={() => confirmarBorradoPermanente(e)}
                           disabled={borrarPermanente.isPending}>
                           🗑️ Borrar
                         </Btn>

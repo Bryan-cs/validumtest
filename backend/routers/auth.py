@@ -1,13 +1,13 @@
 """Router de autenticación."""
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime, timezone
 import jwt, time
 from database import get_db
 import schemas, crud, models
 from .deps import (
     SECRET_KEY, ALGORITHM, REFRESH_TOKEN_EXPIRE_DAYS,
-    create_token, verify_token, security,
+    create_token, verify_token, security, is_token_blacklisted,
 )
 from fastapi.security import HTTPAuthorizationCredentials
 from slowapi import Limiter
@@ -19,10 +19,8 @@ _limiter = Limiter(key_func=get_remote_address)
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # ── Protección contra fuerza bruta (usando DB para funcionar con múltiples workers) ──
-import threading
-_MAX_ATTEMPTS  = 5
-_BLOCK_WINDOW  = 300         # segundos (5 minutos)
-_attempts_lock = threading.Lock()
+_MAX_ATTEMPTS = 5
+_BLOCK_WINDOW = 300  # segundos (5 minutos)
 
 def _get_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For", "")
@@ -33,8 +31,9 @@ def _get_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 def _get_attempts(db: Session, ip: str):
-    """Obtiene intentos de login desde la tabla login_attempts."""
-    row = db.query(models.LoginAttempt).filter_by(ip=ip).first()
+    """Obtiene intentos de login desde la tabla login_attempts.
+    Usa SELECT FOR UPDATE para evitar race condition con múltiples workers."""
+    row = db.query(models.LoginAttempt).filter_by(ip=ip).with_for_update().first()
     if not row:
         return {"count": 0, "last": 0.0}
     return {"count": row.count, "last": row.last_attempt}
@@ -119,6 +118,10 @@ def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Sessi
     except jwt.InvalidTokenError:
         raise HTTPException(status_code=401, detail="Refresh token inválido")
 
+    # Verificar que el refresh token no esté en la blacklist (logout explícito)
+    if is_token_blacklisted(payload.get("jti")):
+        raise HTTPException(status_code=401, detail="Token invalidado — inicia sesión nuevamente")
+
     # Verificar que el usuario siga activo
     user = crud.get_user_by_username(db, payload.get("sub", ""))
     if not user or not user.activo:
@@ -131,6 +134,23 @@ def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Sessi
         expires=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
     return {"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"}
+
+
+@router.post("/logout")
+def logout(body: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
+    """Invalida el refresh token — impide renovar el access token tras cerrar sesión."""
+    try:
+        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        jti = payload.get("jti")
+        if jti:
+            expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
+            existing = db.query(models.TokenBlacklist).filter_by(jti=jti).first()
+            if not existing:
+                db.add(models.TokenBlacklist(jti=jti, expires_at=expires_at))
+                db.commit()
+    except Exception as _e:
+        logger.warning(f"logout: no se pudo blacklistear token: {_e}")
+    return {"ok": True}
 
 
 @router.get("/me")

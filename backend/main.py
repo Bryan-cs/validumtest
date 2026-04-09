@@ -95,6 +95,23 @@ def _limpiar_novedades_antiguas():
         db.close()
 
 
+def _limpiar_token_blacklist():
+    """Elimina tokens expirados de la blacklist."""
+    from database import SessionLocal
+    from logger import logger as _log
+    db = SessionLocal()
+    try:
+        ahora = datetime.now(timezone.utc)
+        count = db.query(models.TokenBlacklist).filter(models.TokenBlacklist.expires_at < ahora).delete()
+        db.commit()
+        if count: _log.info(f"Limpieza: {count} tokens expirados removidos de blacklist")
+    except Exception as e:
+        db.rollback()
+        _log.error(f"Error limpieza token_blacklist: {e}")
+    finally:
+        db.close()
+
+
 def _backup_db_to_r2():
     """Wrapper para compatibilidad con scheduler."""
     from routers.backups import backup_db_to_r2
@@ -152,12 +169,15 @@ async def lifespan(app: FastAPI):
             _got_lock = _sdb.execute(text("SELECT pg_try_advisory_lock(1)")).scalar()
             _sdb.close()
             _should_schedule = bool(_got_lock)
-        except Exception:
-            _should_schedule = True  # si falla, dejar que corra
+        except Exception as _lock_err:
+            from logger import logger as _log
+            _log.warning(f"Advisory lock falló — scheduler no iniciado en este worker: {_lock_err}")
+            _should_schedule = False  # si falla el lock, NO iniciar (evita duplicados)
     if _should_schedule:
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
             _scheduler = BackgroundScheduler()
+            _scheduler.add_job(_limpiar_token_blacklist, "cron", hour=1, minute=0)
             _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
             _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
             _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
@@ -207,6 +227,11 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["X-Permitted-Cross-Domain-Policies"] = "none"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'none'; frame-ancestors 'none'"
+        )
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
@@ -240,6 +265,27 @@ def list_eliminados(db: Session = Depends(get_db), token=Depends(require_admin))
     return [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
              "fecha_eliminacion":r.fecha_eliminacion,"mes":r.mes,
              "eliminado_por":r.eliminado_por} for r in rows]
+
+
+@app.get("/eliminados/{id}/preview")
+def preview_eliminado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+    """Retorna cuántos registros serán borrados junto con el eliminado."""
+    e = db.query(models.Eliminado).filter_by(id=id).first()
+    if not e:
+        raise HTTPException(404, "No encontrado")
+    n_facturas    = db.query(models.Factura).filter_by(doc=e.doc).count()
+    n_documentos  = db.query(models.Documento).filter_by(afiliado_doc=e.doc).count()
+    n_solicitudes = (
+        db.query(models.SolicitudNovedad).filter_by(afiliado_doc=e.doc).count() +
+        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=e.doc).count()
+    )
+    return {
+        "nombre": e.nombre,
+        "doc": e.doc,
+        "facturas": n_facturas,
+        "documentos": n_documentos,
+        "solicitudes": n_solicitudes,
+    }
 
 
 @app.delete("/eliminados/{id}")

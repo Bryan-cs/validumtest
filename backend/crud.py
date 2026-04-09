@@ -170,6 +170,8 @@ def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
     query = query.order_by(models.Afiliado.nombre)
     if limit > 0:
         query = query.offset(skip).limit(limit)
+    else:
+        query = query.limit(50_000)  # cap de seguridad — evita retornar millones de filas
     return {"total": total, "items": [_afiliado_to_dict(a) for a in query.all()]}
 
 def get_afiliado(db, id): a = db.query(models.Afiliado).filter_by(id=id, activo=True).first(); return _afiliado_to_dict(a) if a else None
@@ -812,8 +814,8 @@ import time as _time
 import os as _os
 
 # TTL diferenciados según frecuencia de cambio
-TTL_COBRO     = 120    # 2 min  — cambia con cada factura/afiliado
-TTL_DASHBOARD = 120    # 2 min  — mismo ritmo que cobro
+TTL_COBRO     = 300    # 5 min  — cambia con cada factura/afiliado
+TTL_DASHBOARD = 300    # 5 min  — mismo ritmo que cobro
 TTL_AFILIADOS = 180    # 3 min  — consultas frecuentes durante jornada
 TTL_CONFIG    = 600    # 10 min — cambia solo cuando admin edita configuración
 TTL_LISTAS    = 1800   # 30 min — EPS, ARL, tipos de cotizante (casi estáticos)
@@ -836,16 +838,49 @@ import threading as _threading
 _mem_cache: dict = {}
 _cache_lock = _threading.Lock()
 
+# Circuit breaker para Redis — evita que Redis lento bloquee la app
+_cb_failures   = 0
+_cb_open_until = 0.0
+_CB_MAX_FAILS  = 5
+_CB_COOLDOWN   = 30  # segundos antes de reintentar Redis
+
+
+def _redis_disponible() -> bool:
+    """Retorna True si Redis está disponible según el circuit breaker."""
+    global _cb_failures, _cb_open_until
+    if not _redis_client:
+        return False
+    if _cb_failures >= _CB_MAX_FAILS:
+        if _time.time() < _cb_open_until:
+            return False  # circuito abierto
+        # Cooldown terminó — half-open: dejar pasar un intento
+    return True
+
+
+def _redis_on_success():
+    global _cb_failures
+    _cb_failures = 0
+
+
+def _redis_on_failure():
+    global _cb_failures, _cb_open_until
+    _cb_failures += 1
+    if _cb_failures >= _CB_MAX_FAILS:
+        _cb_open_until = _time.time() + _CB_COOLDOWN
+        from logger import logger as _cblog
+        _cblog.warning(f"Redis circuit breaker abierto — {_CB_COOLDOWN}s de pausa")
+
 
 def _cache_get(key: str):
     """Obtiene un valor del caché (Redis o memoria)."""
-    if _redis_client:
+    if _redis_disponible():
         try:
             raw = _redis_client.get(key)
+            _redis_on_success()
             if raw:
                 return json.loads(raw)
         except Exception:
-            pass
+            _redis_on_failure()
         return None
     # Fallback memoria — usa el TTL guardado por entrada
     with _cache_lock:
@@ -857,11 +892,12 @@ def _cache_get(key: str):
 
 def _cache_set(key: str, data, ttl: int = TTL_COBRO):
     """Guarda un valor en el caché con TTL configurable."""
-    if _redis_client:
+    if _redis_disponible():
         try:
             _redis_client.setex(key, ttl, json.dumps(data, default=str))
+            _redis_on_success()
         except Exception:
-            pass
+            _redis_on_failure()
         return
     # Fallback memoria
     with _cache_lock:
@@ -871,11 +907,16 @@ def _cache_set(key: str, data, ttl: int = TTL_COBRO):
             expired = [k for k, v in list(_mem_cache.items()) if (now - v["ts"]) >= v["ttl"]]
             for k in expired:
                 _mem_cache.pop(k, None)
+            # Si no había expirados, evictar los 100 más antiguos para evitar crecimiento infinito
+            if len(_mem_cache) > 500:
+                oldest = sorted(_mem_cache.items(), key=lambda x: x[1]["ts"])[:100]
+                for k, _ in oldest:
+                    _mem_cache.pop(k, None)
 
 
 def cache_invalidar(prefijo: str = ""):
     """Invalida entradas del caché que empiecen con el prefijo dado."""
-    if _redis_client:
+    if _redis_disponible():
         try:
             cursor = 0
             while True:
@@ -884,8 +925,9 @@ def cache_invalidar(prefijo: str = ""):
                     _redis_client.delete(*keys)
                 if cursor == 0:
                     break
+            _redis_on_success()
         except Exception:
-            pass
+            _redis_on_failure()
         return
     # Fallback memoria
     with _cache_lock:

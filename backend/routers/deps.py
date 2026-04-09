@@ -1,6 +1,7 @@
 """Dependencias compartidas para los routers."""
 import os
 import time
+import uuid
 from fastapi import HTTPException, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
@@ -64,11 +65,25 @@ def _decode_token(token: str) -> dict:
     return payload
 
 
+def is_token_blacklisted(jti: str) -> bool:
+    """Verifica si un jti está en la blacklist (solo para refresh tokens)."""
+    if not jti:
+        return False
+    from database import SessionLocal
+    import models
+    db = SessionLocal()
+    try:
+        return db.query(models.TokenBlacklist).filter_by(jti=jti).first() is not None
+    finally:
+        db.close()
+
+
 def create_token(data: dict, expires: timedelta = None):
     payload = data.copy()
     if expires is None:
         expires = timedelta(hours=TOKEN_EXPIRE_HOURS)
     payload["exp"] = datetime.now(timezone.utc) + expires
+    payload["jti"] = str(uuid.uuid4())  # ID único por token
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
 
