@@ -1299,7 +1299,7 @@ export function NovedadesClientes() {
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
               <div>
                 <label style={lbl}>Cliente destinatario</label>
-                <select style={sel} value={avisoForm.cliente_ref} onChange={e=>setAvisoForm(p=>({...p,cliente_ref:e.target.value}))}>
+                <select style={inp} value={avisoForm.cliente_ref} onChange={e=>setAvisoForm(p=>({...p,cliente_ref:e.target.value}))}>
                   <option value="">Seleccionar cliente...</option>
                   {usuariosCliente.filter(u=>u.cliente_ref).map(u=>(
                     <option key={u.id} value={u.cliente_ref}>{u.nombre} — {u.cliente_ref}</option>
