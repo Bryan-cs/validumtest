@@ -27,16 +27,17 @@ export default function PlanillasSS() {
     queryFn: () => api.get('/planillas', { params: { cliente: filtroCliente, mes: filtroMes, anio: filtroAnio } }).then(r => r.data.items || []),
   });
 
-  const { data: listas = {} } = useQuery({
+  const { data: listasRaw = [] } = useQuery({
     queryKey: ['listas'],
-    queryFn: () => api.get('/listas').then(r => {
-      const m = {};
-      r.data.forEach(l => { try { m[l.nombre] = JSON.parse(l.items); } catch { m[l.nombre] = []; } });
-      return m;
-    }),
+    queryFn: () => api.get('/listas').then(r => r.data),
     staleTime: 300_000,
   });
-  const clientes = listas.clientes || [];
+  const clientes = (() => {
+    try {
+      const entry = (Array.isArray(listasRaw) ? listasRaw : []).find(l => l.nombre === 'clientes');
+      return entry ? JSON.parse(entry.items) : [];
+    } catch { return []; }
+  })();
 
   const handleDelete = async () => {
     if (!confirmDel) return;
