@@ -1075,7 +1075,7 @@ export default function PortalCliente() {
                     <th style={{ padding:'10px 12px', borderBottom:`1px solid ${C.border}` }}>
                       <input type="checkbox" checked={seleccionados.length===filtrados.length&&filtrados.length>0} onChange={toggleTodos} />
                     </th>
-                    {['Nombre','Documento','Empresa','EPS','AFP','Estado','Detalle','Acciones'].map(h => (
+                    {['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle','Acciones'].map(h => (
                       <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
                     ))}
                   </tr>
@@ -1092,6 +1092,7 @@ export default function PortalCliente() {
                         <td style={tdc}>{a.empresa}</td>
                         <td style={tdc}>{a.eps||'—'}</td>
                         <td style={tdc}>{a.afp||'—'}</td>
+                        <td style={tdc}>{a.ccf||'—'}</td>
                         <td style={tdc}><Badge color={ec.color} bg={ec.bg}>{a.estado}</Badge></td>
                         <td style={{ ...tdc, maxWidth:200 }}>
                           {a.detalle
