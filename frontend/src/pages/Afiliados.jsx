@@ -917,20 +917,20 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
   const handleUpload = async (files) => {
     if (!docDocSel || !files.length) return;
     setUploading(true);
-    const errores = [];
-    for (const file of files) {
-      try {
+    const resultados = await Promise.allSettled(
+      files.map(file => {
         const fd = new FormData();
         fd.append('file', file);
         fd.append('afiliado_doc', docDocSel);
         fd.append('contexto', 'afiliado');
-        await api.post('/documentos', fd);
-      } catch (e) {
-        errores.push(`${file.name}: ${e.response?.data?.detail || 'Error'}`);
-      }
-    }
+        return api.post('/documentos', fd);
+      })
+    );
     await qc.refetchQueries({ queryKey: ['documentos', docDocSel] });
     setUploading(false);
+    const errores = resultados
+      .map((r, i) => r.status === 'rejected' ? `${files[i].name}: ${r.reason?.response?.data?.detail || 'Error'}` : null)
+      .filter(Boolean);
     if (errores.length) alert(`Error al subir:\n${errores.join('\n')}`);
   };
 
