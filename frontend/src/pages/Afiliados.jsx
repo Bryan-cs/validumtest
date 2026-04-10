@@ -855,45 +855,45 @@ export default function Afiliados() {
             </table>
           </div>
 
-          {/* Modal crear/editar */}
-          {arlModal !== null && (
-            <Modal title={arlModal === 'nuevo' ? 'Nuevo registro ARL' : 'Editar registro ARL'} onClose={() => setArlModal(null)}>
-              <InputUp label="Nombre" value={arlForm.nombre} onChange={v => setArlForm(f=>({...f,nombre:v}))} placeholder="Nombre completo" />
-              <InputUp label="Documento" value={arlForm.documento} onChange={v => setArlForm(f=>({...f,documento:v}))} placeholder="Número de documento" />
-              <Sel label="Cliente" value={arlForm.cliente} onChange={v => setArlForm(f=>({...f,cliente:v}))}
-                options={['', ...(clientesUnicos||[])]} />
-              <Sel label="Empresa" value={arlForm.empresa} onChange={v => setArlForm(f=>({...f,empresa:v}))}
-                options={['', ...(listas.empresas||[])]} />
-              <div style={{ marginBottom:12 }}>
-                <label style={lbl}>Fecha de afiliación</label>
-                <input type="date" value={arlForm.fecha_afiliacion}
-                  onChange={e => setArlForm(f=>({...f,fecha_afiliacion:e.target.value}))}
-                  style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                    fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface }} />
-              </div>
-              <Sel label="Nivel ARL" value={arlForm.nivel_arl} onChange={v => setArlForm(f=>({...f,nivel_arl:v}))}
-                options={['N/A','1','2','3','4','5']} />
-              <div style={{ marginBottom:12 }}>
-                <label style={lbl}>Observaciones</label>
-                <textarea value={arlForm.observaciones||''} onChange={e => setArlForm(f=>({...f,observaciones:e.target.value}))}
-                  rows={3} placeholder="Opcional..."
-                  style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                    fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,resize:'vertical' }} />
-              </div>
-              {arlModal !== 'nuevo' && (
-                <Sel label="Estado" value={arlForm.estado||'activo'} onChange={v => setArlForm(f=>({...f,estado:v}))}
-                  options={[{value:'activo',label:'Activo'},{value:'retirar',label:'Retirar'},{value:'retirado',label:'Retirado'}]} />
-              )}
-              <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
-                <Btn variant="secondary" onClick={() => setArlModal(null)}>Cancelar</Btn>
-                <Btn variant="primary" disabled={arlCrear.isPending||arlEditar.isPending} onClick={submitArlForm}>
-                  {arlModal === 'nuevo' ? 'Crear' : 'Guardar'}
-                </Btn>
-              </div>
-            </Modal>
-          )}
         </div>
       )}
+
+      {/* ─── MODAL SEGUIMIENTO ARL ─── */}
+      <Modal open={arlModal !== null} onClose={() => setArlModal(null)}
+        title={arlModal === 'nuevo' ? 'Nuevo registro ARL' : 'Editar registro ARL'}>
+        <InputUp label="Nombre" value={arlForm.nombre} onChange={v => setArlForm(f=>({...f,nombre:v}))} placeholder="Nombre completo" />
+        <InputUp label="Documento" value={arlForm.documento} onChange={v => setArlForm(f=>({...f,documento:v}))} placeholder="Número de documento" />
+        <Sel label="Cliente" value={arlForm.cliente} onChange={v => setArlForm(f=>({...f,cliente:v}))}
+          options={['', ...(listas.clientes||[])].map(c=>({value:c, label:c||'— Seleccionar cliente'}))} />
+        <Sel label="Empresa" value={arlForm.empresa} onChange={v => setArlForm(f=>({...f,empresa:v}))}
+          options={['', ...(listas.empresas||[])].map(e=>({value:e, label:e||'— Seleccionar'}))} />
+        <div style={{ marginBottom:12 }}>
+          <label style={lbl}>Fecha de afiliación</label>
+          <input type="date" value={arlForm.fecha_afiliacion}
+            onChange={e => setArlForm(f=>({...f,fecha_afiliacion:e.target.value}))}
+            style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
+              fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,colorScheme:'inherit' }} />
+        </div>
+        <Sel label="Nivel ARL" value={arlForm.nivel_arl} onChange={v => setArlForm(f=>({...f,nivel_arl:v}))}
+          options={['N/A','1','2','3','4','5']} />
+        <div style={{ marginBottom:12 }}>
+          <label style={lbl}>Observaciones</label>
+          <textarea value={arlForm.observaciones||''} onChange={e => setArlForm(f=>({...f,observaciones:e.target.value}))}
+            rows={3} placeholder="Opcional..."
+            style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
+              fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,resize:'vertical' }} />
+        </div>
+        {arlModal !== 'nuevo' && (
+          <Sel label="Estado" value={arlForm.estado||'activo'} onChange={v => setArlForm(f=>({...f,estado:v}))}
+            options={[{value:'activo',label:'Activo'},{value:'retirar',label:'Retirar'},{value:'retirado',label:'Retirado'}]} />
+        )}
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+          <Btn variant="secondary" onClick={() => setArlModal(null)}>Cancelar</Btn>
+          <Btn variant="primary" disabled={arlCrear.isPending||arlEditar.isPending} onClick={submitArlForm}>
+            {arlModal === 'nuevo' ? 'Crear' : 'Guardar'}
+          </Btn>
+        </div>
+      </Modal>
 
       <ConfirmModal
         open={!!confirm}
