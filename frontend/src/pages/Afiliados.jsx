@@ -832,7 +832,7 @@ export default function Afiliados() {
                       <td style={tdc}>{row.empresa||'—'}</td>
                       <td style={tdc}>
                         <span>{row.fecha_afiliacion||'—'}</span>
-                        {alerta && <span style={{ marginLeft:6, fontSize:11, fontWeight:700, color:'#D97706',
+                        {alerta && <span style={{ marginLeft:6, fontSize:11, fontWeight:700, color:C.amber,
                           background:C.amberBg, borderRadius:4, padding:'2px 6px' }}>⚠️ Vence pronto</span>}
                       </td>
                       <td style={{ ...tdc, fontSize:12 }}>{row.nivel_arl||'N/A'}</td>
