@@ -252,6 +252,7 @@ from routers import portal as portal_router
 from routers.documentos import router as documentos_router
 from routers import backups as backups_router
 from routers import planillas as planillas_router
+from routers import seguimiento_arl as seguimiento_arl_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
@@ -262,6 +263,7 @@ app.include_router(portal_router.router)
 app.include_router(documentos_router)
 app.include_router(backups_router.router)
 app.include_router(planillas_router.router)
+app.include_router(seguimiento_arl_router.router)
 
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
