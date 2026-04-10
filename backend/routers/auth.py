@@ -31,9 +31,8 @@ def _get_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 def _get_attempts(db: Session, ip: str):
-    """Obtiene intentos de login desde la tabla login_attempts.
-    Usa SELECT FOR UPDATE para evitar race condition con múltiples workers."""
-    row = db.query(models.LoginAttempt).filter_by(ip=ip).with_for_update().first()
+    """Obtiene intentos de login desde la tabla login_attempts."""
+    row = db.query(models.LoginAttempt).filter_by(ip=ip).first()
     if not row:
         return {"count": 0, "last": 0.0}
     return {"count": row.count, "last": row.last_attempt}
