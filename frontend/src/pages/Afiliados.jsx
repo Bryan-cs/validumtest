@@ -822,7 +822,7 @@ export default function Afiliados() {
                 {segArlFiltrado.map(row => {
                   const alerta = arlAlerta(row);
                   return (
-                    <tr key={row.id} style={{ borderBottom:`1px solid ${C.border}`, background: alerta ? '#FFF8E7' : C.surface }}>
+                    <tr key={row.id} style={{ borderBottom:`1px solid ${C.border}`, background: alerta ? C.amberBg : C.surface }}>
                       <td style={{ ...tdc, width:36 }}>
                         <input type="checkbox" checked={arlSeleccionados.includes(row.id)} onChange={() => toggleUnoArl(row.id)} />
                       </td>
@@ -833,7 +833,7 @@ export default function Afiliados() {
                       <td style={tdc}>
                         <span>{row.fecha_afiliacion||'—'}</span>
                         {alerta && <span style={{ marginLeft:6, fontSize:11, fontWeight:700, color:'#D97706',
-                          background:'#FEF3C7', borderRadius:4, padding:'2px 6px' }}>⚠️ Vence pronto</span>}
+                          background:C.amberBg, borderRadius:4, padding:'2px 6px' }}>⚠️ Vence pronto</span>}
                       </td>
                       <td style={{ ...tdc, fontSize:12 }}>{row.nivel_arl||'N/A'}</td>
                       <td style={tdc}>{statusBadge(row.estado==='activo'?'ACTIVO':row.estado==='retirar'?'PENDIENTE':'RETIRADO')}</td>
