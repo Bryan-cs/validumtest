@@ -34,6 +34,23 @@ def create_seguimiento(
     return row
 
 
+@router.patch("/bulk-estado")
+def bulk_estado(
+    body: schemas.BulkEstadoBody,
+    db: Session = Depends(get_db),
+    token=Depends(require_admin),
+):
+    if not body.ids:
+        raise HTTPException(400, "Lista de IDs vacía")
+    if body.estado not in ("activo", "retirar", "retirado"):
+        raise HTTPException(400, "Estado inválido")
+    db.query(models.SeguimientoArl)\
+      .filter(models.SeguimientoArl.id.in_(body.ids))\
+      .update({"estado": body.estado}, synchronize_session=False)
+    db.commit()
+    return {"ok": True, "actualizados": len(body.ids)}
+
+
 @router.put("/{id}")
 def update_seguimiento(
     id: int,
@@ -63,20 +80,3 @@ def delete_seguimiento(
     db.delete(row)
     db.commit()
     return {"ok": True}
-
-
-@router.patch("/bulk-estado")
-def bulk_estado(
-    body: schemas.BulkEstadoBody,
-    db: Session = Depends(get_db),
-    token=Depends(require_admin),
-):
-    if not body.ids:
-        raise HTTPException(400, "Lista de IDs vacía")
-    if body.estado not in ("activo", "retirar", "retirado"):
-        raise HTTPException(400, "Estado inválido")
-    db.query(models.SeguimientoArl)\
-      .filter(models.SeguimientoArl.id.in_(body.ids))\
-      .update({"estado": body.estado}, synchronize_session=False)
-    db.commit()
-    return {"ok": True, "actualizados": len(body.ids)}
