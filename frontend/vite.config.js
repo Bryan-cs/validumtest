@@ -9,18 +9,18 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'favicon.svg', 'icons/*.svg'],
+      includeAssets: ['favicon.ico', 'favicon.svg', 'favicon-96x96.png', 'apple-touch-icon.png', 'icons/*.png'],
       manifest: {
         name: 'BBC File',
         short_name: 'BBC File',
         description: 'Gestión de afiliados y facturación BBC File',
-        theme_color: '#1e40af',
-        background_color: '#ffffff',
+        theme_color: '#111827',
+        background_color: '#111827',
         display: 'standalone',
         start_url: '/',
         icons: [
-          { src: 'icons/icon-192.svg', sizes: '192x192', type: 'image/svg+xml' },
-          { src: 'icons/icon-512.svg', sizes: '512x512', type: 'image/svg+xml' },
+          { src: 'icons/icon-192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'icons/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
       workbox: {
