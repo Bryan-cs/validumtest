@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 
@@ -28,6 +28,25 @@ const money = (v) => _moneyFmt.format(v || 0);
 const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, boxSizing:'border-box', outline:'none', color:C.text, background:C.surface };
 const lbl = { fontSize:12, fontWeight:600, color:C.text2, display:'block', marginBottom:4 };
 const tdc = { padding:'10px 12px', fontSize:13, color:C.text, verticalAlign:'middle' };
+
+const EMPRESA_COLOR = {
+  'carsecoop':  { bg: '#F3E8FF', color: '#7C3AED' },
+  'protsecoop': { bg: '#FEF9C3', color: '#A16207' },
+  'technova':   { bg: '#FEF3C7', color: '#D97706' },
+  'techplanet': { bg: '#DCFCE7', color: '#16A34A' },
+};
+function EmpresaBadge({ nombre }) {
+  if (!nombre) return <span style={{ color:C.text2 }}>—</span>;
+  const key = Object.keys(EMPRESA_COLOR).find(k => nombre.toLowerCase().includes(k));
+  if (!key) return <span style={{ fontSize:13, color:C.text }}>{nombre}</span>;
+  const s = EMPRESA_COLOR[key];
+  return (
+    <span style={{ fontSize:12, fontWeight:700, borderRadius:6, padding:'2px 8px',
+      background:s.bg, color:s.color, whiteSpace:'nowrap', display:'inline-block' }}>
+      {nombre}
+    </span>
+  );
+}
 
 function Badge({ color, bg, children }) {
   return (
@@ -108,7 +127,9 @@ function ModalResumen({ doc, onClose }) {
                 ].map(([k, v]) => v ? (
                   <div key={k}>
                     <span style={{ fontSize:11,color:C.text2,fontWeight:600 }}>{k}</span>
-                    <div style={{ fontSize:13,color:C.text }}>{v}</div>
+                    <div style={{ fontSize:13,color:C.text }}>
+                      {k === 'Empresa' ? <EmpresaBadge nombre={v} /> : v}
+                    </div>
                   </div>
                 ) : null)}
               </div>
@@ -322,7 +343,7 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
 
         <div style={{ background:C.surface2,borderRadius:8,padding:12,marginBottom:16 }}>
           <div style={{ fontWeight:600,fontSize:14,color:C.text }}>{afiliado.nombre}</div>
-          <div style={{ fontSize:12,color:C.text2 }}>{afiliado.tipo_doc} {afiliado.doc} — {afiliado.empresa}</div>
+          <div style={{ fontSize:12,color:C.text2 }}>{afiliado.tipo_doc} {afiliado.doc} — <EmpresaBadge nombre={afiliado.empresa} /></div>
         </div>
 
         <div style={{ marginBottom:12 }}>
@@ -405,7 +426,7 @@ function ModalRetiro({ afiliado, onClose, onSuccess }) {
 
         <div style={{ background:C.surface,borderRadius:8,padding:12,marginBottom:16 }}>
           <div style={{ fontWeight:600,fontSize:14,color:C.text }}>{afiliado.nombre}</div>
-          <div style={{ fontSize:12,color:C.text2 }}>{afiliado.tipo_doc} {afiliado.doc} — {afiliado.empresa}</div>
+          <div style={{ fontSize:12,color:C.text2 }}>{afiliado.tipo_doc} {afiliado.doc} — <EmpresaBadge nombre={afiliado.empresa} /></div>
         </div>
 
         <p style={{ fontSize:13,color:C.text2,marginBottom:12 }}>
@@ -1089,7 +1110,7 @@ export default function PortalCliente() {
                         <td style={tdc}><input type="checkbox" checked={sel} onChange={() => toggleSel(a.doc)} /></td>
                         <td style={tdc}><span style={{ fontWeight:600 }}>{a.nombre}</span></td>
                         <td style={tdc}><span style={{ color:C.text2 }}>{a.tipo_doc} {a.doc}</span></td>
-                        <td style={tdc}>{a.empresa}</td>
+                        <td style={tdc}><EmpresaBadge nombre={a.empresa} /></td>
                         <td style={tdc}>{a.eps||'—'}</td>
                         <td style={tdc}>{a.afp||'—'}</td>
                         <td style={tdc}>{a.ccf||'—'}</td>

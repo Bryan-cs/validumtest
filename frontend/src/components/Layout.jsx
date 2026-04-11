@@ -160,31 +160,28 @@ export default function Layout() {
 
       /* ── Sidebar items ── */
       .sb-item { transition: background .15s, color .15s; }
-      .sb-item:hover { background: rgba(255,255,255,.07) !important; color: rgba(255,255,255,.9) !important; }
+      .sb-item:hover { background: #1F2937 !important; color: #F9FAFB !important; }
       .sb-item.active::before {
         content: '';
         position: absolute; left: -8px; top: 50%; transform: translateY(-50%);
         width: 3px; height: 60%;
-        background: var(--c-sidebar-active);
+        background: #F9FAFB;
         border-radius: 0 2px 2px 0;
       }
-      .sb-icon-box { width:28px; height:28px; border-radius:7px; background:rgba(255,255,255,.07); display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; transition:background .15s; }
-      .sb-item.active .sb-icon-box { background: rgba(249,158,11,.18) !important; }
-      .sb-item:hover .sb-icon-box { background: rgba(255,255,255,.12) !important; }
     `}</style>
 
       {/* Sidebar */}
       <aside style={{
         width, minWidth: width, maxWidth: width,
-        background: 'var(--c-sidebar)', display: 'flex', flexDirection: 'column',
+        background: '#111827', borderRight: '1px solid #1F2937', display: 'flex', flexDirection: 'column',
         position: 'relative', flexShrink: 0, overflow: 'hidden',
       }}>
         {/* Logo */}
         <div style={{ padding: collapsed ? '14px 0 16px' : '14px 16px 16px', display:'flex', alignItems:'center', gap:10, whiteSpace:'nowrap', overflow:'hidden', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-          <div style={{ width:30, height:30, borderRadius:8, background:'linear-gradient(135deg,#F59E0B,#F97316)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'#fff', flexShrink:0 }}>B</div>
+          <div style={{ width:30, height:30, borderRadius:8, background:'linear-gradient(135deg,#f9fafb,#d1d5db)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'#111827', flexShrink:0 }}>BB</div>
           {!collapsed && (
-            <span style={{ fontFamily:"'Syne', sans-serif", fontSize:16, fontWeight:800, color:'#fff', letterSpacing:'-.3px' }}>
-              BBC <span style={{ color:'var(--c-sidebar-active)' }}>File</span>
+            <span style={{ fontFamily:"'Syne', sans-serif", fontSize:16, fontWeight:800, color:'#F9FAFB', letterSpacing:'-.3px' }}>
+              BBC File
             </span>
           )}
         </div>
@@ -194,9 +191,9 @@ export default function Layout() {
           {items.map((item) => (
             <React.Fragment key={item.to}>
               {item.section && !collapsed && (
-                <div style={{ fontSize: 9.5, color: 'rgba(255,255,255,.28)', padding: '14px 18px 5px', fontWeight: 700, letterSpacing: '.15em', whiteSpace: 'nowrap', display:'flex', alignItems:'center', gap:8 }}>
+                <div style={{ fontSize: 9.5, color: '#4B5563', padding: '14px 18px 5px', fontWeight: 700, letterSpacing: '.15em', whiteSpace: 'nowrap', display:'flex', alignItems:'center', gap:8 }}>
                   {item.section}
-                  <span style={{ flex:1, height:1, background:'rgba(255,255,255,.07)' }} />
+                  <span style={{ flex:1, height:1, background:'#1F2937', borderTop: '1px solid #1F2937' }} />
                 </div>
               )}
               <NavLink to={item.to} end={item.to === '/'}
@@ -206,13 +203,13 @@ export default function Layout() {
                   display: 'flex', alignItems: 'center', position: 'relative',
                   padding: collapsed ? '10px 0' : '9px 10px',
                   margin: '1px 8px', borderRadius: 9, textDecoration: 'none', fontSize: 13,
-                  color: isActive ? 'var(--c-sidebar-active)' : 'rgba(255,255,255,.55)',
-                  background: isActive ? 'linear-gradient(90deg,rgba(249,158,11,.16),rgba(249,158,11,.04))' : 'transparent',
+                  color: isActive ? '#F9FAFB' : '#9CA3AF',
+                  background: isActive ? '#1F2937' : 'transparent',
                   fontWeight: isActive ? 600 : 400,
                   justifyContent: collapsed ? 'center' : 'flex-start',
                   whiteSpace: 'nowrap', overflow: 'hidden',
                 })}>
-                <span className="sb-icon-box" style={{ fontSize: collapsed ? 15 : 13, width: collapsed ? 'auto' : 28, background: 'transparent' }}>
+                <span style={{ fontSize: collapsed ? 15 : 13, flexShrink: 0 }}>
                   {item.label.split(' ')[0]}
                 </span>
                 {!collapsed && <span style={{ marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
@@ -222,7 +219,7 @@ export default function Layout() {
         </nav>
 
         {/* Notificaciones */}
-        <div style={{ position: 'relative', padding: '6px 14px', borderTop: '1px solid rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div style={{ position: 'relative', padding: '6px 14px', borderTop: '1px solid #1F2937', display: 'flex', alignItems: 'center', gap: 6 }}>
           <button onClick={abrirNotifs} style={{
             background: 'none', border: 'none', color: 'rgba(255,255,255,.8)',
             cursor: 'pointer', fontSize: 20, position: 'relative', padding: '4px 6px', flexShrink: 0,
@@ -295,15 +292,27 @@ export default function Layout() {
         </div>
 
         {/* Usuario + controles */}
-        <div style={{ padding: '12px 14px', borderTop: '1px solid rgba(255,255,255,.1)' }}>
-          {!collapsed && (
-            <div style={{ color: 'rgba(255,255,255,.8)', fontSize: 12, marginBottom: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-              <span style={{ fontWeight: 600 }}>{user?.nombre}</span>
-              <span style={{ marginLeft: 6, background: 'rgba(255,255,255,.15)', borderRadius: 10, padding: '1px 8px', fontSize: 10 }}>
-                {user?.rol?.toUpperCase()}
-              </span>
+        <div style={{ padding: '12px 14px', borderTop: '1px solid #1F2937' }}>
+          {/* Avatar + info */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10, overflow: 'hidden' }}>
+            <div style={{
+              width: 32, height: 32, borderRadius: '50%', background: '#374151',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: 13, fontWeight: 700, color: '#F9FAFB', flexShrink: 0,
+            }}>
+              {user?.nombre?.charAt(0)?.toUpperCase() || '?'}
             </div>
-          )}
+            {!collapsed && (
+              <div style={{ minWidth: 0, overflow: 'hidden' }}>
+                <div style={{ color: '#F9FAFB', fontSize: 12, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user?.nombre}
+                </div>
+                <div style={{ color: '#9CA3AF', fontSize: 10, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {user?.rol?.toUpperCase()}
+                </div>
+              </div>
+            )}
+          </div>
           <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
             <button onClick={() => setDark(d => !d)} title={dark ? 'Modo claro' : 'Modo oscuro'} style={{
               flex: 1, padding: '5px 8px', background: 'rgba(255,255,255,.1)',

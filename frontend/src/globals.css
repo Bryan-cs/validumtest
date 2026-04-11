@@ -1,0 +1,28 @@
+/* frontend/src/globals.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+}
+
+/* Animaciones base */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in { animation: fade-in 0.15s ease-out; }
+
+/* Dark mode: bridge shadcn Tailwind classes to --c-* CSS vars */
+.dark .bg-background { background-color: var(--c-bg) !important; }
+.dark .bg-card { background-color: var(--c-surface) !important; }
+.dark .border-border { border-color: var(--c-border) !important; }
+.dark .text-foreground { color: var(--c-text) !important; }
+.dark .text-muted-foreground { color: var(--c-text2) !important; }
+
+/* Ensure shadcn Dialog overlays respect dark mode */
+.dark [data-radix-popper-content-wrapper] { color-scheme: dark; }
+.dark [role="dialog"] { background-color: var(--c-surface); color: var(--c-text); }

@@ -1,6 +1,6 @@
 import React, { lazy, Suspense } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Toaster } from 'react-hot-toast';
+import { Toaster } from 'sonner';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import useAuthStore from './hooks/useAuth';
 
@@ -31,7 +31,7 @@ const qc = new QueryClient({
     mutations: {
       onError: (err) => {
         const msg = err?.response?.data?.detail || err?.message || 'Error inesperado';
-        import('react-hot-toast').then(m => m.default.error(msg));
+        import('sonner').then(m => m.toast.error(msg));
       },
     },
   },
@@ -64,7 +64,7 @@ export default function App() {
     <QueryClientProvider client={qc}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <OfflineBanner />
-        <Toaster position="bottom-center" toastOptions={{ duration: 3000 }} />
+        <Toaster position="bottom-center" richColors closeButton />
         <ErrorBoundary>
         <Suspense fallback={<div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh',color:'#888'}}>Cargando...</div>}>
         <Routes>
