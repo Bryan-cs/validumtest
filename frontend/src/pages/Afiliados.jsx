@@ -124,7 +124,6 @@ export default function Afiliados() {
   });
   const data     = resp.items || [];
   const totalReg = resp.total || 0;
-  const totalPags = Math.ceil(totalReg / POR_PAG);
   const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data?.items||r.data), enabled: esAdmin });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
@@ -183,7 +182,7 @@ export default function Afiliados() {
     {
       accessorKey: 'nombre',
       header: ({ column }) => (
-        <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
           Nombre {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
         </button>
@@ -201,7 +200,7 @@ export default function Afiliados() {
     {
       accessorKey: 'empresa',
       header: ({ column }) => (
-        <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
           Empresa {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
         </button>
@@ -241,7 +240,7 @@ export default function Afiliados() {
     {
       accessorKey: 'estado_srv',
       header: ({ column }) => (
-        <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
           className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
           Estado {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
         </button>
@@ -294,7 +293,7 @@ export default function Afiliados() {
         );
       },
     },
-  ], [eliminar.isPending]);
+  ], [eliminar.isPending, openEditar]);
 
   const table = useReactTable({
     data: dataFiltrada,
