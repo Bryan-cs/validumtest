@@ -158,7 +158,7 @@ export default function Actividad() {
   const limpiarFiltros = () => {
     setDesde(haceUnMes); setHasta(hoy);
     setModulo(''); setUsuario(''); setBuscar('');
-    setPage(1);
+    setActPagination(p => ({ ...p, pageIndex: 0 }));
   };
 
   return (
