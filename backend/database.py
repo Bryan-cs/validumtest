@@ -35,26 +35,12 @@ def get_db():
 
 def init_db():
     import models
-    # Crear tablas que no existan — checkfirst=True es idempotente y seguro con múltiples workers
+    # Crear tablas que no existan — checkfirst=True es idempotente y seguro con múltiples workers.
+    # NO se llama alembic upgrade head aquí: en startup multi-worker Alembic crea sus propias
+    # conexiones fuera de cualquier advisory lock, provocando deadlocks entre workers.
+    # Las columnas nuevas las cubre _ensure_columns().
     Base.metadata.create_all(bind=engine, checkfirst=True)
-    # Ejecutar migraciones Alembic pendientes — solo desde un worker (advisory lock no-bloqueante)
-    if not _is_sqlite:
-        try:
-            from sqlalchemy import text
-            # pg_try_advisory_xact_lock: adquiere lock transaccional solo si está libre.
-            # Si otro worker ya lo tiene, retorna False en lugar de bloquear.
-            with engine.begin() as conn:
-                locked = conn.execute(text("SELECT pg_try_advisory_xact_lock(7654321)")).scalar()
-                if locked:
-                    from alembic.config import Config as AlembicConfig
-                    from alembic import command
-                    alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-                    alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
-                    command.upgrade(alembic_cfg, "head")
-        except Exception as e:
-            import logging
-            logging.getLogger("bbcfile").warning(f"Alembic upgrade falló (create_all ya creó las tablas): {e}")
-    # Safety net: agregar columnas nuevas si Alembic no las creó
+    # Safety net: agregar columnas nuevas si create_all no las creó
     _ensure_columns()
     # Seed data inicial si la DB está vacía
     db = SessionLocal()
