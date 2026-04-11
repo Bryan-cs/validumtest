@@ -15,6 +15,28 @@ import {
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5','N/A'];
 
+const EMPRESA_COLOR = {
+  'carsecoop':  { bg: '#F3E8FF', color: '#7C3AED' },
+  'protsecoop': { bg: '#FEF9C3', color: '#A16207' },
+  'technova':   { bg: '#FEF3C7', color: '#D97706' },
+  'techplanet': { bg: '#DCFCE7', color: '#16A34A' },
+};
+function empresaStyle(nombre = '') {
+  const key = Object.keys(EMPRESA_COLOR).find(k => nombre.toLowerCase().includes(k));
+  return key ? EMPRESA_COLOR[key] : null;
+}
+function EmpresaBadge({ nombre }) {
+  if (!nombre) return <span style={{ color: C.text2 }}>—</span>;
+  const s = empresaStyle(nombre);
+  if (!s) return <span style={{ fontSize: 13, color: C.text2 }}>{nombre}</span>;
+  return (
+    <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 6, padding: '2px 8px',
+      background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>
+      {nombre}
+    </span>
+  );
+}
+
 async function dlExcel(url, filename) {
   try {
     const res = await api.get(url, { responseType: 'blob' });
@@ -34,24 +56,23 @@ const ESTADOS_SRV = ['ACTIVO','SUSPENDIDO','DOBLE AFILIACION','EN ESPERA DE ACTI
 const UP = (v) => (v||'').toUpperCase();
 
 const InputUp = ({ label, value, onChange, placeholder, type='text', style, readOnly }) => (
-  <div style={{ marginBottom:12, ...style }}>
+  <div style={{ marginBottom:14, ...style }}>
     {label && <label style={lbl}>{label}</label>}
     <input type={type} value={value} readOnly={readOnly}
       onChange={e => onChange(type==='text'||type==='tel' ? UP(e.target.value) : e.target.value)}
       placeholder={placeholder}
-      style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-        fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,
+      style={{ ...inp2,
         textTransform:(type==='text'||type==='tel')?'uppercase':'none',
-        background: readOnly ? C.surface2 : C.surface }} />
+        background: readOnly ? C.surface2 : C.surface,
+        cursor: readOnly ? 'not-allowed' : 'text' }} />
   </div>
 );
 
 const Sel = ({ label, value, onChange, options=[], style }) => (
-  <div style={{ marginBottom:12, ...style }}>
+  <div style={{ marginBottom:14, ...style }}>
     {label && <label style={lbl}>{label}</label>}
     <select value={value} onChange={e=>onChange(e.target.value)}
-      style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-        fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface }}>
+      style={{ ...inp2, cursor:'pointer' }}>
       {options.map(o=>typeof o==='string'
         ?<option key={o} value={o}>{o||'—'}</option>
         :<option key={o.value} value={o.value}>{o.label}</option>)}
@@ -189,11 +210,13 @@ export default function Afiliados() {
       ),
       cell: ({ row }) => (
         <div>
-          <span style={{ fontWeight: 600, cursor: 'pointer', color: C.primary }}
+          <span style={{ fontWeight: 700, cursor: 'pointer', color: C.primary }}
             onClick={() => { setDocSeleccionado(row.original.doc); setTab('pagos'); }}>
             {row.original.nombre}
           </span>
-          <div style={{ fontSize: 10, color: C.text2 }}>{row.original.tipo_doc || 'CC'} {row.original.doc}</div>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.text2, letterSpacing: '0.02em' }}>
+            {row.original.tipo_doc || 'CC'} {row.original.doc}
+          </div>
         </div>
       ),
     },
@@ -205,12 +228,12 @@ export default function Afiliados() {
           Empresa {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
         </button>
       ),
-      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.empresa || '—'}</span>,
+      cell: ({ row }) => <EmpresaBadge nombre={row.original.empresa} />,
     },
     {
       accessorKey: 'cliente_txt',
       header: 'Cliente',
-      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.cliente_txt || '—'}</span>,
+      cell: ({ row }) => <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{row.original.cliente_txt || '—'}</span>,
     },
     {
       accessorKey: 'subtipo',
@@ -220,12 +243,12 @@ export default function Afiliados() {
     {
       accessorKey: 'eps',
       header: 'EPS',
-      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.eps || '—'}</span>,
+      cell: ({ row }) => <span style={{ fontSize: 13, color: C.text2 }}>{row.original.eps || '—'}</span>,
     },
     {
       accessorKey: 'arl',
       header: 'ARL',
-      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.arl || '—'}</span>,
+      cell: ({ row }) => <span style={{ fontSize: 13, color: C.text2 }}>{row.original.arl || '—'}</span>,
     },
     {
       accessorKey: 'servicios',
@@ -252,7 +275,7 @@ export default function Afiliados() {
       header: 'Novedades',
       enableSorting: false,
       cell: ({ row }) => (
-        <span style={{ fontSize: 11, color: C.text2, display: '-webkit-box',
+        <span style={{ fontSize: 13, color: C.text2, display: '-webkit-box',
           WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 160 }}>
           {row.original.novedades || '—'}
         </span>
@@ -263,7 +286,7 @@ export default function Afiliados() {
       header: 'Detalle',
       enableSorting: false,
       cell: ({ row }) => (
-        <span style={{ fontSize: 11, color: C.blue, display: '-webkit-box',
+        <span style={{ fontSize: 13, color: C.blue, display: '-webkit-box',
           WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 180 }}>
           {row.original.detalle || '—'}
         </span>
@@ -293,7 +316,7 @@ export default function Afiliados() {
         );
       },
     },
-  ], [eliminar.isPending, openEditar]);
+  ], []);
 
   const table = useReactTable({
     data: dataFiltrada,
@@ -1018,12 +1041,11 @@ export default function Afiliados() {
         <Seccion title="Datos personales" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
           <InputUp label="Nombre completo *" value={form.nombre||''} onChange={v=>sf('nombre',v)} />
-          <div style={{ marginBottom:12 }}>
+          <div style={{ marginBottom:14 }}>
             <label style={lbl}>Tipo y N° Documento *</label>
-            <div style={{ display:'flex', gap:6 }}>
+            <div style={{ display:'flex', gap:8 }}>
               <select value={form.tipo_doc||'CC'} onChange={e=>sf('tipo_doc',e.target.value)}
-                style={{ padding:'9px 10px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,
-                  outline:'none',background:C.surface,color:C.text,flexShrink:0 }}>
+                style={{ ...inp2, width:'auto', flexShrink:0, paddingRight:24 }}>
                 <option value="CC">CC</option>
                 <option value="CE">CE</option>
                 <option value="PT">PT</option>
@@ -1032,8 +1054,7 @@ export default function Afiliados() {
               </select>
               <input value={form.doc||''} onChange={e=>sf('doc',e.target.value.toUpperCase())}
                 placeholder="NÚMERO DE DOCUMENTO"
-                style={{ flex:1,padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                  fontSize:13,outline:'none',color:C.text,textTransform:'uppercase',background:C.surface }} />
+                style={{ ...inp2, flex:1, textTransform:'uppercase' }} />
             </div>
           </div>
           <InputUp label="Cargo"             value={form.cargo||''} onChange={v=>sf('cargo',v)} />
@@ -1075,15 +1096,22 @@ export default function Afiliados() {
             {SERVICIOS.map(s=>{
               const checked = (form.servicios||[]).includes(s);
               return (
-                <label key={s} onClick={()=>toggleSrv(s)} style={{
-                  display:'flex',alignItems:'center',gap:6,cursor:'pointer',padding:'6px 12px',
-                  borderRadius:7,background:checked?C.blueBg:C.surface,
-                  border:`1px solid ${checked?C.blue:C.border}`,
-                  color:checked?C.blue:C.text,fontWeight:checked?600:400,fontSize:13,
+                <button key={s} type="button" onClick={()=>toggleSrv(s)} style={{
+                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                  gap:6, cursor:'pointer', padding:'12px 16px', borderRadius:10,
+                  minWidth:72,
+                  background: checked ? C.primary : C.surface,
+                  border: `2px solid ${checked ? C.primary : C.border}`,
+                  color: checked ? '#fff' : C.text2,
+                  fontWeight: checked ? 700 : 500,
+                  fontSize: 13,
+                  transition: 'all .15s',
+                  boxShadow: checked ? '0 2px 8px rgba(0,0,0,.15)' : 'none',
+                  outline: 'none',
                 }}>
-                  <input type="checkbox" checked={checked} onChange={()=>{}} style={{ accentColor:C.primary }} />
+                  <span style={{ fontSize:18, lineHeight:1 }}>{checked ? '✓' : '○'}</span>
                   {s}
-                </label>
+                </button>
               );
             })}
           </div>
@@ -1100,50 +1128,50 @@ export default function Afiliados() {
 
         <Seccion title="IBC, novedades y detalle" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
-          <div style={{ marginBottom:12 }}>
+          <div style={{ marginBottom:14 }}>
             <label style={lbl}>IBC individual ($) — vacío = usa global</label>
             <input type="number" value={form.ibc||''} onChange={e=>sf('ibc',e.target.value?+e.target.value:null)}
               placeholder={`IBC global: ${(1950905).toLocaleString('es-CO')}`}
-              style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface }} />
+              style={inp2} />
           </div>
-          <div style={{ marginBottom:12 }}>
+          <div style={{ marginBottom:14 }}>
             <label style={lbl}>Novedades</label>
             <textarea value={form.novedades||''} onChange={e=>sf('novedades',UP(e.target.value))}
               placeholder="NOVEDADES DEL AFILIADO..." rows={2}
-              style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
-                resize:'vertical',textTransform:'uppercase' }} />
+              style={{ ...inp2, resize:'vertical', textTransform:'uppercase' }} />
           </div>
         </div>
-        <div style={{ marginBottom:12 }}>
+        <div style={{ marginBottom:14 }}>
           <label style={lbl}>Detalle</label>
           <textarea value={form.detalle||''} onChange={e=>sf('detalle',e.target.value)}
             placeholder="Información adicional visible en el portal del cliente y dashboard..."
             rows={3}
-            style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-              fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
-              resize:'vertical' }} />
+            style={{ ...inp2, resize:'vertical' }} />
         </div>
 
         <Seccion title="Adjuntar documentos (opcional)" />
         <div style={{ marginBottom:12 }}>
-          <label style={{ display:'block',padding:'10px 14px',border:`2px dashed ${C.border}`,
-            borderRadius:8,textAlign:'center',cursor:'pointer',color:C.text2,fontSize:12,
-            background:C.surface2 }}>
-            📎 Haz clic o arrastra archivos aquí (PDF, Word, Excel, imágenes)
+          <label style={{ display:'block', border:`2px dashed ${C.border}`, borderRadius:10,
+            cursor:'pointer', background:C.surface2, overflow:'hidden' }}>
+            <div style={{ padding:'20px 16px', textAlign:'center' }}>
+              <div style={{ fontSize:22, marginBottom:6 }}>📎</div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:2 }}>
+                Haz clic o arrastra archivos aquí
+              </div>
+              <div style={{ fontSize:11, color:C.text2 }}>PDF, Word, Excel, imágenes</div>
+            </div>
             <input type="file" multiple style={{ display:'none' }}
               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
               onChange={e => setPendingFiles(prev => [...prev, ...Array.from(e.target.files)])} />
           </label>
           {pendingFiles.length > 0 && (
-            <div style={{ marginTop:8,display:'flex',flexWrap:'wrap',gap:6 }}>
+            <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
               {pendingFiles.map((f,i) => (
-                <div key={i} style={{ display:'flex',alignItems:'center',gap:6,padding:'4px 10px',
-                  background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:6,fontSize:12 }}>
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px',
+                  background:C.blueBg, border:`1px solid ${C.blue}`, borderRadius:7, fontSize:12 }}>
                   <span style={{ color:C.blue }}>📄 {f.name}</span>
                   <button onClick={()=>setPendingFiles(prev=>prev.filter((_,j)=>j!==i))}
-                    style={{ border:'none',background:'none',cursor:'pointer',color:C.red,fontWeight:700,padding:0 }}>×</button>
+                    style={{ border:'none',background:'none',cursor:'pointer',color:C.red,fontWeight:700,padding:0,fontSize:15,lineHeight:1 }}>×</button>
                 </div>
               ))}
             </div>
@@ -1165,9 +1193,12 @@ export default function Afiliados() {
 
 function Seccion({ title }) {
   return (
-    <div style={{ fontSize:12,fontWeight:700,color:C.primary,borderBottom:`2px solid ${C.primary}`,
-      paddingBottom:4,marginTop:16,marginBottom:10,textTransform:'uppercase',letterSpacing:'0.05em' }}>
-      {title}
+    <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:20, marginBottom:12 }}>
+      <div style={{ width:3, height:16, borderRadius:2, background:C.primary, flexShrink:0 }} />
+      <span style={{ fontSize:11, fontWeight:700, color:C.primary, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+        {title}
+      </span>
+      <div style={{ flex:1, height:1, background:C.border }} />
     </div>
   );
 }
@@ -1179,7 +1210,8 @@ function SrvChip({ children }) {
 }
 
 const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };
-const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
+const lbl = { display:'block',fontSize:11,color:C.text2,fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em' };
+const inp2 = { width:'100%',padding:'10px 12px',border:`1.5px solid ${C.border}`,borderRadius:8,fontSize:14,outline:'none',color:C.text,background:C.surface,boxSizing:'border-box',transition:'border-color .15s' };
 const btnPag = {
   padding:'6px 12px', border:`1px solid ${C.border}`, borderRadius:6,
   background:C.surface, cursor:'pointer', fontSize:13, color:C.text,

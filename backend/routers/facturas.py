@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas, crud
 from .deps import verify_token, require_admin
+from logger import logger
 
 router = APIRouter(prefix="/facturas", tags=["facturas"])
 
@@ -293,59 +294,64 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
             c.drawString(350, y, f"⚠ {dias_mora} día{'s' if dias_mora != 1 else ''} de mora")
             c.setFillColor(colors.black)
 
-    # ── Formas de pago (2 columnas para ahorrar espacio) ─────────────────────
-    bancos_lista = []
-    try:
-        lista_bancos = db.query(models.Lista).filter_by(nombre='bancos').first()
-        if lista_bancos:
-            bancos_lista = [b for b in json.loads(lista_bancos.items or "[]")
-                            if b.strip().lower() not in ('efectivo', 'cash', 'otro', 'other')]
-    except Exception:
-        pass
+    estado_fact = (fact.get('estado') or '').lower()
 
-    if bancos_lista:
-        y -= 16
-        c.setFillColor(colors.HexColor("#1E40AF"))
+    if estado_fact == 'pendiente':
+        # ── Formas de pago disponibles (solo facturas pendientes) ────────────
+        bancos_lista = []
+        try:
+            lista_bancos = db.query(models.Lista).filter_by(nombre='bancos').first()
+            if lista_bancos:
+                bancos_lista = [b for b in json.loads(lista_bancos.items or "[]")
+                                if b.strip()]
+        except Exception as e:
+            logger.error(f"PDF factura {id}: error cargando lista bancos: {e}")
+
+        if bancos_lista:
+            y -= 16
+            c.setFillColor(colors.HexColor("#1E40AF"))
+            c.setFont("Helvetica-Bold", 8)
+            c.drawString(50, y, "FORMAS DE PAGO:")
+
+            y -= 14
+            c.setFillColor(colors.HexColor("#1E40AF"))
+            c.rect(50, y - 3, W - 100, 14, fill=1, stroke=0)
+            c.setFillColor(colors.white)
+            c.setFont("Helvetica-Bold", 7)
+            c.drawString(55, y, "Entidad")
+            c.drawString(175, y, "Cuenta")
+            mid = W / 2 + 5
+            c.drawString(mid, y, "Entidad")
+            c.drawString(mid + 120, y, "Cuenta")
+
+            ROW_H = 12
+            for i in range(0, len(bancos_lista), 2):
+                y -= ROW_H
+                for col, idx in enumerate([i, i + 1]):
+                    if idx >= len(bancos_lista):
+                        break
+                    banco = bancos_lista[idx]
+                    xo = 55 if col == 0 else mid
+                    xc = 175 if col == 0 else mid + 120
+                    nombre_b, cuenta_b = (banco.split(' - ', 1) + [''])[:2] if ' - ' in banco else (banco, '')
+                    c.setFillColor(colors.HexColor("#F8FAFC") if (i // 2) % 2 == 0 else colors.white)
+                    col_w = (W - 100) / 2 - 5
+                    c.rect(xo - 5, y - 3, col_w, ROW_H, fill=1, stroke=0)
+                    c.setFillColor(colors.black)
+                    c.setFont("Helvetica", 7)
+                    c.drawString(xo, y, nombre_b[:28])
+                    c.setFont("Helvetica-Bold", 7)
+                    c.drawString(xc, y, cuenta_b[:22])
+
+    elif fact.get('banco'):
+        # ── Banco con que se pagó (solo facturas pagadas) ────────────────────
+        y -= 14
         c.setFont("Helvetica-Bold", 8)
-        c.drawString(50, y, "FORMAS DE PAGO:")
-
-        # Encabezado de la tabla 2 columnas
-        y -= 14
         c.setFillColor(colors.HexColor("#1E40AF"))
-        c.rect(50, y - 3, W - 100, 14, fill=1, stroke=0)
-        c.setFillColor(colors.white)
-        c.setFont("Helvetica-Bold", 7)
-        c.drawString(55, y, "Entidad")
-        c.drawString(175, y, "Cuenta")
-        mid = W / 2 + 5
-        c.drawString(mid, y, "Entidad")
-        c.drawString(mid + 120, y, "Cuenta")
-
-        ROW_H = 12
-        for i in range(0, len(bancos_lista), 2):
-            y -= ROW_H
-            for col, idx in enumerate([i, i + 1]):
-                if idx >= len(bancos_lista):
-                    break
-                banco = bancos_lista[idx]
-                xo = 55 if col == 0 else mid
-                xc = 175 if col == 0 else mid + 120
-                nombre_b, cuenta_b = (banco.split(' - ', 1) + [''])[:2] if ' - ' in banco else (banco, '')
-                c.setFillColor(colors.HexColor("#F8FAFC") if (i // 2) % 2 == 0 else colors.white)
-                col_w = (W - 100) / 2 - 5
-                c.rect(xo - 5, y - 3, col_w, ROW_H, fill=1, stroke=0)
-                c.setFillColor(colors.black)
-                c.setFont("Helvetica", 7)
-                c.drawString(xo, y, nombre_b[:28])
-                c.setFont("Helvetica-Bold", 7)
-                c.drawString(xc, y, cuenta_b[:22])
-
-    # Banco seleccionado en la factura
-    if fact.get('banco'):
-        y -= 14
-        c.setFont("Helvetica", 7)
-        c.setFillColor(colors.HexColor("#374151"))
-        c.drawString(50, y, f"Pago registrado en: {fact.get('banco','')}")
+        c.drawString(50, y, "PAGO REGISTRADO EN:")
+        c.setFont("Helvetica", 8)
+        c.setFillColor(colors.black)
+        c.drawString(195, y, fact.get('banco', ''))
 
     c.save()
 
