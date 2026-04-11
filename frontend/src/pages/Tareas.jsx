@@ -150,6 +150,7 @@ export default function Tareas() {
     queryKey: ['usuarios'],
     queryFn: () => api.get('/usuarios').then(r => r.data),
     enabled: isAdmin,
+    staleTime: 300_000,
   });
 
   const crear = useMutation({

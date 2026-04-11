@@ -484,8 +484,8 @@ export function Empleados() {
 
   useEffect(() => { try { localStorage.setItem('bbc_emp_filtros', JSON.stringify({ mes, anio })); } catch {} }, [mes, anio]);
 
-  const { data: emps = [] } = useQuery({ queryKey: ['empleados'], queryFn: () => api.get('/empleados').then(r => r.data) });
-  const { data: usuarios = [] } = useQuery({ queryKey: ['usuarios'], queryFn: () => api.get('/usuarios').then(r => r.data) });
+  const { data: emps = [] } = useQuery({ queryKey: ['empleados'], queryFn: () => api.get('/empleados').then(r => r.data), staleTime: 300_000 });
+  const { data: usuarios = [] } = useQuery({ queryKey: ['usuarios'], queryFn: () => api.get('/usuarios').then(r => r.data), staleTime: 300_000 });
   const { data: gastos = [] } = useQuery({ queryKey: ['gastos', mes, anio], queryFn: () => api.get('/gastos', { params: { mes, anio } }).then(r => r.data) });
   const { data: nomina = [] } = useQuery({ queryKey: ['nomina', mes, anio], queryFn: () => api.get('/nomina', { params: { mes, anio } }).then(r => r.data) });
 
@@ -807,8 +807,8 @@ export function Usuarios() {
   const [pwForm,setPwForm]=useState({});
   const [pwErr,setPwErr]=useState('');
 
-  const { data: users=[] } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data) });
-  const { data: clientes=[] } = useQuery({ queryKey:['clientes-lista'], queryFn:()=>api.get('/clientes').then(r=>r.data) });
+  const { data: users=[] } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data), staleTime: 300_000 });
+  const { data: clientes=[] } = useQuery({ queryKey:['clientes-lista'], queryFn:()=>api.get('/clientes').then(r=>r.data), staleTime: 300_000 });
 
   const crear = useMutation({
     mutationFn:()=>{
@@ -1071,7 +1071,7 @@ TOTAL: \${{total}}
 
 export function Calculadora() {
   const qc = useQueryClient();
-  const { data: cfg={} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
+  const { data: cfg={} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data), staleTime: 300_000 });
   const [ibc, setIbc] = useState('');
   const [pcts, setPcts] = useState({});
   const [plantilla, setPlantilla] = useState('');
