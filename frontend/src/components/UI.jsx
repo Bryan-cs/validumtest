@@ -4,6 +4,21 @@ import { Button } from './ui/button';
 import { Badge as ShadBadge } from './ui/badge';
 import { Card as ShadCard } from './ui/card';
 import { cn } from '../lib/utils';
+import { Input as ShadInput } from './ui/input';
+import { Label } from './ui/label';
+import {
+  Select as ShadSelect,
+  SelectTrigger,
+  SelectValue,
+  SelectContent,
+  SelectItem,
+} from './ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from './ui/dialog';
 
 export const C = {
   primary:  'var(--c-primary)',
@@ -112,110 +127,120 @@ export function Btn({ children, onClick, variant = 'primary', size = 'md', disab
   );
 }
 
-export function Input({ label, value, onChange, placeholder, type='text', style }) {
-  const uid = label ? `ui-input-${label.replace(/\s+/g,'-').toLowerCase()}` : undefined;
+export function Input({ label, value, onChange, placeholder, type = 'text', style }) {
+  const uid = label ? `ui-input-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined;
   return (
-    <div style={{ marginBottom: 12, ...style }}>
-      {label && <label htmlFor={uid} style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
-      <input id={uid} type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
-        className="ui-input"
-        style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.border}`,
-          borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box', color:C.text, background:C.surface,
-          transition:'border-color .18s, box-shadow .18s' }} />
+    <div className="mb-3" style={style}>
+      {label && (
+        <Label
+          htmlFor={uid}
+          className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 block"
+        >
+          {label}
+        </Label>
+      )}
+      <ShadInput
+        id={uid}
+        type={type}
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="bg-card"
+      />
     </div>
   );
 }
 
 export function Select({ label, value, onChange, options = [], style }) {
-  const uid = label ? `ui-select-${label.replace(/\s+/g,'-').toLowerCase()}` : undefined;
+  const uid = label ? `ui-select-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined;
   return (
-    <div style={{ marginBottom: 12, ...style }}>
-      {label && <label htmlFor={uid} style={{ display:'block', fontSize:11, color:C.text2, fontWeight:600, marginBottom:5, textTransform:'uppercase', letterSpacing:'.7px' }}>{label}</label>}
-      <select id={uid} value={value} onChange={e=>onChange(e.target.value)}
-        className="ui-input"
-        style={{ width:'100%', padding:'11px 14px', border:`1.5px solid ${C.border}`,
-          borderRadius:10, fontSize:14, outline:'none', boxSizing:'border-box',
-          color:C.text, background:C.surface, transition:'border-color .18s, box-shadow .18s' }}>
-        {options.map(o => typeof o === 'string'
-          ? <option key={o} value={o}>{o}</option>
-          : <option key={o.value} value={o.value}>{o.label}</option>
-        )}
-      </select>
+    <div className="mb-3" style={style}>
+      {label && (
+        <label
+          htmlFor={uid}
+          className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5"
+        >
+          {label}
+        </label>
+      )}
+      <ShadSelect value={value} onValueChange={onChange}>
+        <SelectTrigger id={uid} className="bg-card">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(o =>
+            typeof o === 'string'
+              ? <SelectItem key={o} value={o}>{o}</SelectItem>
+              : <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+          )}
+        </SelectContent>
+      </ShadSelect>
     </div>
   );
 }
 
 export function Table({ headers, rows, loading }) {
-  const thStyle = {
-    padding:'12px 16px', textAlign:'left', fontSize:10.5, fontWeight:700,
-    color: C.text2, background: C.surface, borderBottom:`2px solid ${C.border}`,
-    textTransform:'uppercase', letterSpacing:'0.1em', whiteSpace:'nowrap',
-  };
-  const tdStyle = {
-    padding:'13px 16px', fontSize:13.5, color: C.text,
-    borderBottom:`1px solid ${C.border}`, verticalAlign:'middle',
-    transition:'background .12s',
-  };
   return (
-    <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-      <table className="tbl" style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+    <div className="overflow-x-auto rounded-lg border border-border">
+      <table className="w-full border-collapse bg-card text-sm">
         <thead>
-          <tr>{headers.map((h,i)=><th key={i} style={{ ...thStyle, paddingLeft: i===0?20:undefined, paddingRight: i===headers.length-1?20:undefined }}>{h}</th>)}</tr>
+          <tr>
+            {headers.map((h, i) => (
+              <th
+                key={i}
+                className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted/40 border-b border-border"
+              >
+                {h}
+              </th>
+            ))}
+          </tr>
         </thead>
         <tbody>
-          {loading
-            ? <tr><td colSpan={headers.length} style={{ ...tdStyle, textAlign:'center', color:C.text2 }}>Cargando...</td></tr>
-            : rows.length === 0
-            ? <tr><td colSpan={headers.length} style={{ ...tdStyle, textAlign:'center', color:C.text2 }}>Sin registros</td></tr>
-            : rows}
+          {loading ? (
+            <tr>
+              <td colSpan={headers.length} className="px-4 py-8 text-center text-muted-foreground">
+                Cargando...
+              </td>
+            </tr>
+          ) : rows.length === 0 ? (
+            <tr>
+              <td colSpan={headers.length} className="px-4 py-8 text-center text-muted-foreground">
+                Sin registros
+              </td>
+            </tr>
+          ) : rows}
         </tbody>
       </table>
     </div>
   );
 }
 
-export function Modal({ open, onClose, title, children, width=540 }) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, onClose]);
-  if (!open) return null;
+export function Modal({ open, onClose, title, children, width = 540 }) {
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)', zIndex:1000,
-      display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div style={{ background:C.surface, borderRadius:16, width:'100%', maxWidth:width,
-        maxHeight:'90vh', overflow:'auto', boxShadow:'0 32px 80px rgba(0,0,0,.25)', overflow:'hidden' }}>
-        <div style={{ height:4, background:`linear-gradient(90deg, ${C.primary}, ${C.accent})` }} />
-        <div style={{ display:'flex', alignItems:'center', padding:'18px 22px',
-          borderBottom:`1px solid ${C.border}` }}>
-          <h2 style={{ margin:0, fontFamily:"'Syne', sans-serif", fontSize:18, fontWeight:800, color:C.text, letterSpacing:'-.3px' }}>{title}</h2>
-          <button onClick={onClose} style={{
-            marginLeft:'auto', width:28, height:28, display:'flex', alignItems:'center', justifyContent:'center',
-            background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
-            fontSize:14, cursor:'pointer', color:C.text2, flexShrink:0,
-          }}>✕</button>
-        </div>
-        <div style={{ padding:22, overflowY:'auto', maxHeight:'calc(90vh - 110px)' }}>{children}</div>
-      </div>
-    </div>
+    <Dialog open={open} onOpenChange={v => !v && onClose()}>
+      <DialogContent style={{ maxWidth: width }} className="overflow-y-auto max-h-[90vh]">
+        <DialogHeader>
+          <DialogTitle className="font-bold tracking-tight">{title}</DialogTitle>
+        </DialogHeader>
+        {children}
+      </DialogContent>
+    </Dialog>
   );
 }
 
 export function PageHeader({ title, subtitle, action, crumb }) {
   return (
-    <div style={{ marginBottom:24, paddingBottom:20, borderBottom:`1px solid ${C.border}`, position:'relative' }}>
-      <div style={{ position:'absolute', bottom:-1, left:0, width:48, height:2, background:`linear-gradient(90deg, ${C.primary}, ${C.accent})`, borderRadius:2 }} />
+    <div className="mb-6 pb-5 border-b border-border relative">
+      <div className="absolute bottom-[-1px] left-0 w-12 h-0.5 bg-gradient-to-r from-[var(--c-primary)] to-[var(--c-accent)] rounded" />
       {crumb && (
-        <div style={{ fontSize:11, color:C.text2, marginBottom:5, fontFamily:"'IBM Plex Mono', monospace" }}>{crumb}</div>
+        <div className="text-xs text-muted-foreground font-mono mb-1">{crumb}</div>
       )}
-      <div style={{ display:'flex', alignItems:'flex-end' }}>
+      <div className="flex items-end">
         <div>
-          <h1 style={{ margin:0, fontFamily:"'Syne', sans-serif", fontSize:24, fontWeight:800, color:C.text, letterSpacing:'-.4px', lineHeight:1.1 }}>{title}</h1>
-          {subtitle && <p style={{ margin:'3px 0 0', fontSize:13, color:C.text2, fontWeight:300 }}>{subtitle}</p>}
+          <h1 className="text-2xl font-extrabold tracking-tight text-foreground leading-tight">{title}</h1>
+          {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
         </div>
-        {action && <div style={{ marginLeft:'auto' }}>{action}</div>}
+        {action && <div className="ml-auto">{action}</div>}
       </div>
     </div>
   );
@@ -254,29 +279,19 @@ export function statusBadge(estado) {
 export const fmt = (n) => n == null ? '$ 0' : '$ ' + Math.round(n).toLocaleString('es-CO');
 
 export function ConfirmModal({ open, title, message, confirmLabel = 'Eliminar', variant = 'danger', onConfirm, onCancel }) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (e.key === 'Escape') onCancel(); };
-    window.addEventListener('keydown', handler);
-    return () => window.removeEventListener('keydown', handler);
-  }, [open, onCancel]);
-  if (!open) return null;
   return (
-    <div onClick={onCancel} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.45)',
-      zIndex:2000, display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-      <div onClick={e => e.stopPropagation()} style={{ background:C.surface, borderRadius:16,
-        maxWidth:400, width:'100%', boxShadow:'0 32px 80px rgba(0,0,0,.25)', overflow:'hidden' }}>
-        <div style={{ height:4, background:`linear-gradient(90deg, ${C.primary}, ${C.accent})` }} />
-        <div style={{ padding:'22px 24px 24px' }}>
-          <h3 style={{ margin:'0 0 8px', color:C.text, fontFamily:"'Syne', sans-serif", fontSize:17, fontWeight:800, letterSpacing:'-.3px' }}>{title}</h3>
-          <p style={{ margin:'0 0 22px', color:C.text2, fontSize:14, lineHeight:1.6 }}>{message}</p>
-          <div style={{ display:'flex', gap:10, justifyContent:'flex-end' }}>
-            <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
-            <Btn variant={variant} onClick={onConfirm}>{confirmLabel}</Btn>
-          </div>
+    <Dialog open={open} onOpenChange={v => !v && onCancel()}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <p className="text-sm text-muted-foreground leading-relaxed">{message}</p>
+        <div className="flex justify-end gap-2 mt-2">
+          <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
+          <Btn variant={variant} onClick={onConfirm}>{confirmLabel}</Btn>
         </div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
