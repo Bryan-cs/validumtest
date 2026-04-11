@@ -1160,27 +1160,6 @@ export default function Afiliados() {
         </div>
       </Modal>
 
-      {/* Paginación: solo cuando hay más de una página Y no hay filtros activos */}
-      {totalPags > 1 && tab === 'activos' && !hayFiltrosActivos && (
-        <div style={{ display:'flex', justifyContent:'center', alignItems:'center',
-          gap:6, marginTop:16, flexWrap:'wrap' }}>
-          <button onClick={()=>setPagina(1)} disabled={pagina===1} style={btnPag}>«</button>
-          <button onClick={()=>setPagina(p=>Math.max(1,p-1))} disabled={pagina===1} style={btnPag}>‹</button>
-          {[...Array(Math.min(5,totalPags))].map((_,i) => {
-            const start = Math.max(1, Math.min(pagina-2, totalPags-4));
-            const p = start + i;
-            if(p > totalPags) return null;
-            return <button key={p} onClick={()=>setPagina(p)} style={{
-              ...btnPag, background:p===pagina?C.primary:C.surface,
-              color:p===pagina?'#fff':C.text, fontWeight:p===pagina?700:400 }}>{p}</button>;
-          })}
-          <button onClick={()=>setPagina(p=>Math.min(totalPags,p+1))} disabled={pagina===totalPags} style={btnPag}>›</button>
-          <button onClick={()=>setPagina(totalPags)} disabled={pagina===totalPags} style={btnPag}>»</button>
-          <span style={{ fontSize:12, color:C.text2, marginLeft:4 }}>
-            Pág {pagina}/{totalPags} · {totalReg} total
-          </span>
-        </div>
-      )}
     </div>
   );
 }
