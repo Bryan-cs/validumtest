@@ -5,6 +5,13 @@ import api from '../utils/api';
 import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 import useAuthStore from '../hooks/useAuth';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getPaginationRowModel,
+  flexRender,
+} from '@tanstack/react-table';
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5','N/A'];
 
@@ -98,6 +105,8 @@ export default function Afiliados() {
 
   const [pagina, setPagina] = useState(1);
   const POR_PAG = 50;
+  const [sorting, setSorting] = useState([]);
+  const [tablePagination, setTablePagination] = useState({ pageIndex: 0, pageSize: 50 });
 
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   // Sin paginación: para filtros y exportaciones (no necesita polling cada 10s)
@@ -169,6 +178,134 @@ export default function Afiliados() {
   const sugerenciasPagos = useMemo(() => busquedaPagos.length >= 2
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
     : [], [todos, busquedaPagos]);
+
+  const columns = useMemo(() => [
+    {
+      accessorKey: 'nombre',
+      header: ({ column }) => (
+        <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Nombre {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => (
+        <div>
+          <span style={{ fontWeight: 600, cursor: 'pointer', color: C.primary }}
+            onClick={() => { setDocSeleccionado(row.original.doc); setTab('pagos'); }}>
+            {row.original.nombre}
+          </span>
+          <div style={{ fontSize: 10, color: C.text2 }}>{row.original.tipo_doc || 'CC'} {row.original.doc}</div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'empresa',
+      header: ({ column }) => (
+        <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Empresa {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.empresa || '—'}</span>,
+    },
+    {
+      accessorKey: 'cliente_txt',
+      header: 'Cliente',
+      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.cliente_txt || '—'}</span>,
+    },
+    {
+      accessorKey: 'subtipo',
+      header: 'Subtipo',
+      cell: ({ row }) => row.original.subtipo ? <Chip>{row.original.subtipo}</Chip> : <span style={{ color: C.text2 }}>—</span>,
+    },
+    {
+      accessorKey: 'eps',
+      header: 'EPS',
+      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.eps || '—'}</span>,
+    },
+    {
+      accessorKey: 'arl',
+      header: 'ARL',
+      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.arl || '—'}</span>,
+    },
+    {
+      accessorKey: 'servicios',
+      header: 'Servicios',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {(row.original.servicios || []).map(s => <SrvChip key={s}>{s}</SrvChip>)}
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'estado_srv',
+      header: ({ column }) => (
+        <button onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Estado {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => statusBadge(row.original.estado_srv || row.original.estado),
+    },
+    {
+      accessorKey: 'novedades',
+      header: 'Novedades',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span style={{ fontSize: 11, color: C.text2, display: '-webkit-box',
+          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 160 }}>
+          {row.original.novedades || '—'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'detalle',
+      header: 'Detalle',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span style={{ fontSize: 11, color: C.blue, display: '-webkit-box',
+          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 180 }}>
+          {row.original.detalle || '—'}
+        </span>
+      ),
+    },
+    {
+      id: 'acciones',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const a = row.original;
+        return (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <Btn size="sm" variant="secondary" onClick={() => openEditar(a)}>✏️ Editar</Btn>
+            <Btn size="sm" variant="secondary" onClick={() => dlExcel(`/afiliados/${a.id}/certificado`, `certificado_${a.nombre.replace(/ /g, '_')}.pdf`)}>📄 Cert.</Btn>
+            <Btn size="sm" variant="danger" disabled={eliminar.isPending}
+              onClick={async () => {
+                let msg = `¿Eliminar a "${a.nombre}" (${a.doc})? Esta acción moverá al afiliado a eliminados.`;
+                try {
+                  const r = await api.get('/facturas', { params: { doc: a.doc, estado: 'pendiente', limit: 0 } });
+                  const pend = r.data?.total || 0;
+                  if (pend > 0) msg += `\n\n⚠️ ATENCIÓN: Este afiliado tiene ${pend} factura${pend !== 1 ? 's' : ''} pendiente${pend !== 1 ? 's' : ''} de pago.`;
+                } catch {}
+                setConfirm({ title: 'Eliminar afiliado', message: msg, onConfirm: () => eliminar.mutate(a.id) });
+              }}>×</Btn>
+          </div>
+        );
+      },
+    },
+  ], [eliminar.isPending]);
+
+  const table = useReactTable({
+    data: dataFiltrada,
+    columns,
+    state: { sorting, pagination: tablePagination },
+    onSortingChange: setSorting,
+    onPaginationChange: setTablePagination,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setPendingFiles([]); setModal('nuevo'); };
@@ -425,75 +562,46 @@ export default function Afiliados() {
             ]}
             valores={filtros} onChange={setFiltro} onLimpiar={limpiar}
           />
-          <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+          <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
               <thead>
-                <tr style={{ background:C.surface2 }}>
-                  {['Nombre','Empresa','Documento','Cliente','Subtipo','EPS','ARL','Servicios','Estado','Novedades','Detalle','Acciones'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                      color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
+                {table.getHeaderGroups().map(hg => (
+                  <tr key={hg.id} style={{ background: C.surface2 }}>
+                    {hg.headers.map(header => (
+                      <th key={header.id} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
               </thead>
               <tbody>
-                {isLoading && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
-                {!isLoading && dataFiltrada.length===0 && (
-                  <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros</td></tr>
+                {isLoading && <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Cargando...</td></tr>}
+                {!isLoading && table.getRowModel().rows.length === 0 && (
+                  <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin registros</td></tr>
                 )}
-                {dataFiltrada.map(a=>(
-                  <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}` }}>
-                    <td style={tdc}>
-                      <span style={{ fontWeight:600, cursor:'pointer', color:C.primary }}
-                        onClick={() => { setDocSeleccionado(a.doc); setTab('pagos'); }}>
-                        {a.nombre}
-                      </span>
-                    </td>
-                    <td style={tdc}>{a.empresa||'—'}</td>
-                    <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>
-                      <span style={{ fontSize:10,fontWeight:700,color:C.text2,marginRight:4 }}>{a.tipo_doc||'CC'}</span>{a.doc}
-                    </td>
-                    <td style={tdc}>{a.cliente_txt||'—'}</td>
-                    <td style={tdc}>{a.subtipo?<Chip>{a.subtipo}</Chip>:'—'}</td>
-                    <td style={tdc}><span style={{ fontSize:11,color:C.text2 }}>{a.eps||'—'}</span></td>
-                    <td style={tdc}><span style={{ fontSize:11,color:C.text2 }}>{a.arl||'—'}</span></td>
-                    <td style={tdc}>
-                      <div style={{ display:'flex',flexWrap:'wrap',gap:3 }}>
-                        {(a.servicios||[]).map(s=><SrvChip key={s}>{s}</SrvChip>)}
-                      </div>
-                    </td>
-                    <td style={tdc}>{statusBadge(a.estado_srv||a.estado)}</td>
-                    <td style={{ ...tdc,maxWidth:160 }}>
-                      <span style={{ fontSize:11,color:C.text2,display:'-webkit-box',
-                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                        {a.novedades||'—'}
-                      </span>
-                    </td>
-                    <td style={{ ...tdc,maxWidth:180 }}>
-                      <span style={{ fontSize:11,color:C.blue,display:'-webkit-box',
-                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                        {a.detalle||'—'}
-                      </span>
-                    </td>
-                    <td style={tdc}>
-                      <div style={{ display:'flex',gap:4,flexWrap:'wrap' }}>
-                        <Btn size="sm" variant="secondary" onClick={()=>openEditar(a)}>✏️ Editar</Btn>
-                        <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/certificado`,`certificado_${a.nombre.replace(/ /g,'_')}.pdf`)}>📄 Cert.</Btn>
-                        <Btn size="sm" variant="danger" disabled={eliminar.isPending}
-                          onClick={async()=>{
-                            let msg = `¿Eliminar a "${a.nombre}" (${a.doc})? Esta acción moverá al afiliado a eliminados.`;
-                            try {
-                              const r = await api.get('/facturas', { params: { doc: a.doc, estado: 'pendiente', limit: 0 } });
-                              const pend = r.data?.total || 0;
-                              if (pend > 0) msg += `\n\n⚠️ ATENCIÓN: Este afiliado tiene ${pend} factura${pend !== 1 ? 's' : ''} pendiente${pend !== 1 ? 's' : ''} de pago.`;
-                            } catch {}
-                            setConfirm({ title:'Eliminar afiliado', message: msg, onConfirm:()=>eliminar.mutate(a.id) });
-                          }}>×</Btn>
-                      </div>
-                    </td>
+                {table.getRowModel().rows.map(row => (
+                  <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {row.getVisibleCells().map(cell => (
+                      <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Paginación TanStack */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+            <span style={{ fontSize: 12, color: C.text2 }}>
+              Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()} — {dataFiltrada.length} total
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <Btn size="sm" variant="secondary" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>← Ant.</Btn>
+              <Btn size="sm" variant="secondary" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>Sig. →</Btn>
+            </div>
           </div>
         </>
       )}
