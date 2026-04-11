@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
-import { StatCard, C, fmt } from '../components/UI';
+import { StatCard, SkeletonCard, C, fmt } from '../components/UI';
 
 const MESES = ['Todos','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -49,22 +49,32 @@ export default function Dashboard() {
 
       {/* Métricas afiliados */}
       <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
-        <StatCard label="Activos"             value={d?.activos          ?? '—'} color={C.green}   icon="👥" />
-        <StatCard label="Suspendidos"         value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
-        <StatCard label="Doble afiliación"    value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
-        <StatCard label="No se encuentra"     value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
-        <StatCard label="En espera activac."  value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" />
-        <StatCard label="Total afiliados"     value={d?.total_afiliados  ?? '—'} color={C.primary} icon="📊" />
+        {isLoading
+          ? [1,2,3,4,5,6].map(i => <div key={i} style={{ flex:1, minWidth:120 }}><SkeletonCard height={88} /></div>)
+          : <>
+            <StatCard label="Activos"             value={d?.activos          ?? '—'} color={C.green}   icon="👥" />
+            <StatCard label="Suspendidos"         value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
+            <StatCard label="Doble afiliación"    value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
+            <StatCard label="No se encuentra"     value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
+            <StatCard label="En espera activac."  value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" />
+            <StatCard label="Total afiliados"     value={d?.total_afiliados  ?? '—'} color={C.primary} icon="📊" />
+          </>
+        }
       </div>
 
       {/* Métricas financieras */}
       <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap' }}>
-        <StatCard label="Ingresos"                  value={fmt(d?.ingresos)}              color={C.primary} icon="💰" />
-        <StatCard label={`Nóminas (×${d?.meses_factor??1} mes)`}     value={fmt(d?.nominas)}      color={C.red} icon="👔" />
-        <StatCard label={`Gastos fijos (×${d?.meses_factor??1} mes)`} value={fmt(d?.gastos_fijos)} color={C.red} icon="📝" />
-        <StatCard label="Utilidad neta"             value={fmt(d?.utilidad_neta)}
-          color={(d?.utilidad_neta ?? 0) >= 0 ? C.green : C.red}
-          icon={(d?.utilidad_neta ?? 0) >= 0 ? '📈' : '📉'} />
+        {isLoading
+          ? [1,2,3,4].map(i => <div key={i} style={{ flex:1, minWidth:140 }}><SkeletonCard height={88} /></div>)
+          : <>
+            <StatCard label="Ingresos"                  value={fmt(d?.ingresos)}              color={C.primary} icon="💰" />
+            <StatCard label={`Nóminas (×${d?.meses_factor??1} mes)`}     value={fmt(d?.nominas)}      color={C.red} icon="👔" />
+            <StatCard label={`Gastos fijos (×${d?.meses_factor??1} mes)`} value={fmt(d?.gastos_fijos)} color={C.red} icon="📝" />
+            <StatCard label="Utilidad neta"             value={fmt(d?.utilidad_neta)}
+              color={(d?.utilidad_neta ?? 0) >= 0 ? C.green : C.red}
+              icon={(d?.utilidad_neta ?? 0) >= 0 ? '📈' : '📉'} />
+          </>
+        }
       </div>
     </div>
   );

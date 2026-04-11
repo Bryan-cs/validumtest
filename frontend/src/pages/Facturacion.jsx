@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
-import { C, Btn, Modal, PageHeader, StatCard, fmt } from '../components/UI';
+import { C, Btn, Modal, PageHeader, StatCard, fmt, SkeletonRow } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 
 const UP = v => (v||'').toUpperCase();
@@ -645,7 +645,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       <td style={tdc}>
                         <span style={{ fontWeight:600, color:C.primary }}>{i.concepto}</span>
                       </td>
-                      <td style={{ ...tdc, color:C.text2 }}>{i.descripcion || '—'}</td>
+                      <td style={{ ...tdc, fontWeight:700, color:C.text }}>{i.descripcion || '—'}</td>
                       <td style={{ ...tdc, fontWeight:700, color:C.green }}>{fmt(i.valor)}</td>
                       <td style={tdc}>{MESES_NUM[i.mes-1]}</td>
                       <td style={tdc}>{i.anio}</td>
@@ -701,14 +701,16 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={10} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+            {isLoading && [1,2,3,4,5].map(i => <SkeletonRow key={i} cols={10} />)}
             {rowsFiltradas.map(f => {
               const isHuerfana = f.afiliado_eliminado && f.estado==='pendiente';
               const isExpanded = expandedRow === f.id;
               const ai = f.afil_info || {};
               return (<React.Fragment key={f.id}>
-                <tr style={{ borderBottom: isExpanded ? 'none' : `1px solid ${C.border}`,background:isHuerfana?C.redBg:C.surface,cursor:'pointer' }}
-                  onClick={()=>setExpandedRow(isExpanded ? null : f.id)}>
+                <tr style={{ borderBottom: isExpanded ? 'none' : `1px solid ${C.border}`,background:isHuerfana?C.redBg:C.surface,cursor:'pointer',transition:'background .1s' }}
+                  onClick={()=>setExpandedRow(isExpanded ? null : f.id)}
+                  onMouseEnter={e=>{ if(!isHuerfana) e.currentTarget.style.background=C.surface2; }}
+                  onMouseLeave={e=>{ e.currentTarget.style.background=isHuerfana?C.redBg:C.surface; }}>
                   <td style={tdc}><span style={{ fontFamily:'monospace',fontSize:12 }}>{f.codigo}</span></td>
                   <td style={{ ...tdc,color:isHuerfana?C.red:C.blue }}>
                     <span style={{ textDecoration:'underline',cursor:'pointer' }}>{f.nombre_afiliado}</span>

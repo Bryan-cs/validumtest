@@ -143,6 +143,7 @@ class Gasto(Base):
     id     = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(120))
     valor  = Column(Float, default=0)
+    activo = Column(Boolean, default=True)
     mes    = Column(Integer)
     anio   = Column(Integer)
     creado = Column(DateTime, default=_utcnow)

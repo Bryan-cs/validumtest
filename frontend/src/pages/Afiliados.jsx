@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../components/ui/tooltip';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
@@ -89,7 +90,7 @@ export default function Afiliados() {
     try { return localStorage.getItem('bbc_afil_busqueda') || ''; } catch { return ''; }
   });
   const [filtros,  setFiltros]  = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bbc_afil_filtros')) || { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] }; } catch { return { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] }; }
+    try { return JSON.parse(localStorage.getItem('bbc_afil_filtros')) || { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[] }; } catch { return { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[] }; }
   });
   const [modal,    setModal]    = useState(null);
   const [confirm,  setConfirm]  = useState(null);  // { title, message, onConfirm }
@@ -118,16 +119,18 @@ export default function Afiliados() {
     fecha_afiliacion:'', nivel_arl:'N/A', observaciones:''
   });
 
-  const setFiltro = (key,vals) => setFiltros(f=>({...f,[key]:vals}));
-  const limpiar = () => { setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] }); setBusqueda(''); };
+  const setFiltro = (key,vals) => { setFiltros(f=>({...f,[key]:vals})); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
+  const limpiar = () => { setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[] }); setBusqueda(''); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
 
   useEffect(() => { try { localStorage.setItem('bbc_afil_filtros', JSON.stringify(filtros)); } catch {} }, [filtros]);
   useEffect(() => { try { localStorage.setItem('bbc_afil_busqueda', busqueda); } catch {} }, [busqueda]);
 
   const [pagina, setPagina] = useState(1);
-  const POR_PAG = 50;
   const [sorting, setSorting] = useState([]);
   const [tablePagination, setTablePagination] = useState({ pageIndex: 0, pageSize: 50 });
+  const [columnVisibility, setColumnVisibility] = useState({});
+  const colMenuRef = useRef(null);
+  const [colMenuOpen, setColMenuOpen] = useState(false);
 
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   // Sin paginación: para filtros y exportaciones (no necesita polling cada 10s)
@@ -139,8 +142,8 @@ export default function Afiliados() {
   });
   // Con paginación: para la tabla principal
   const { data: resp={total:0,items:[]}, isLoading } = useQuery({
-    queryKey:['afiliados', pagina],
-    queryFn:()=>api.get('/afiliados', { params:{ skip:(pagina-1)*POR_PAG, limit:POR_PAG } }).then(r=>r.data),
+    queryKey:['afiliados', pagina, tablePagination.pageSize],
+    queryFn:()=>api.get('/afiliados', { params:{ skip:(pagina-1)*tablePagination.pageSize, limit:tablePagination.pageSize } }).then(r=>r.data),
     placeholderData: (prev) => prev,
   });
   const data     = resp.items || [];
@@ -178,6 +181,14 @@ export default function Afiliados() {
     return () => clearTimeout(timerRef.current);
   }, [busqueda]);
 
+  // Cerrar menú de columnas al click fuera
+  useEffect(() => {
+    if (!colMenuOpen) return;
+    const handler = (e) => { if (colMenuRef.current && !colMenuRef.current.contains(e.target)) setColMenuOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [colMenuOpen]);
+
   const clientesUnicos = useMemo(() => [...new Set(todos.map(a=>a.cliente_txt).filter(Boolean))].sort(), [todos]);
   const subtiposUnicos = useMemo(() => [...new Set(todos.map(a=>a.subtipo).filter(Boolean))].sort(), [todos]);
   const estadosOpts    = useMemo(() => [...new Set(todos.map(a=>a.estado_srv||a.estado).filter(Boolean))].sort(), [todos]);
@@ -187,11 +198,12 @@ export default function Afiliados() {
   const dataFiltrada = useMemo(() => fuenteDatos.filter(a => {
     const q = busquedaDefer.toLowerCase();
     if (busquedaDefer && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
-    if (filtros.empresa.length && !filtros.empresa.includes(a.empresa))               return false;
-    if (filtros.cliente.length && !filtros.cliente.includes(a.cliente_txt))           return false;
-    if (filtros.estado.length  && !filtros.estado.includes(a.estado_srv||a.estado))   return false;
-    if (filtros.subtipo.length   && !filtros.subtipo.includes(a.subtipo))               return false;
-    if (filtros.tipo_doc.length  && !filtros.tipo_doc.includes(a.tipo_doc||'CC'))       return false;
+    if (filtros.empresa.length  && !filtros.empresa.includes(a.empresa))               return false;
+    if (filtros.cliente.length  && !filtros.cliente.includes(a.cliente_txt))           return false;
+    if (filtros.estado.length   && !filtros.estado.includes(a.estado_srv||a.estado))   return false;
+    if (filtros.subtipo.length  && !filtros.subtipo.includes(a.subtipo))               return false;
+    if (filtros.tipo_doc.length && !filtros.tipo_doc.includes(a.tipo_doc||'CC'))       return false;
+    if (filtros.ccf?.length     && !filtros.ccf.includes(a.ccf))                       return false;
     return true;
   }), [fuenteDatos, busquedaDefer, filtros]);
 
@@ -243,7 +255,7 @@ export default function Afiliados() {
     {
       accessorKey: 'eps',
       header: 'EPS',
-      cell: ({ row }) => <span style={{ fontSize: 13, color: C.text2 }}>{row.original.eps || '—'}</span>,
+      cell: ({ row }) => <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{row.original.eps || '—'}</span>,
     },
     {
       accessorKey: 'arl',
@@ -296,6 +308,7 @@ export default function Afiliados() {
       id: 'acciones',
       header: '',
       enableSorting: false,
+      enableHiding: false,
       cell: ({ row }) => {
         const a = row.original;
         return (
@@ -321,9 +334,10 @@ export default function Afiliados() {
   const table = useReactTable({
     data: dataFiltrada,
     columns,
-    state: { sorting, pagination: tablePagination },
+    state: { sorting, pagination: tablePagination, columnVisibility },
     onSortingChange: setSorting,
     onPaginationChange: setTablePagination,
+    onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
@@ -489,6 +503,23 @@ export default function Afiliados() {
     return true;
   });
 
+  const diasEnEspera = (a) => {
+    if (!a.fecha_afiliacion) return null;
+    const desde = new Date(a.fecha_afiliacion + 'T00:00:00');
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    return Math.floor((hoy - desde) / 86400000);
+  };
+
+  const urgenciaEspera = (dias) => {
+    if (dias === null) return null;
+    if (dias > 10) return { color: C.red,   bg: C.redBg,   label: `⚠️ ${dias}d — VENCIDO`, nivel: 'critico' };
+    if (dias >= 7)  return { color: C.amber, bg: C.amberBg, label: `⏰ ${dias}d — Revisar`, nivel: 'urgente' };
+    return { color: C.text2, bg: 'transparent', label: `${dias}d`, nivel: 'ok' };
+  };
+
+  const criticos = enSeguimiento.filter(a => { const d=diasEnEspera(a); return d!==null && d>10; }).length;
+  const urgentes = enSeguimiento.filter(a => { const d=diasEnEspera(a); return d!==null && d>=7 && d<=10; }).length;
+
   // Seguimiento ARL helpers
   const segArlFiltrado = useMemo(
     () => arlFiltroCliente ? segArlData.filter(r => r.cliente === arlFiltroCliente) : segArlData,
@@ -570,10 +601,35 @@ export default function Afiliados() {
       {/* ═══ TAB: ACTIVOS ═══ */}
       {tab === 'activos' && (
         <>
-          <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
-            value={busqueda} onChange={e=>setBusqueda(e.target.value)}
-            style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
-              fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
+          <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center' }}>
+            <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
+              value={busqueda} onChange={e=>{ setBusqueda(e.target.value); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); }}
+              style={{ flex:1,padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
+                fontSize:14,outline:'none',boxSizing:'border-box',background:C.surface,color:C.text }} />
+            <div ref={colMenuRef} style={{ position:'relative' }}>
+              <button type="button" onClick={() => setColMenuOpen(o => !o)}
+                style={{ padding:'10px 14px', border:`1px solid ${C.border}`, borderRadius:8,
+                  background:C.surface, color:C.text, fontSize:13, cursor:'pointer', whiteSpace:'nowrap' }}>
+                ⚙ Columnas
+              </button>
+              {colMenuOpen && (
+                <div style={{ position:'absolute', right:0, top:'calc(100% + 4px)', background:C.surface,
+                  border:`1px solid ${C.border}`, borderRadius:8, boxShadow:'0 4px 12px rgba(0,0,0,.1)',
+                  zIndex:200, padding:'8px 0', minWidth:180 }}>
+                  {table.getAllColumns().filter(col => col.getCanHide()).map(col => (
+                    <label key={col.id} style={{ display:'flex', alignItems:'center', gap:8,
+                      padding:'6px 14px', cursor:'pointer', fontSize:13, color:C.text,
+                      userSelect:'none' }}
+                      onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                      onMouseLeave={e=>e.currentTarget.style.background=''}>
+                      <input type="checkbox" checked={col.getIsVisible()} onChange={col.getToggleVisibilityHandler()} />
+                      {typeof col.columnDef.header === 'string' ? col.columnDef.header : col.id}
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
           <BarraFiltros
             filtros={[
               { key:'empresa',  label:'Empresa',   icon:'🏢', options: listas.empresas||[] },
@@ -581,6 +637,7 @@ export default function Afiliados() {
               { key:'estado',   label:'Estado',    icon:'📌', options: estadosOpts },
               { key:'subtipo',  label:'Subtipo',   icon:'🔢', options: subtiposUnicos },
               { key:'tipo_doc', label:'Tipo doc',  icon:'🪪', options: ['CC','CE','PT','PA','NIT'] },
+              { key:'ccf',      label:'CCF',       icon:'🏦', options: listas.ccf||[] },
             ]}
             valores={filtros} onChange={setFiltro} onLimpiar={limpiar}
           />
@@ -603,7 +660,10 @@ export default function Afiliados() {
                   <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin registros</td></tr>
                 )}
                 {table.getRowModel().rows.map(row => (
-                  <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  <tr key={row.id}
+                    style={{ borderBottom: `1px solid ${C.border}`, transition:'background .1s' }}
+                    onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
+                    onMouseLeave={e=>e.currentTarget.style.background=''}>
                     {row.getVisibleCells().map(cell => (
                       <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}>
                         {flexRender(cell.column.columnDef.cell, cell.getContext())}
@@ -615,14 +675,33 @@ export default function Afiliados() {
             </table>
           </div>
 
-          {/* Paginación TanStack */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
-            <span style={{ fontSize: 12, color: C.text2 }}>
-              Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()} — {dataFiltrada.length} total
-            </span>
+          {/* Paginación — server-side sin filtros, client-side con filtros */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <span style={{ fontSize: 12, color: C.text2 }}>
+                {hayFiltrosActivos
+                  ? `Página ${table.getState().pagination.pageIndex + 1} de ${table.getPageCount()} — ${dataFiltrada.length} resultados`
+                  : `Página ${pagina} de ${Math.ceil(totalReg / tablePagination.pageSize) || 1} — ${totalReg} total`
+                }
+              </span>
+              <select value={tablePagination.pageSize}
+                onChange={e => { const sz = Number(e.target.value); table.setPageSize(sz); setTablePagination(p => ({ ...p, pageSize: sz, pageIndex: 0 })); setPagina(1); }}
+                style={{ padding:'3px 8px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, background:C.surface, color:C.text, cursor:'pointer' }}>
+                {[25, 50, 100].map(n => <option key={n} value={n}>{n} / pág.</option>)}
+              </select>
+            </div>
             <div style={{ display: 'flex', gap: 4 }}>
-              <Btn size="sm" variant="secondary" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>← Ant.</Btn>
-              <Btn size="sm" variant="secondary" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>Sig. →</Btn>
+              {hayFiltrosActivos ? (
+                <>
+                  <Btn size="sm" variant="secondary" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>← Ant.</Btn>
+                  <Btn size="sm" variant="secondary" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>Sig. →</Btn>
+                </>
+              ) : (
+                <>
+                  <Btn size="sm" variant="secondary" onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina <= 1}>← Ant.</Btn>
+                  <Btn size="sm" variant="secondary" onClick={() => setPagina(p => p + 1)} disabled={pagina * tablePagination.pageSize >= totalReg}>Sig. →</Btn>
+                </>
+              )}
             </div>
           </div>
         </>
@@ -823,9 +902,41 @@ export default function Afiliados() {
       {/* ═══ TAB: SEGUIMIENTO ═══ */}
       {tab === 'seguimiento' && (
         <div>
-          <div style={{ background:C.amberBg, border:`1px solid ${C.amber}`, borderRadius:8,
-            padding:'10px 14px', marginBottom:14, fontSize:12, color:C.amber, fontWeight:500 }}>
-            📋 Afiliados en espera de activación. Usa el botón <strong>Activar</strong> para cambiar su estado a ACTIVO.
+          {/* Banner política 10 días */}
+          <div style={{ borderRadius:10, marginBottom:10, overflow:'hidden', border:`1px solid ${C.border}` }}>
+            <div style={{ background:C.amberBg, padding:'10px 14px', display:'flex', alignItems:'center', gap:10 }}>
+              <span style={{ fontSize:16 }}>⏱️</span>
+              <div style={{ flex:1 }}>
+                <span style={{ fontSize:13, fontWeight:700, color:C.amber }}>Política: máximo 10 días para activación</span>
+                <span style={{ fontSize:12, color:C.text2, marginLeft:10 }}>
+                  Revisa y activa a cada afiliado antes de que se cumpla el plazo.
+                </span>
+              </div>
+              {(criticos > 0 || urgentes > 0) && (
+                <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                  {criticos > 0 && (
+                    <span style={{ background:C.red, color:'#fff', borderRadius:20, padding:'2px 12px', fontSize:12, fontWeight:700 }}>
+                      ⚠️ {criticos} vencido{criticos!==1?'s':''}
+                    </span>
+                  )}
+                  {urgentes > 0 && (
+                    <span style={{ background:C.amber, color:'#fff', borderRadius:20, padding:'2px 12px', fontSize:12, fontWeight:700 }}>
+                      ⏰ {urgentes} urgente{urgentes!==1?'s':''}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Barra de urgencia visual */}
+            {enSeguimiento.length > 0 && (
+              <div style={{ display:'flex', height:4 }}>
+                {criticos > 0 && <div style={{ flex:criticos, background:C.red }} />}
+                {urgentes > 0 && <div style={{ flex:urgentes, background:C.amber }} />}
+                {(enSeguimiento.length - criticos - urgentes) > 0 && (
+                  <div style={{ flex: enSeguimiento.length - criticos - urgentes, background:C.greenBg }} />
+                )}
+              </div>
+            )}
           </div>
           <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
             value={segBusqueda} onChange={e=>setSegBusqueda(e.target.value)}
@@ -844,7 +955,7 @@ export default function Afiliados() {
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
-                  {['Nombre','Empresa','Documento','Cliente','EPS','AFP','ARL','CCF','Novedades','Detalle','Acciones'].map(h=>(
+                  {['Nombre','Empresa','Documento','Cliente','EPS','AFP','ARL','CCF','Días','Novedades','Detalle','Acciones'].map(h=>(
                     <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                       color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
                   ))}
@@ -852,22 +963,42 @@ export default function Afiliados() {
               </thead>
               <tbody>
                 {enSeguimientoFiltrado.length===0 && (
-                  <tr><td colSpan={11} style={{ padding:30,textAlign:'center',color:C.text2 }}>
+                  <tr><td colSpan={12} style={{ padding:30,textAlign:'center',color:C.text2 }}>
                     No hay afiliados en espera de activación
                   </td></tr>
                 )}
-                {enSeguimientoFiltrado.map(a=>(
-                  <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}`, background:C.amberBg }}>
-                    <td style={{ ...tdc,fontWeight:600,color:C.amber }}>{a.nombre}</td>
+                {enSeguimientoFiltrado.map(a=>{
+                  const dias = diasEnEspera(a);
+                  const urg  = urgenciaEspera(dias);
+                  const rowBg = urg?.nivel==='critico' ? C.redBg : urg?.nivel==='urgente' ? C.amberBg : C.surface;
+                  return (
+                  <tr key={a.id}
+                    style={{ borderBottom:`1px solid ${C.border}`, background:rowBg, transition:'background .1s' }}
+                    onMouseEnter={e=>{ if(urg?.nivel==='ok'||!urg) e.currentTarget.style.background=C.surface2; }}
+                    onMouseLeave={e=>{ e.currentTarget.style.background=rowBg; }}>
+                    <td style={{ ...tdc }}>
+                      <div style={{ fontWeight:700, color: urg?.nivel==='critico' ? C.red : urg?.nivel==='urgente' ? C.amber : C.text }}>
+                        {a.nombre}
+                      </div>
+                    </td>
                     <td style={tdc}>{a.empresa||'—'}</td>
                     <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>
                       <span style={{ fontSize:10,fontWeight:700,color:C.text2,marginRight:4 }}>{a.tipo_doc||'CC'}</span>{a.doc}
                     </td>
                     <td style={tdc}>{a.cliente_txt||'—'}</td>
-                    <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.eps||'—'}</td>
+                    <td style={{ ...tdc,fontSize:11,fontWeight:700,color:C.text }}>{a.eps||'—'}</td>
                     <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.afp||'—'}</td>
                     <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.arl||'—'}</td>
                     <td style={{ ...tdc,fontSize:11,color:C.text2 }}>{a.ccf||'—'}</td>
+                    <td style={tdc}>
+                      {urg ? (
+                        <span style={{ fontSize:11, fontWeight:700, borderRadius:20, padding:'2px 10px',
+                          background: urg.nivel==='critico' ? C.red : urg.nivel==='urgente' ? C.amber : C.surface2,
+                          color: urg.nivel==='ok' ? C.text2 : '#fff', whiteSpace:'nowrap' }}>
+                          {urg.label}
+                        </span>
+                      ) : <span style={{ fontSize:11,color:C.text2 }}>—</span>}
+                    </td>
                     <td style={{ ...tdc,maxWidth:160 }}>
                       <span style={{ fontSize:11,color:C.text2,display:'-webkit-box',
                         WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
@@ -893,7 +1024,8 @@ export default function Afiliados() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1205,8 +1337,33 @@ function Seccion({ title }) {
 function Chip({ children }) {
   return <span style={{ background:C.surface2,color:C.text,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11 }}>{children}</span>;
 }
+const SRV_TOOLTIP = {
+  'EPS':   'Entidad Promotora de Salud',
+  'AFP':   'Administradora Fondos de Pensiones',
+  'CCF':   'Caja de Compensación Familiar',
+  'ARL 1': 'Administradora Riesgos Laborales (nivel 1)',
+  'ARL 2': 'Administradora Riesgos Laborales (nivel 2)',
+  'ARL 3': 'Administradora Riesgos Laborales (nivel 3)',
+  'ARL 4': 'Administradora Riesgos Laborales (nivel 4)',
+  'ARL 5': 'Administradora Riesgos Laborales (nivel 5)',
+  'N/A':   'Sin servicio',
+};
 function SrvChip({ children }) {
-  return <span style={{ background:C.blueBg,color:C.blue,borderRadius:5,padding:'1px 7px',fontSize:10,fontWeight:600 }}>{children}</span>;
+  const chip = (
+    <span style={{ background:C.blueBg,color:C.blue,borderRadius:5,padding:'1px 7px',fontSize:10,fontWeight:600 }}>
+      {children}
+    </span>
+  );
+  const label = SRV_TOOLTIP[children];
+  if (!label) return chip;
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>{chip}</TooltipTrigger>
+        <TooltipContent>{label}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
 }
 
 const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };

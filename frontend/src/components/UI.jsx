@@ -372,3 +372,19 @@ export function ErrorMsg({ message = 'Error al cargar datos', onRetry }) {
     </div>
   );
 }
+
+export function SkeletonRow({ cols = 5, height = 14 }) {
+  return (
+    <tr>
+      {Array.from({ length: cols }).map((_, i) => (
+        <td key={i} style={{ padding: '10px 12px' }}>
+          <div className="bbc-skeleton" style={{ height, width: i === 0 ? '60%' : i === cols - 1 ? '40%' : '80%' }} />
+        </td>
+      ))}
+    </tr>
+  );
+}
+
+export function SkeletonCard({ height = 80 }) {
+  return <div className="bbc-skeleton" style={{ height, borderRadius: 10, width: '100%' }} />;
+}
