@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../utils/api';
 import { C, Btn, PageHeader, StatCard, fmt } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
@@ -49,10 +49,12 @@ export default function Cobro() {
 
   const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   const { data: config = {} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
+  const qc = useQueryClient();
   const { data: rows = [], isLoading } = useQuery({
     queryKey: ['cobro', mesFiltro, anioFiltro, docFiltro],
     queryFn: () => api.get('/cobro', { params:{ empresa:'', cliente:'', tipo:'', mes: mesFiltro, anio: anioFiltro, doc: docFiltro } }).then(r=>r.data),
     refetchInterval: 60_000,
+    placeholderData: (prev) => prev,
   });
 
   const clientesUnicos = useMemo(() => [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort(), [rows]);
@@ -162,36 +164,55 @@ export default function Cobro() {
         <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
-              {['','Nombre','Empresa','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades'].map(h=>(
+              {['','Afiliado','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                   color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+            {isLoading && <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
             {!isLoading && rowsFiltrados.length===0 && (
-              <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
+              <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
             )}
             {rowsPagina.map(r => {
-              const cfg  = ESTADO_CONFIG[r.estado]||ESTADO_CONFIG.PROXIMO;
-              const isExp= expanded===r.id;
+              const cfg   = ESTADO_CONFIG[r.estado]||ESTADO_CONFIG.PROXIMO;
+              const isExp = expanded===r.id;
+              const rowBg = r.estado==='VENCIDO' ? C.redBg : r.estado==='HOY' ? C.greenBg : C.surface;
               return (
                 <React.Fragment key={r.id}>
-                  <tr style={{ borderBottom:`1px solid ${C.border}`, background:r.estado==='VENCIDO'?C.redBg:C.surface }}>
+                  <tr
+                    style={{ borderBottom:`1px solid ${C.border}`, background:rowBg, cursor:'pointer', transition:'background .1s' }}
+                    onClick={()=>setExp(isExp?null:r.id)}
+                    onMouseEnter={e=>{
+                      if(r.estado!=='VENCIDO'&&r.estado!=='HOY') e.currentTarget.style.background=C.surface2;
+                      qc.prefetchQuery({
+                        queryKey: ['facturas_cobro', r.doc],
+                        queryFn: () => api.get('/facturas', { params:{ doc: r.doc, limit:0 } }).then(res => res.data.items || []),
+                        staleTime: 30_000,
+                      });
+                    }}
+                    onMouseLeave={e=>{ e.currentTarget.style.background=rowBg; }}>
                     <td style={{ padding:'8px 10px', width:32 }}>
-                      <button onClick={()=>setExp(isExp?null:r.id)}
-                        style={{ background:'none',border:'none',cursor:'pointer',fontSize:14,color:C.text2,padding:0 }}>
-                        {isExp?'▼':'▶'}
-                      </button>
+                      <span style={{ fontSize:12, color:C.text2 }}>{isExp?'▼':'▶'}</span>
                     </td>
-                    <td style={tdc}><span style={{ fontWeight:500 }}>{r.nombre}</span></td>
-                    <td style={tdc}>{r.empresa}</td>
-                    <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{r.doc}</td>
-                    <td style={tdc}>{r.subtipo?<span style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11 }}>{r.subtipo}</span>:'—'}</td>
-                    <td style={tdc}>{r.cliente||'—'}</td>
-                    <td style={{ ...tdc,fontWeight:600,color:C.primary,whiteSpace:'nowrap' }}>{r.mes} {r.anio}</td>
-                    <td style={{ ...tdc,color:C.text2,whiteSpace:'nowrap' }}>Día {r.dia_cobro}</td>
+                    <td style={tdc}>
+                      <div style={{ fontWeight:700, color:C.text, fontSize:13 }}>{r.nombre}</div>
+                      <div style={{ fontSize:11, color:C.text2, marginTop:1 }}>{r.empresa}</div>
+                    </td>
+                    <td style={{ ...tdc, fontFamily:'monospace', fontSize:12, color:C.text2 }}>{r.doc}</td>
+                    <td style={tdc}>
+                      {r.subtipo
+                        ? <span style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:600 }}>{r.subtipo}</span>
+                        : <span style={{ color:C.text2 }}>—</span>}
+                    </td>
+                    <td style={{ ...tdc, color:C.text2, fontSize:12 }}>{r.cliente||'—'}</td>
+                    <td style={{ ...tdc, fontWeight:700, color:C.primary, whiteSpace:'nowrap' }}>{r.mes} {r.anio}</td>
+                    <td style={{ ...tdc, whiteSpace:'nowrap' }}>
+                      <span style={{ background:C.blueBg, color:C.blue, borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:700 }}>
+                        Día {r.dia_cobro}
+                      </span>
+                    </td>
                     <td style={tdc}>
                       <div style={{ display:'flex',flexWrap:'wrap',gap:3 }}>
                         {(r.servicios||[]).map(s=>(
@@ -199,27 +220,25 @@ export default function Cobro() {
                         ))}
                       </div>
                     </td>
-                    <td style={{ ...tdc,textAlign:'right',fontWeight:700,color:C.red }}>{fmt(r.planilla)}</td>
+                    <td style={{ ...tdc, textAlign:'right', fontWeight:700, color:C.red, fontSize:14 }}>{fmt(r.planilla)}</td>
                     <td style={tdc}>
-                      <span style={{ background:cfg.bg,color:cfg.fg,borderRadius:10,padding:'3px 10px',fontSize:11,fontWeight:700,whiteSpace:'nowrap' }}>
+                      <span style={{ background:cfg.bg,color:cfg.fg,borderRadius:10,padding:'3px 12px',fontSize:11,fontWeight:700,whiteSpace:'nowrap' }}>
                         {cfg.label}
                       </span>
                     </td>
-                    <td style={{ ...tdc, maxWidth:180 }}
-                      title={r.novedades || undefined}>
+                    <td style={{ ...tdc, maxWidth:180 }} title={r.novedades||undefined}>
                       {r.novedades ? (
-                        <span
-                          onClick={() => setNovedadModal({ nombre: r.nombre, texto: r.novedades })}
-                          style={{ fontSize:11, color:C.amber, fontWeight:600, cursor:'pointer',
-                            display:'block', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
+                        <span onClick={e=>{e.stopPropagation();setNovedadModal({nombre:r.nombre,texto:r.novedades});}}
+                          style={{ fontSize:11,color:C.amber,fontWeight:600,cursor:'pointer',
+                            display:'block',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
                           📝 {r.novedades}
                         </span>
-                      ) : <span style={{ fontSize:11, color:C.text2 }}>—</span>}
+                      ) : <span style={{ fontSize:11,color:C.text2 }}>—</span>}
                     </td>
                   </tr>
                   {isExp && (
-                    <tr style={{ background:C.surface2,borderBottom:`1px solid ${C.border}` }}>
-                      <td colSpan={12} style={{ padding:'12px 20px' }}>
+                    <tr style={{ background:C.surface2, borderBottom:`1px solid ${C.border}` }}>
+                      <td colSpan={11} style={{ padding:'12px 20px' }}>
                         <PlanillaDetalle afiliado={r} cobroRow={r} config={config} />
                       </td>
                     </tr>

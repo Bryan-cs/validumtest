@@ -246,6 +246,13 @@ export default function Tareas() {
     return t.fecha_limite < new Date().toISOString().slice(0, 10);
   };
 
+  const diasRestantes = t => {
+    if (!t.fecha_limite) return null;
+    const hoy = new Date(); hoy.setHours(0,0,0,0);
+    const lim = new Date(t.fecha_limite + 'T00:00:00');
+    return Math.ceil((lim - hoy) / 86400000);
+  };
+
   const filtradas = tareas.filter(t => {
     if (t.estado !== tab) return false;
     const f = toDateStr(t.creado);
@@ -332,6 +339,48 @@ export default function Tareas() {
         })}
       </div>
 
+      {/* Flujo de trabajo */}
+      {(() => {
+        const total = tareas.length || 1;
+        const flujo = [
+          { key:'pendiente',  label:'Pendiente',  color:'#92400E', bg:'#FEF3C7', dot:'#D97706' },
+          { key:'en_proceso', label:'En proceso', color:C.blue,    bg:C.blueBg,  dot:C.blue   },
+          { key:'completada', label:'Completada', color:C.green,   bg:C.greenBg, dot:C.green  },
+          { key:'finalizada', label:'Finalizada', color:C.text2,   bg:C.surface2,dot:C.text2  },
+        ];
+        return (
+          <div style={{ marginBottom:16, background:C.surface, borderRadius:10, padding:'12px 16px', border:`1px solid ${C.border}` }}>
+            {/* Breadcrumb de estados */}
+            <div style={{ display:'flex', alignItems:'center', gap:4, marginBottom:10, flexWrap:'wrap' }}>
+              {flujo.map((f,i) => (
+                <React.Fragment key={f.key}>
+                  <span style={{
+                    fontSize:11, fontWeight: tab===f.key ? 700 : 500,
+                    color: tab===f.key ? f.color : C.text2,
+                    background: tab===f.key ? f.bg : 'transparent',
+                    borderRadius:20, padding: tab===f.key ? '2px 10px' : '2px 4px',
+                    cursor:'pointer', transition:'all .15s',
+                  }} onClick={()=>setTab(f.key)}>
+                    {f.label} {conteo[f.key]>0 && <strong>({conteo[f.key]})</strong>}
+                  </span>
+                  {i < flujo.length-1 && <span style={{ color:C.text2, fontSize:11 }}>→</span>}
+                </React.Fragment>
+              ))}
+            </div>
+            {/* Barra de distribución */}
+            <div style={{ display:'flex', borderRadius:6, overflow:'hidden', height:6, gap:1 }}>
+              {flujo.map(f => {
+                const pct = Math.round((conteo[f.key]||0) / total * 100);
+                return pct > 0 ? (
+                  <div key={f.key} style={{ flex:conteo[f.key]||0, background:f.dot, minWidth:2, transition:'flex .3s' }}
+                    title={`${f.label}: ${conteo[f.key]} (${pct}%)`} />
+                ) : null;
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Filtro fechas */}
       <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', marginBottom: 16, background: C.surface, borderRadius: 10, padding: '12px 16px', border: `1px solid ${C.border}` }}>
         <div>
@@ -376,7 +425,11 @@ export default function Tareas() {
 
       {/* Lista */}
       {isLoading ? (
-        <p style={{ color: C.text2 }}>Cargando...</p>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {[80, 64, 72, 80].map((h, i) => (
+            <div key={i} className="bbc-skeleton" style={{ height: h, borderRadius: 10 }} />
+          ))}
+        </div>
       ) : filtradas.length === 0 ? (
         <div style={{ background: C.surface, borderRadius: 10, padding: 32, textAlign: 'center', border: `1px solid ${C.border}` }}>
           <p style={{ color: C.text2, fontSize: 14, margin: 0 }}>
@@ -416,14 +469,39 @@ export default function Tareas() {
                       )}
                     </div>
                     {t.descripcion && <p style={{ margin: '5px 0 0', fontSize: 13, color: C.text2 }}>{t.descripcion}</p>}
-                    <div style={{ marginTop: 6, fontSize: 11, color: C.text2, display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-                      <span>👤 {isAdmin ? 'Asignado a' : 'Creado por'}: <strong>{isAdmin ? t.asignado_a : t.creado_por}</strong></span>
-                      {t.fecha_limite && (
-                        <span style={{ color: vencida ? C.red : C.text2 }}>📅 Límite: <strong>{t.fecha_limite}</strong></span>
+                    <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                      {/* Chip asignado */}
+                      <span style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'2px 10px',
+                        background:C.blueBg, color:C.blue, display:'inline-flex', alignItems:'center', gap:4 }}>
+                        👤 {isAdmin ? t.asignado_a : t.creado_por}
+                      </span>
+                      {/* Fecha límite con urgencia */}
+                      {t.fecha_limite && (() => {
+                        const dias = diasRestantes(t);
+                        const urgente = !vencida && dias !== null && dias <= 3;
+                        return (
+                          <span style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'2px 10px',
+                            background: vencida ? C.redBg : urgente ? C.amberBg : C.surface2,
+                            color: vencida ? C.red : urgente ? C.amber : C.text2,
+                          }}>
+                            📅 {vencida ? `Vencida ${t.fecha_limite}` : dias === 0 ? 'Vence hoy' : dias === 1 ? 'Vence mañana' : urgente ? `${dias}d restantes` : t.fecha_limite}
+                          </span>
+                        );
+                      })()}
+                      {/* Creado */}
+                      <span style={{ fontSize:11, color:C.text2 }}>
+                        🗓 {new Date(t.creado).toLocaleDateString('es-CO')}
+                      </span>
+                      {t.completado_en && (
+                        <span style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'2px 10px', background:C.greenBg, color:C.green }}>
+                          ✅ {new Date(t.completado_en).toLocaleDateString('es-CO')}
+                        </span>
                       )}
-                      <span>🗓 Creado: {new Date(t.creado).toLocaleDateString('es-CO')}</span>
-                      {t.completado_en && <span>✅ Completada: {new Date(t.completado_en).toLocaleDateString('es-CO')}</span>}
-                      {t.finalizado_en && <span>⬛ Finalizada: {new Date(t.finalizado_en).toLocaleDateString('es-CO')} por <strong>{t.finalizado_por}</strong></span>}
+                      {t.finalizado_en && (
+                        <span style={{ fontSize:11, color:C.text2 }}>
+                          ⬛ {new Date(t.finalizado_en).toLocaleDateString('es-CO')} · {t.finalizado_por}
+                        </span>
+                      )}
                     </div>
                   </div>
 
