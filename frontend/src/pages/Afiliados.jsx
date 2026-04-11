@@ -80,6 +80,16 @@ export default function Afiliados() {
   // Adjuntos pendientes en formulario de afiliado
   const [pendingFiles, setPendingFiles] = useState([]);
 
+  // Seguimiento ARL state
+  const [arlFiltroCliente, setArlFiltroCliente] = useState('');
+  const [arlSeleccionados, setArlSeleccionados] = useState([]);
+  const [arlBulkEstado, setArlBulkEstado] = useState('activo');
+  const [arlModal, setArlModal] = useState(null);
+  const [arlForm, setArlForm] = useState({
+    nombre:'', documento:'', cliente:'', empresa:'',
+    fecha_afiliacion:'', nivel_arl:'N/A', observaciones:''
+  });
+
   const setFiltro = (key,vals) => setFiltros(f=>({...f,[key]:vals}));
   const limpiar = () => { setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[] }); setBusqueda(''); };
 
@@ -121,6 +131,15 @@ export default function Afiliados() {
     enabled: !!docSeleccionado,
     refetchInterval: false,
   });
+
+  const qSegArl = useQuery({
+    queryKey: ['seguimiento-arl'],
+    queryFn: () => api.get('/seguimiento-arl').then(r => r.data),
+    staleTime: 120_000,
+    refetchOnWindowFocus: false,
+    enabled: tab === 'arl',
+  });
+  const segArlData = qSegArl.data || [];
 
   // Debounce búsqueda: evita recalcular en cada keystroke
   const [busquedaDefer, setBusquedaDefer] = useState('');
@@ -281,6 +300,27 @@ export default function Afiliados() {
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const arlCrear = useMutation({
+    mutationFn: d => api.post('/seguimiento-arl', d).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['seguimiento-arl'] }); setArlModal(null); toast.success('Registro creado'); },
+    onError: () => toast.error('Error al crear registro'),
+  });
+  const arlEditar = useMutation({
+    mutationFn: ({ id, ...d }) => api.put(`/seguimiento-arl/${id}`, d).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['seguimiento-arl'] }); setArlModal(null); toast.success('Registro actualizado'); },
+    onError: () => toast.error('Error al actualizar'),
+  });
+  const arlEliminar = useMutation({
+    mutationFn: id => api.delete(`/seguimiento-arl/${id}`).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['seguimiento-arl'] }); toast.success('Registro eliminado'); },
+    onError: () => toast.error('Error al eliminar'),
+  });
+  const arlBulk = useMutation({
+    mutationFn: ({ ids, estado }) => api.patch('/seguimiento-arl/bulk-estado', { ids, estado }).then(r => r.data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['seguimiento-arl'] }); setArlSeleccionados([]); toast.success('Estados actualizados'); },
+    onError: () => toast.error('Error al actualizar estados'),
+  });
+
   const enSeguimiento = todos.filter(a => (a.estado_srv||a.estado||'').toUpperCase() === 'EN ESPERA DE ACTIVACION');
   const enSeguimientoFiltrado = enSeguimiento.filter(a => {
     const q = segBusqueda.toLowerCase();
@@ -289,6 +329,38 @@ export default function Afiliados() {
     if (segFiltros.cliente.length && !segFiltros.cliente.includes(a.cliente_txt)) return false;
     return true;
   });
+
+  // Seguimiento ARL helpers
+  const segArlFiltrado = useMemo(
+    () => arlFiltroCliente ? segArlData.filter(r => r.cliente === arlFiltroCliente) : segArlData,
+    [segArlData, arlFiltroCliente]
+  );
+  const todosArlSel = arlSeleccionados.length > 0 && arlSeleccionados.length === segArlFiltrado.length;
+  function diasDesdeArl(fechaStr) {
+    if (!fechaStr) return 0;
+    return Math.floor((Date.now() - new Date(fechaStr).getTime()) / 86_400_000);
+  }
+  function arlAlerta(row) { return row.estado === 'activo' && diasDesdeArl(row.fecha_afiliacion) >= 25; }
+  function toggleTodosArl() { setArlSeleccionados(todosArlSel ? [] : segArlFiltrado.map(r => r.id)); }
+  function toggleUnoArl(id) { setArlSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); }
+  function abrirNuevoArl() {
+    setArlForm({ nombre:'', documento:'', cliente:'', empresa:'', fecha_afiliacion:'', nivel_arl:'N/A', observaciones:'' });
+    setArlModal('nuevo');
+  }
+  function abrirEditarArl(row) {
+    setArlForm({ nombre:row.nombre, documento:row.documento, cliente:row.cliente||'', empresa:row.empresa||'',
+      fecha_afiliacion:row.fecha_afiliacion||'', nivel_arl:row.nivel_arl||'N/A', observaciones:row.observaciones||'',
+      estado: row.estado||'activo' });
+    setArlModal(row);
+  }
+  function submitArlForm() {
+    if (!arlForm.nombre || !arlForm.documento) { toast.error('Nombre y documento son requeridos'); return; }
+    if (arlModal === 'nuevo') {
+      arlCrear.mutate(arlForm);
+    } else {
+      arlEditar.mutate({ id: arlModal.id, ...arlForm });
+    }
+  }
 
   // Filtro por año y totales
   const aniosDisponibles = [...new Set(factAfil.map(f => String(f.anio)).filter(Boolean))].sort().reverse();
@@ -323,6 +395,7 @@ export default function Afiliados() {
           { key:'pagos',      label:'💳 Historial de pagos' },
           { key:'documentos', label:'📎 Documentos' },
           { key:'seguimiento', label:'📋 En seguimiento' },
+          { key:'arl', label:'🔵 Seguimiento ARL' },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
             padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
@@ -696,6 +769,131 @@ export default function Afiliados() {
           </div>
         </div>
       )}
+
+      {/* ═══ TAB: SEGUIMIENTO ARL ═══ */}
+      {tab === 'arl' && (
+        <div>
+          {/* Barra superior */}
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' }}>
+            <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+              <select value={arlFiltroCliente} onChange={e => { setArlFiltroCliente(e.target.value); setArlSeleccionados([]); }}
+                style={{ padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', color:C.text, background:C.surface }}>
+                <option value="">👤 Todos los clientes</option>
+                {clientesUnicos.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              {arlSeleccionados.length > 0 && (
+                <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+                  <span style={{ fontSize:12, color:C.text2 }}>{arlSeleccionados.length} seleccionados</span>
+                  <select value={arlBulkEstado} onChange={e => setArlBulkEstado(e.target.value)}
+                    style={{ padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:12, outline:'none', color:C.text, background:C.surface }}>
+                    <option value="activo">Activo</option>
+                    <option value="retirar">Retirar</option>
+                    <option value="retirado">Retirado</option>
+                  </select>
+                  <Btn size="sm" variant="primary" disabled={arlBulk.isPending}
+                    onClick={() => arlBulk.mutate({ ids: arlSeleccionados, estado: arlBulkEstado })}>Aplicar</Btn>
+                  <Btn size="sm" variant="secondary" onClick={() => setArlSeleccionados([])}>Cancelar</Btn>
+                </div>
+              )}
+            </div>
+            <Btn size="sm" variant="primary" onClick={abrirNuevoArl}>+ Nuevo registro</Btn>
+          </div>
+
+          {/* Tabla */}
+          <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
+            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+              <thead>
+                <tr style={{ background:C.surface2 }}>
+                  <th style={{ padding:'10px 12px', width:36 }}>
+                    <input type="checkbox" checked={todosArlSel} onChange={toggleTodosArl} />
+                  </th>
+                  {['Nombre','Documento','Cliente','Empresa','Fecha afiliación','Nivel ARL','Estado','Observaciones','Acciones'].map(h => (
+                    <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
+                      color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {segArlFiltrado.length === 0 && (
+                  <tr><td colSpan={10} style={{ padding:30, textAlign:'center', color:C.text2 }}>
+                    No hay registros de seguimiento ARL
+                  </td></tr>
+                )}
+                {segArlFiltrado.map(row => {
+                  const alerta = arlAlerta(row);
+                  return (
+                    <tr key={row.id} style={{ borderBottom:`1px solid ${C.border}`, background: alerta ? C.amberBg : C.surface }}>
+                      <td style={{ ...tdc, width:36 }}>
+                        <input type="checkbox" checked={arlSeleccionados.includes(row.id)} onChange={() => toggleUnoArl(row.id)} />
+                      </td>
+                      <td style={{ ...tdc, fontWeight:600 }}>{row.nombre}</td>
+                      <td style={{ ...tdc, fontFamily:'monospace', fontSize:12 }}>{row.documento}</td>
+                      <td style={tdc}>{row.cliente||'—'}</td>
+                      <td style={tdc}>{row.empresa||'—'}</td>
+                      <td style={tdc}>
+                        <span>{row.fecha_afiliacion||'—'}</span>
+                        {alerta && <span style={{ marginLeft:6, fontSize:11, fontWeight:700, color:C.amber,
+                          background:C.amberBg, borderRadius:4, padding:'2px 6px' }}>⚠️ Vence pronto</span>}
+                      </td>
+                      <td style={{ ...tdc, fontSize:12 }}>{row.nivel_arl||'N/A'}</td>
+                      <td style={tdc}>{statusBadge(row.estado==='activo'?'ACTIVO':row.estado==='retirar'?'PENDIENTE DE RETIRAR':'RETIRADO')}</td>
+                      <td style={{ ...tdc, maxWidth:180, fontSize:12, color:C.text2 }}>{row.observaciones||'—'}</td>
+                      <td style={tdc}>
+                        <div style={{ display:'flex', gap:4 }}>
+                          <Btn size="sm" variant="secondary" onClick={() => abrirEditarArl(row)}>✏️</Btn>
+                          <Btn size="sm" variant="danger" disabled={arlEliminar.isPending}
+                            onClick={() => setConfirm({ title:'Eliminar registro',
+                              message:`¿Eliminar a "${row.nombre}"? Esta acción no se puede deshacer.`,
+                              confirmLabel:'Eliminar', variant:'danger',
+                              onConfirm:() => arlEliminar.mutate(row.id) })}>🗑️</Btn>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      )}
+
+      {/* ─── MODAL SEGUIMIENTO ARL ─── */}
+      <Modal open={arlModal !== null} onClose={() => setArlModal(null)}
+        title={arlModal === 'nuevo' ? 'Nuevo registro ARL' : 'Editar registro ARL'}>
+        <InputUp label="Nombre" value={arlForm.nombre} onChange={v => setArlForm(f=>({...f,nombre:v}))} placeholder="Nombre completo" />
+        <InputUp label="Documento" value={arlForm.documento} onChange={v => setArlForm(f=>({...f,documento:v}))} placeholder="Número de documento" />
+        <Sel label="Cliente" value={arlForm.cliente} onChange={v => setArlForm(f=>({...f,cliente:v}))}
+          options={['', ...(listas.clientes||[])].map(c=>({value:c, label:c||'— Seleccionar cliente'}))} />
+        <Sel label="Empresa" value={arlForm.empresa} onChange={v => setArlForm(f=>({...f,empresa:v}))}
+          options={['', ...(listas.empresas||[])].map(e=>({value:e, label:e||'— Seleccionar'}))} />
+        <div style={{ marginBottom:12 }}>
+          <label style={lbl}>Fecha de afiliación</label>
+          <input type="date" value={arlForm.fecha_afiliacion}
+            onChange={e => setArlForm(f=>({...f,fecha_afiliacion:e.target.value}))}
+            style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
+              fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,colorScheme:'inherit' }} />
+        </div>
+        <Sel label="Nivel ARL" value={arlForm.nivel_arl} onChange={v => setArlForm(f=>({...f,nivel_arl:v}))}
+          options={['N/A','1','2','3','4','5']} />
+        <div style={{ marginBottom:12 }}>
+          <label style={lbl}>Observaciones</label>
+          <textarea value={arlForm.observaciones||''} onChange={e => setArlForm(f=>({...f,observaciones:e.target.value}))}
+            rows={3} placeholder="Opcional..."
+            style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
+              fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,resize:'vertical' }} />
+        </div>
+        {arlModal !== 'nuevo' && (
+          <Sel label="Estado" value={arlForm.estado||'activo'} onChange={v => setArlForm(f=>({...f,estado:v}))}
+            options={[{value:'activo',label:'Activo'},{value:'retirar',label:'Retirar'},{value:'retirado',label:'Retirado'}]} />
+        )}
+        <div style={{ display:'flex', gap:8, justifyContent:'flex-end', marginTop:8 }}>
+          <Btn variant="secondary" onClick={() => setArlModal(null)}>Cancelar</Btn>
+          <Btn variant="primary" disabled={arlCrear.isPending||arlEditar.isPending} onClick={submitArlForm}>
+            {arlModal === 'nuevo' ? 'Crear' : 'Guardar'}
+          </Btn>
+        </div>
+      </Modal>
 
       <ConfirmModal
         open={!!confirm}

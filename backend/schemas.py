@@ -269,3 +269,26 @@ class AvisoClienteCreate(BaseModel):
     cliente_ref: str
     titulo: str
     mensaje: str
+
+class SeguimientoArlCreate(BaseModel):
+    nombre: str
+    documento: str
+    cliente: str = ""
+    empresa: str = ""
+    fecha_afiliacion: str = ""   # 'YYYY-MM-DD'
+    nivel_arl: str = "N/A"
+    observaciones: Optional[str] = None
+
+class SeguimientoArlUpdate(BaseModel):
+    nombre: Optional[str] = None
+    documento: Optional[str] = None
+    cliente: Optional[str] = None
+    empresa: Optional[str] = None
+    fecha_afiliacion: Optional[str] = None
+    nivel_arl: Optional[str] = None
+    observaciones: Optional[str] = None
+    estado: Optional[str] = None
+
+class BulkEstadoBody(BaseModel):
+    ids: List[int]
+    estado: str
