@@ -1,7 +1,8 @@
 // ─── COBRO PAGE ───────────────────────────────────────────────────────────────
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender } from '@tanstack/react-table';
+import { toast } from 'sonner';
 import api from '../utils/api';
 import { C, Btn, PageHeader, StatCard, fmt } from '../components/UI';
 
@@ -288,6 +289,119 @@ export function Facturacion() {
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error en la operación'),
   });
 
+  const [factSorting, setFactSorting] = useState([]);
+  const [factPagination, setFactPagination] = useState({ pageIndex: 0, pageSize: 20 });
+
+  const factColumns = useMemo(() => [
+    {
+      accessorKey: 'codigo',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Código {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2, fontFamily: 'monospace' }}>{row.original.codigo}</span>,
+    },
+    {
+      accessorKey: 'nombre_afiliado',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Afiliado {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => {
+        const f = row.original;
+        const isHuerfana = f.afiliado_eliminado && f.estado === 'pendiente';
+        return (
+          <span style={{ color: isHuerfana ? C.red : C.text }}>
+            {f.nombre_afiliado}{isHuerfana && <span style={{ fontSize: 10, marginLeft: 4 }}>⚠️ eliminado</span>}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'cliente',
+      header: 'Cliente',
+      cell: ({ row }) => <span style={{ fontSize: 11 }}>{row.original.cliente || '—'}</span>,
+    },
+    {
+      id: 'periodo',
+      header: 'Mes/Año',
+      accessorFn: row => `${row.mes} ${row.anio}`,
+      cell: ({ row }) => <span style={{ fontSize: 11 }}>{row.original.mes} {row.original.anio}</span>,
+    },
+    {
+      accessorKey: 'ingresos',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Ingresos {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ fontSize: 11, textAlign: 'right', display: 'block' }}>{fmt(row.original.ingresos)}</span>,
+    },
+    {
+      accessorKey: 'costos',
+      header: 'Planilla',
+      cell: ({ row }) => <span style={{ fontSize: 11, textAlign: 'right', display: 'block' }}>{fmt(row.original.costos)}</span>,
+    },
+    {
+      accessorKey: 'utilidad',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Utilidad {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ fontSize: 11, textAlign: 'right', display: 'block', color: row.original.utilidad >= 0 ? C.green : C.red }}>{fmt(row.original.utilidad)}</span>,
+    },
+    {
+      accessorKey: 'banco',
+      header: 'Banco',
+      cell: ({ row }) => <span style={{ fontSize: 11, color: C.text2 }}>{row.original.banco || '—'}</span>,
+    },
+    {
+      accessorKey: 'estado',
+      header: 'Estado',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const f = row.original;
+        return (
+          <span style={{ background: f.estado === 'pagado' ? C.greenBg : C.amberBg, color: f.estado === 'pagado' ? C.green : C.amber, borderRadius: 10, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
+            {f.estado === 'pagado' ? 'Pagada' : 'Pendiente'}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'acciones',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const f = row.original;
+        return (
+          <div style={{ display: 'flex', gap: 5 }}>
+            {f.estado === 'pendiente' && <Btn size="sm" variant="success" onClick={() => pagar.mutate(f.id)}>✓ Pagada</Btn>}
+            <Btn size="sm" variant="danger" onClick={() => { if (window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>Eliminar</Btn>
+          </div>
+        );
+      },
+    },
+  ], [pagar.isPending, eliminar.isPending]);
+
+  const factTable = useReactTable({
+    data: rows,
+    columns: factColumns,
+    state: { sorting: factSorting, pagination: factPagination },
+    onSortingChange: setFactSorting,
+    onPaginationChange: setFactPagination,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
+
   const totIng  = rows.reduce((s,f)=>s+(f.ingresos||0),0);
   const totUtil = rows.reduce((s,f)=>s+(f.utilidad||0),0);
   const totPend = rows.filter(f=>f.estado==='pendiente').reduce((s,f)=>s+(f.ingresos||0),0);
@@ -318,52 +432,42 @@ export function Facturacion() {
           <option value="pagado">Pagado</option>
         </select>
       </div>
-      <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+      <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
           <thead>
-            <tr style={{ background:C.surface2 }}>
-              {['Código','Afiliado','Cliente','Mes/Año','Ingresos','Planilla','Utilidad','Banco','Estado','Acciones'].map(h=>(
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
-              ))}
-            </tr>
+            {factTable.getHeaderGroups().map(hg => (
+              <tr key={hg.id} style={{ background: C.surface2 }}>
+                {hg.headers.map(header => (
+                  <th key={header.id} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>
+                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                  </th>
+                ))}
+              </tr>
+            ))}
           </thead>
           <tbody>
-            {isLoading&&<tr><td colSpan={10} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
-            {rows.map(f=>{
-              const isHuerfana = f.afiliado_eliminado && f.estado==='pendiente';
-              return (
-                <tr key={f.id} style={{ borderBottom:`1px solid ${C.border}`, background: isHuerfana?C.redBg:'#fff' }}>
-                  <td style={tdc}>{f.codigo}</td>
-                  <td style={{ ...tdc, color: isHuerfana?C.red:C.text }}>
-                    {f.nombre_afiliado}
-                    {isHuerfana&&<span style={{ fontSize:10, marginLeft:4 }}>⚠️ eliminado</span>}
+            {isLoading && <tr><td colSpan={factColumns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Cargando...</td></tr>}
+            {!isLoading && factTable.getRowModel().rows.length === 0 && <tr><td colSpan={factColumns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin facturas</td></tr>}
+            {factTable.getRowModel().rows.map(row => (
+              <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}`, background: (row.original.afiliado_eliminado && row.original.estado === 'pendiente') ? C.redBg : '#fff' }}>
+                {row.getVisibleCells().map(cell => (
+                  <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </td>
-                  <td style={tdc}>{f.cliente||'—'}</td>
-                  <td style={tdc}>{f.mes} {f.anio}</td>
-                  <td style={{ ...tdc, textAlign:'right' }}>{fmt(f.ingresos)}</td>
-                  <td style={{ ...tdc, textAlign:'right' }}>{fmt(f.costos)}</td>
-                  <td style={{ ...tdc, textAlign:'right', color:(f.utilidad>=0?C.green:C.red) }}>{fmt(f.utilidad)}</td>
-                  <td style={tdc}>{f.banco||'—'}</td>
-                  <td style={tdc}>
-                    <span style={{ background:f.estado==='pagado'?C.greenBg:C.amberBg,
-                      color:f.estado==='pagado'?C.green:C.amber, borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600 }}>
-                      {f.estado==='pagado'?'Pagada':'Pendiente'}
-                    </span>
-                  </td>
-                  <td style={tdc}>
-                    <div style={{ display:'flex', gap:5 }}>
-                      {f.estado==='pendiente'&&(
-                        <Btn size="sm" variant="success" onClick={()=>pagar.mutate(f.id)}>✓ Pagada</Btn>
-                      )}
-                      <Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>Eliminar</Btn>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {!isLoading&&rows.length===0&&<tr><td colSpan={10} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas</td></tr>}
+                ))}
+              </tr>
+            ))}
           </tbody>
         </table>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+        <span style={{ fontSize: 12, color: C.text2 }}>
+          Página {factTable.getState().pagination.pageIndex + 1} de {factTable.getPageCount()} — {rows.length} total
+        </span>
+        <div style={{ display: 'flex', gap: 4 }}>
+          <Btn size="sm" variant="secondary" onClick={() => factTable.previousPage()} disabled={!factTable.getCanPreviousPage()}>← Ant.</Btn>
+          <Btn size="sm" variant="secondary" onClick={() => factTable.nextPage()} disabled={!factTable.getCanNextPage()}>Sig. →</Btn>
+        </div>
       </div>
     </div>
   );
@@ -454,6 +558,75 @@ export function Empleados() {
 
   const anios = [ANIO_ACTUAL - 1, ANIO_ACTUAL, ANIO_ACTUAL + 1];
 
+  const [empSorting, setEmpSorting] = useState([]);
+
+  const empColumns = useMemo(() => [
+    {
+      accessorKey: 'nombre',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Nombre {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ fontWeight: 500 }}>{row.original.nombre}</span>,
+    },
+    {
+      accessorKey: 'doc',
+      header: 'Documento',
+      cell: ({ row }) => <span style={{ color: C.text2, fontFamily: 'monospace', fontSize: 12 }}>{row.original.doc || '—'}</span>,
+    },
+    {
+      accessorKey: 'cargo',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Cargo {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ fontSize: 12 }}>{row.original.cargo}</span>,
+    },
+    {
+      accessorKey: 'tel',
+      header: 'Teléfono',
+      enableSorting: false,
+      cell: ({ row }) => <span style={{ color: C.text2, fontSize: 12 }}>{row.original.tel || '—'}</span>,
+    },
+    {
+      accessorKey: 'activo',
+      header: 'Estado',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span style={{ background: row.original.activo ? C.greenBg : C.redBg, color: row.original.activo ? C.green : C.red, borderRadius: 10, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>
+          {row.original.activo ? 'Activo' : 'Inactivo'}
+        </span>
+      ),
+    },
+    {
+      id: 'acciones',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const e = row.original;
+        return (
+          <div style={{ display: 'flex', gap: 6 }}>
+            <Btn size="sm" variant="secondary" onClick={() => { setForm({ ...e }); setModal(e); }}>✏️ Editar</Btn>
+            <Btn size="sm" variant="danger" onClick={() => { if (window.confirm(`¿Eliminar a ${e.nombre}?`)) eliminarEmp.mutate(e.id); }}>🗑️ Eliminar</Btn>
+          </div>
+        );
+      },
+    },
+  ], [eliminarEmp.isPending]);
+
+  const empTable = useReactTable({
+    data: emps,
+    columns: empColumns,
+    state: { sorting: empSorting },
+    onSortingChange: setEmpSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   return (
     <div>
       <PageHeader title="👔 Empleados y gastos" />
@@ -480,28 +653,30 @@ export function Empleados() {
       </div>
       <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 24 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
-          <thead><tr style={{ background: C.surface2 }}>
-            {['Nombre', 'Documento', 'Cargo', 'Teléfono', 'Estado', 'Acciones'].map(h => (
-              <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
-            ))}
-          </tr></thead>
-          <tbody>
-            {emps.map(e => (
-              <tr key={e.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                <td style={tdc}>{e.nombre}</td>
-                <td style={{ ...tdc, color: C.text2, fontFamily: 'monospace', fontSize: 12 }}>{e.doc || '—'}</td>
-                <td style={tdc}>{e.cargo}</td>
-                <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>{e.tel || '—'}</td>
-                <td style={tdc}><span style={{ background: e.activo ? C.greenBg : C.redBg, color: e.activo ? C.green : C.red, borderRadius: 10, padding: '2px 10px', fontSize: 11, fontWeight: 600 }}>{e.activo ? 'Activo' : 'Inactivo'}</span></td>
-                <td style={tdc}>
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <Btn size="sm" variant="secondary" onClick={() => { setForm({ ...e }); setModal(e); }}>✏️ Editar</Btn>
-                    <Btn size="sm" variant="danger" onClick={() => { if (window.confirm(`¿Eliminar a ${e.nombre}?`)) eliminarEmp.mutate(e.id); }}>🗑️ Eliminar</Btn>
-                  </div>
-                </td>
+          <thead>
+            {empTable.getHeaderGroups().map(hg => (
+              <tr key={hg.id} style={{ background: C.surface2 }}>
+                {hg.headers.map(header => (
+                  <th key={header.id} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>
+                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                  </th>
+                ))}
               </tr>
             ))}
-            {emps.length === 0 && <tr><td colSpan={6} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados</td></tr>}
+          </thead>
+          <tbody>
+            {empTable.getRowModel().rows.length === 0
+              ? <tr><td colSpan={empColumns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin empleados</td></tr>
+              : empTable.getRowModel().rows.map(row => (
+                <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                  {row.getVisibleCells().map(cell => (
+                    <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              ))
+            }
           </tbody>
         </table>
       </div>
@@ -662,28 +837,101 @@ export function Usuarios() {
     onError:(e)=>{ const d=e?.response?.data?.detail; setPwErr(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const [userSorting, setUserSorting] = useState([]);
+
+  const userColumns = useMemo(() => [
+    {
+      accessorKey: 'nombre',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Nombre {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span>{row.original.nombre}</span>,
+    },
+    {
+      accessorKey: 'username',
+      header: 'Usuario',
+      cell: ({ row }) => <span style={{ fontFamily: 'monospace', fontSize: 12 }}>{row.original.username}</span>,
+    },
+    {
+      accessorKey: 'rol',
+      header: 'Rol',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const u = row.original;
+        return (
+          <span style={{
+            background: u.rol === 'admin' ? C.blueBg : u.rol === 'cliente' ? '#FEF3C7' : C.greenBg,
+            color: u.rol === 'admin' ? C.blue : u.rol === 'cliente' ? '#92400E' : C.green,
+            borderRadius: 10, padding: '2px 10px', fontSize: 11, fontWeight: 600
+          }}>{u.rol}</span>
+        );
+      },
+    },
+    {
+      accessorKey: 'cliente_ref',
+      header: 'Cliente Ref',
+      enableSorting: false,
+      cell: ({ row }) => <span style={{ fontSize: 12, color: C.text2 }}>{row.original.cliente_ref || '—'}</span>,
+    },
+    {
+      accessorKey: 'activo',
+      header: 'Estado',
+      enableSorting: false,
+      cell: ({ row }) => <span style={{ color: row.original.activo ? C.green : C.red, fontWeight: 600 }}>{row.original.activo ? 'Activo' : 'Inactivo'}</span>,
+    },
+    {
+      id: 'acciones',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const u = row.original;
+        return (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <Btn size="sm" variant="secondary" onClick={() => { setPwModal({ id: u.id, nombre: u.nombre }); setPwForm({}); setPwErr(''); }}>Contraseña</Btn>
+            {u.username !== 'admin' && <Btn size="sm" variant="danger" onClick={() => { if (window.confirm('¿Eliminar usuario?')) eliminar.mutate(u.id); }}>Eliminar</Btn>}
+          </div>
+        );
+      },
+    },
+  ], [eliminar.isPending]);
+
+  const userTable = useReactTable({
+    data: users,
+    columns: userColumns,
+    state: { sorting: userSorting },
+    onSortingChange: setUserSorting,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+  });
+
   return (
     <div>
       <PageHeader title="⚙️ Usuarios del sistema"
         action={<Btn variant="accent" onClick={()=>{setForm({rol:'empleado'});setErr('');setModal(true);}}>+ Nuevo usuario</Btn>} />
-      <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
-        <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
-          <thead><tr style={{ background:C.surface2 }}>
-            {['Nombre','Usuario','Rol','Cliente Ref','Estado','Acciones'].map(h=>(
-              <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,color:C.text2,borderBottom:`1px solid ${C.border}` }}>{h}</th>
+      <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
+          <thead>
+            {userTable.getHeaderGroups().map(hg => (
+              <tr key={hg.id} style={{ background: C.surface2 }}>
+                {hg.headers.map(header => (
+                  <th key={header.id} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>
+                    {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                  </th>
+                ))}
+              </tr>
             ))}
-          </tr></thead>
+          </thead>
           <tbody>
-            {users.map(u=>(
-              <tr key={u.id} style={{ borderBottom:`1px solid ${C.border}` }}>
-                <td style={tdc}>{u.nombre}</td><td style={tdc}>{u.username}</td>
-                <td style={tdc}><span style={{ background:u.rol==='admin'?C.blueBg:u.rol==='cliente'?'#FEF3C7':C.greenBg,color:u.rol==='admin'?C.blue:u.rol==='cliente'?'#92400E':C.green,borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>{u.rol}</span></td>
-                <td style={tdc}><span style={{ fontSize:12,color:C.text2 }}>{u.cliente_ref||'—'}</span></td>
-                <td style={tdc}><span style={{ color:u.activo?C.green:C.red,fontWeight:600 }}>{u.activo?'Activo':'Inactivo'}</span></td>
-                <td style={{...tdc,display:'flex',gap:6,flexWrap:'wrap'}}>
-                  <Btn size="sm" variant="secondary" onClick={()=>{setPwModal({id:u.id,nombre:u.nombre});setPwForm({});setPwErr('');}}>Contraseña</Btn>
-                  {u.username!=='admin'&&<Btn size="sm" variant="danger" onClick={()=>{ if(window.confirm('¿Eliminar usuario?')) eliminar.mutate(u.id); }}>Eliminar</Btn>}
-                </td>
+            {userTable.getRowModel().rows.map(row => (
+              <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                {row.getVisibleCells().map(cell => (
+                  <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </td>
+                ))}
               </tr>
             ))}
           </tbody>

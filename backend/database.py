@@ -35,16 +35,22 @@ def get_db():
 
 def init_db():
     import models
-    # Crear tablas que no existan (primera ejecución)
-    Base.metadata.create_all(bind=engine)
-    # Ejecutar migraciones Alembic pendientes (solo en PostgreSQL; SQLite usa create_all)
+    # Crear tablas que no existan — checkfirst=True es idempotente y seguro con múltiples workers
+    Base.metadata.create_all(bind=engine, checkfirst=True)
+    # Ejecutar migraciones Alembic pendientes — solo desde un worker (advisory lock no-bloqueante)
     if not _is_sqlite:
         try:
-            from alembic.config import Config as AlembicConfig
-            from alembic import command
-            alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
-            alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
-            command.upgrade(alembic_cfg, "head")
+            from sqlalchemy import text
+            # pg_try_advisory_xact_lock: adquiere lock transaccional solo si está libre.
+            # Si otro worker ya lo tiene, retorna False en lugar de bloquear.
+            with engine.begin() as conn:
+                locked = conn.execute(text("SELECT pg_try_advisory_xact_lock(7654321)")).scalar()
+                if locked:
+                    from alembic.config import Config as AlembicConfig
+                    from alembic import command
+                    alembic_cfg = AlembicConfig(os.path.join(os.path.dirname(__file__), "alembic.ini"))
+                    alembic_cfg.set_main_option("sqlalchemy.url", DATABASE_URL)
+                    command.upgrade(alembic_cfg, "head")
         except Exception as e:
             import logging
             logging.getLogger("bbcfile").warning(f"Alembic upgrade falló (create_all ya creó las tablas): {e}")

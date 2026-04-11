@@ -8,7 +8,7 @@
 import React, { Suspense, lazy } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, NavLink, useNavigate } from 'react-router-dom';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { Toaster } from 'react-hot-toast';
+import { Toaster } from 'sonner';
 import useAuthStore from './hooks/useAuth';
 import { C } from '../components/UI';
 
@@ -149,8 +149,7 @@ export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Toaster position="top-right"
-          toastOptions={{ duration:3500, style:{ fontSize:13 } }} />
+        <Toaster position="top-right" richColors closeButton />
         <Routes>
           <Route path="/login" element={
             <Suspense fallback={<PageLoader />}><Login /></Suspense>

@@ -1,12 +1,41 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import api from '../utils/api';
 import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 import useAuthStore from '../hooks/useAuth';
+import {
+  useReactTable,
+  getCoreRowModel,
+  getSortedRowModel,
+  getPaginationRowModel,
+  flexRender,
+} from '@tanstack/react-table';
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5','N/A'];
+
+const EMPRESA_COLOR = {
+  'carsecoop':  { bg: '#F3E8FF', color: '#7C3AED' },
+  'protsecoop': { bg: '#FEF9C3', color: '#A16207' },
+  'technova':   { bg: '#FEF3C7', color: '#D97706' },
+  'techplanet': { bg: '#DCFCE7', color: '#16A34A' },
+};
+function empresaStyle(nombre = '') {
+  const key = Object.keys(EMPRESA_COLOR).find(k => nombre.toLowerCase().includes(k));
+  return key ? EMPRESA_COLOR[key] : null;
+}
+function EmpresaBadge({ nombre }) {
+  if (!nombre) return <span style={{ color: C.text2 }}>—</span>;
+  const s = empresaStyle(nombre);
+  if (!s) return <span style={{ fontSize: 13, color: C.text2 }}>{nombre}</span>;
+  return (
+    <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 6, padding: '2px 8px',
+      background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>
+      {nombre}
+    </span>
+  );
+}
 
 async function dlExcel(url, filename) {
   try {
@@ -27,24 +56,23 @@ const ESTADOS_SRV = ['ACTIVO','SUSPENDIDO','DOBLE AFILIACION','EN ESPERA DE ACTI
 const UP = (v) => (v||'').toUpperCase();
 
 const InputUp = ({ label, value, onChange, placeholder, type='text', style, readOnly }) => (
-  <div style={{ marginBottom:12, ...style }}>
+  <div style={{ marginBottom:14, ...style }}>
     {label && <label style={lbl}>{label}</label>}
     <input type={type} value={value} readOnly={readOnly}
       onChange={e => onChange(type==='text'||type==='tel' ? UP(e.target.value) : e.target.value)}
       placeholder={placeholder}
-      style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-        fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,
+      style={{ ...inp2,
         textTransform:(type==='text'||type==='tel')?'uppercase':'none',
-        background: readOnly ? C.surface2 : C.surface }} />
+        background: readOnly ? C.surface2 : C.surface,
+        cursor: readOnly ? 'not-allowed' : 'text' }} />
   </div>
 );
 
 const Sel = ({ label, value, onChange, options=[], style }) => (
-  <div style={{ marginBottom:12, ...style }}>
+  <div style={{ marginBottom:14, ...style }}>
     {label && <label style={lbl}>{label}</label>}
     <select value={value} onChange={e=>onChange(e.target.value)}
-      style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-        fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface }}>
+      style={{ ...inp2, cursor:'pointer' }}>
       {options.map(o=>typeof o==='string'
         ?<option key={o} value={o}>{o||'—'}</option>
         :<option key={o.value} value={o.value}>{o.label}</option>)}
@@ -98,6 +126,8 @@ export default function Afiliados() {
 
   const [pagina, setPagina] = useState(1);
   const POR_PAG = 50;
+  const [sorting, setSorting] = useState([]);
+  const [tablePagination, setTablePagination] = useState({ pageIndex: 0, pageSize: 50 });
 
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   // Sin paginación: para filtros y exportaciones (no necesita polling cada 10s)
@@ -115,7 +145,6 @@ export default function Afiliados() {
   });
   const data     = resp.items || [];
   const totalReg = resp.total || 0;
-  const totalPags = Math.ceil(totalReg / POR_PAG);
   const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data?.items||r.data), enabled: esAdmin });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
@@ -169,6 +198,136 @@ export default function Afiliados() {
   const sugerenciasPagos = useMemo(() => busquedaPagos.length >= 2
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
     : [], [todos, busquedaPagos]);
+
+  const columns = useMemo(() => [
+    {
+      accessorKey: 'nombre',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Nombre {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => (
+        <div>
+          <span style={{ fontWeight: 700, cursor: 'pointer', color: C.primary }}
+            onClick={() => { setDocSeleccionado(row.original.doc); setTab('pagos'); }}>
+            {row.original.nombre}
+          </span>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.text2, letterSpacing: '0.02em' }}>
+            {row.original.tipo_doc || 'CC'} {row.original.doc}
+          </div>
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'empresa',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Empresa {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <EmpresaBadge nombre={row.original.empresa} />,
+    },
+    {
+      accessorKey: 'cliente_txt',
+      header: 'Cliente',
+      cell: ({ row }) => <span style={{ fontSize: 13, fontWeight: 600, color: C.text }}>{row.original.cliente_txt || '—'}</span>,
+    },
+    {
+      accessorKey: 'subtipo',
+      header: 'Subtipo',
+      cell: ({ row }) => row.original.subtipo ? <Chip>{row.original.subtipo}</Chip> : <span style={{ color: C.text2 }}>—</span>,
+    },
+    {
+      accessorKey: 'eps',
+      header: 'EPS',
+      cell: ({ row }) => <span style={{ fontSize: 13, color: C.text2 }}>{row.original.eps || '—'}</span>,
+    },
+    {
+      accessorKey: 'arl',
+      header: 'ARL',
+      cell: ({ row }) => <span style={{ fontSize: 13, color: C.text2 }}>{row.original.arl || '—'}</span>,
+    },
+    {
+      accessorKey: 'servicios',
+      header: 'Servicios',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+          {(row.original.servicios || []).map(s => <SrvChip key={s}>{s}</SrvChip>)}
+        </div>
+      ),
+    },
+    {
+      accessorKey: 'estado_srv',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Estado {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => statusBadge(row.original.estado_srv || row.original.estado),
+    },
+    {
+      accessorKey: 'novedades',
+      header: 'Novedades',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span style={{ fontSize: 13, color: C.text2, display: '-webkit-box',
+          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 160 }}>
+          {row.original.novedades || '—'}
+        </span>
+      ),
+    },
+    {
+      accessorKey: 'detalle',
+      header: 'Detalle',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span style={{ fontSize: 13, color: C.blue, display: '-webkit-box',
+          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 180 }}>
+          {row.original.detalle || '—'}
+        </span>
+      ),
+    },
+    {
+      id: 'acciones',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const a = row.original;
+        return (
+          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+            <Btn size="sm" variant="secondary" onClick={() => openEditar(a)}>✏️ Editar</Btn>
+            <Btn size="sm" variant="secondary" onClick={() => dlExcel(`/afiliados/${a.id}/certificado`, `certificado_${a.nombre.replace(/ /g, '_')}.pdf`)}>📄 Cert.</Btn>
+            <Btn size="sm" variant="danger" disabled={eliminar.isPending}
+              onClick={async () => {
+                let msg = `¿Eliminar a "${a.nombre}" (${a.doc})? Esta acción moverá al afiliado a eliminados.`;
+                try {
+                  const r = await api.get('/facturas', { params: { doc: a.doc, estado: 'pendiente', limit: 0 } });
+                  const pend = r.data?.total || 0;
+                  if (pend > 0) msg += `\n\n⚠️ ATENCIÓN: Este afiliado tiene ${pend} factura${pend !== 1 ? 's' : ''} pendiente${pend !== 1 ? 's' : ''} de pago.`;
+                } catch {}
+                setConfirm({ title: 'Eliminar afiliado', message: msg, onConfirm: () => eliminar.mutate(a.id) });
+              }}>×</Btn>
+          </div>
+        );
+      },
+    },
+  ], []);
+
+  const table = useReactTable({
+    data: dataFiltrada,
+    columns,
+    state: { sorting, pagination: tablePagination },
+    onSortingChange: setSorting,
+    onPaginationChange: setTablePagination,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setPendingFiles([]); setModal('nuevo'); };
@@ -425,75 +584,46 @@ export default function Afiliados() {
             ]}
             valores={filtros} onChange={setFiltro} onLimpiar={limpiar}
           />
-          <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
+          <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
               <thead>
-                <tr style={{ background:C.surface2 }}>
-                  {['Nombre','Empresa','Documento','Cliente','Subtipo','EPS','ARL','Servicios','Estado','Novedades','Detalle','Acciones'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                      color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
-                  ))}
-                </tr>
+                {table.getHeaderGroups().map(hg => (
+                  <tr key={hg.id} style={{ background: C.surface2 }}>
+                    {hg.headers.map(header => (
+                      <th key={header.id} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>
+                        {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                      </th>
+                    ))}
+                  </tr>
+                ))}
               </thead>
               <tbody>
-                {isLoading && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
-                {!isLoading && dataFiltrada.length===0 && (
-                  <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros</td></tr>
+                {isLoading && <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Cargando...</td></tr>}
+                {!isLoading && table.getRowModel().rows.length === 0 && (
+                  <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin registros</td></tr>
                 )}
-                {dataFiltrada.map(a=>(
-                  <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}` }}>
-                    <td style={tdc}>
-                      <span style={{ fontWeight:600, cursor:'pointer', color:C.primary }}
-                        onClick={() => { setDocSeleccionado(a.doc); setTab('pagos'); }}>
-                        {a.nombre}
-                      </span>
-                    </td>
-                    <td style={tdc}>{a.empresa||'—'}</td>
-                    <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>
-                      <span style={{ fontSize:10,fontWeight:700,color:C.text2,marginRight:4 }}>{a.tipo_doc||'CC'}</span>{a.doc}
-                    </td>
-                    <td style={tdc}>{a.cliente_txt||'—'}</td>
-                    <td style={tdc}>{a.subtipo?<Chip>{a.subtipo}</Chip>:'—'}</td>
-                    <td style={tdc}><span style={{ fontSize:11,color:C.text2 }}>{a.eps||'—'}</span></td>
-                    <td style={tdc}><span style={{ fontSize:11,color:C.text2 }}>{a.arl||'—'}</span></td>
-                    <td style={tdc}>
-                      <div style={{ display:'flex',flexWrap:'wrap',gap:3 }}>
-                        {(a.servicios||[]).map(s=><SrvChip key={s}>{s}</SrvChip>)}
-                      </div>
-                    </td>
-                    <td style={tdc}>{statusBadge(a.estado_srv||a.estado)}</td>
-                    <td style={{ ...tdc,maxWidth:160 }}>
-                      <span style={{ fontSize:11,color:C.text2,display:'-webkit-box',
-                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                        {a.novedades||'—'}
-                      </span>
-                    </td>
-                    <td style={{ ...tdc,maxWidth:180 }}>
-                      <span style={{ fontSize:11,color:C.blue,display:'-webkit-box',
-                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                        {a.detalle||'—'}
-                      </span>
-                    </td>
-                    <td style={tdc}>
-                      <div style={{ display:'flex',gap:4,flexWrap:'wrap' }}>
-                        <Btn size="sm" variant="secondary" onClick={()=>openEditar(a)}>✏️ Editar</Btn>
-                        <Btn size="sm" variant="secondary" onClick={()=>dlExcel(`/afiliados/${a.id}/certificado`,`certificado_${a.nombre.replace(/ /g,'_')}.pdf`)}>📄 Cert.</Btn>
-                        <Btn size="sm" variant="danger" disabled={eliminar.isPending}
-                          onClick={async()=>{
-                            let msg = `¿Eliminar a "${a.nombre}" (${a.doc})? Esta acción moverá al afiliado a eliminados.`;
-                            try {
-                              const r = await api.get('/facturas', { params: { doc: a.doc, estado: 'pendiente', limit: 0 } });
-                              const pend = r.data?.total || 0;
-                              if (pend > 0) msg += `\n\n⚠️ ATENCIÓN: Este afiliado tiene ${pend} factura${pend !== 1 ? 's' : ''} pendiente${pend !== 1 ? 's' : ''} de pago.`;
-                            } catch {}
-                            setConfirm({ title:'Eliminar afiliado', message: msg, onConfirm:()=>eliminar.mutate(a.id) });
-                          }}>×</Btn>
-                      </div>
-                    </td>
+                {table.getRowModel().rows.map(row => (
+                  <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}` }}>
+                    {row.getVisibleCells().map(cell => (
+                      <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* Paginación TanStack */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10 }}>
+            <span style={{ fontSize: 12, color: C.text2 }}>
+              Página {table.getState().pagination.pageIndex + 1} de {table.getPageCount()} — {dataFiltrada.length} total
+            </span>
+            <div style={{ display: 'flex', gap: 4 }}>
+              <Btn size="sm" variant="secondary" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>← Ant.</Btn>
+              <Btn size="sm" variant="secondary" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>Sig. →</Btn>
+            </div>
           </div>
         </>
       )}
@@ -911,12 +1041,11 @@ export default function Afiliados() {
         <Seccion title="Datos personales" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
           <InputUp label="Nombre completo *" value={form.nombre||''} onChange={v=>sf('nombre',v)} />
-          <div style={{ marginBottom:12 }}>
+          <div style={{ marginBottom:14 }}>
             <label style={lbl}>Tipo y N° Documento *</label>
-            <div style={{ display:'flex', gap:6 }}>
+            <div style={{ display:'flex', gap:8 }}>
               <select value={form.tipo_doc||'CC'} onChange={e=>sf('tipo_doc',e.target.value)}
-                style={{ padding:'9px 10px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,
-                  outline:'none',background:C.surface,color:C.text,flexShrink:0 }}>
+                style={{ ...inp2, width:'auto', flexShrink:0, paddingRight:24 }}>
                 <option value="CC">CC</option>
                 <option value="CE">CE</option>
                 <option value="PT">PT</option>
@@ -925,8 +1054,7 @@ export default function Afiliados() {
               </select>
               <input value={form.doc||''} onChange={e=>sf('doc',e.target.value.toUpperCase())}
                 placeholder="NÚMERO DE DOCUMENTO"
-                style={{ flex:1,padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                  fontSize:13,outline:'none',color:C.text,textTransform:'uppercase',background:C.surface }} />
+                style={{ ...inp2, flex:1, textTransform:'uppercase' }} />
             </div>
           </div>
           <InputUp label="Cargo"             value={form.cargo||''} onChange={v=>sf('cargo',v)} />
@@ -968,15 +1096,22 @@ export default function Afiliados() {
             {SERVICIOS.map(s=>{
               const checked = (form.servicios||[]).includes(s);
               return (
-                <label key={s} onClick={()=>toggleSrv(s)} style={{
-                  display:'flex',alignItems:'center',gap:6,cursor:'pointer',padding:'6px 12px',
-                  borderRadius:7,background:checked?C.blueBg:C.surface,
-                  border:`1px solid ${checked?C.blue:C.border}`,
-                  color:checked?C.blue:C.text,fontWeight:checked?600:400,fontSize:13,
+                <button key={s} type="button" onClick={()=>toggleSrv(s)} style={{
+                  display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
+                  gap:6, cursor:'pointer', padding:'12px 16px', borderRadius:10,
+                  minWidth:72,
+                  background: checked ? C.primary : C.surface,
+                  border: `2px solid ${checked ? C.primary : C.border}`,
+                  color: checked ? '#fff' : C.text2,
+                  fontWeight: checked ? 700 : 500,
+                  fontSize: 13,
+                  transition: 'all .15s',
+                  boxShadow: checked ? '0 2px 8px rgba(0,0,0,.15)' : 'none',
+                  outline: 'none',
                 }}>
-                  <input type="checkbox" checked={checked} onChange={()=>{}} style={{ accentColor:C.primary }} />
+                  <span style={{ fontSize:18, lineHeight:1 }}>{checked ? '✓' : '○'}</span>
                   {s}
-                </label>
+                </button>
               );
             })}
           </div>
@@ -993,50 +1128,50 @@ export default function Afiliados() {
 
         <Seccion title="IBC, novedades y detalle" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
-          <div style={{ marginBottom:12 }}>
+          <div style={{ marginBottom:14 }}>
             <label style={lbl}>IBC individual ($) — vacío = usa global</label>
             <input type="number" value={form.ibc||''} onChange={e=>sf('ibc',e.target.value?+e.target.value:null)}
               placeholder={`IBC global: ${(1950905).toLocaleString('es-CO')}`}
-              style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface }} />
+              style={inp2} />
           </div>
-          <div style={{ marginBottom:12 }}>
+          <div style={{ marginBottom:14 }}>
             <label style={lbl}>Novedades</label>
             <textarea value={form.novedades||''} onChange={e=>sf('novedades',UP(e.target.value))}
               placeholder="NOVEDADES DEL AFILIADO..." rows={2}
-              style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-                fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
-                resize:'vertical',textTransform:'uppercase' }} />
+              style={{ ...inp2, resize:'vertical', textTransform:'uppercase' }} />
           </div>
         </div>
-        <div style={{ marginBottom:12 }}>
+        <div style={{ marginBottom:14 }}>
           <label style={lbl}>Detalle</label>
           <textarea value={form.detalle||''} onChange={e=>sf('detalle',e.target.value)}
             placeholder="Información adicional visible en el portal del cliente y dashboard..."
             rows={3}
-            style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
-              fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,
-              resize:'vertical' }} />
+            style={{ ...inp2, resize:'vertical' }} />
         </div>
 
         <Seccion title="Adjuntar documentos (opcional)" />
         <div style={{ marginBottom:12 }}>
-          <label style={{ display:'block',padding:'10px 14px',border:`2px dashed ${C.border}`,
-            borderRadius:8,textAlign:'center',cursor:'pointer',color:C.text2,fontSize:12,
-            background:C.surface2 }}>
-            📎 Haz clic o arrastra archivos aquí (PDF, Word, Excel, imágenes)
+          <label style={{ display:'block', border:`2px dashed ${C.border}`, borderRadius:10,
+            cursor:'pointer', background:C.surface2, overflow:'hidden' }}>
+            <div style={{ padding:'20px 16px', textAlign:'center' }}>
+              <div style={{ fontSize:22, marginBottom:6 }}>📎</div>
+              <div style={{ fontSize:13, fontWeight:600, color:C.text, marginBottom:2 }}>
+                Haz clic o arrastra archivos aquí
+              </div>
+              <div style={{ fontSize:11, color:C.text2 }}>PDF, Word, Excel, imágenes</div>
+            </div>
             <input type="file" multiple style={{ display:'none' }}
               accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png"
               onChange={e => setPendingFiles(prev => [...prev, ...Array.from(e.target.files)])} />
           </label>
           {pendingFiles.length > 0 && (
-            <div style={{ marginTop:8,display:'flex',flexWrap:'wrap',gap:6 }}>
+            <div style={{ marginTop:10, display:'flex', flexWrap:'wrap', gap:6 }}>
               {pendingFiles.map((f,i) => (
-                <div key={i} style={{ display:'flex',alignItems:'center',gap:6,padding:'4px 10px',
-                  background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:6,fontSize:12 }}>
+                <div key={i} style={{ display:'flex', alignItems:'center', gap:6, padding:'5px 10px',
+                  background:C.blueBg, border:`1px solid ${C.blue}`, borderRadius:7, fontSize:12 }}>
                   <span style={{ color:C.blue }}>📄 {f.name}</span>
                   <button onClick={()=>setPendingFiles(prev=>prev.filter((_,j)=>j!==i))}
-                    style={{ border:'none',background:'none',cursor:'pointer',color:C.red,fontWeight:700,padding:0 }}>×</button>
+                    style={{ border:'none',background:'none',cursor:'pointer',color:C.red,fontWeight:700,padding:0,fontSize:15,lineHeight:1 }}>×</button>
                 </div>
               ))}
             </div>
@@ -1052,36 +1187,18 @@ export default function Afiliados() {
         </div>
       </Modal>
 
-      {/* Paginación: solo cuando hay más de una página Y no hay filtros activos */}
-      {totalPags > 1 && tab === 'activos' && !hayFiltrosActivos && (
-        <div style={{ display:'flex', justifyContent:'center', alignItems:'center',
-          gap:6, marginTop:16, flexWrap:'wrap' }}>
-          <button onClick={()=>setPagina(1)} disabled={pagina===1} style={btnPag}>«</button>
-          <button onClick={()=>setPagina(p=>Math.max(1,p-1))} disabled={pagina===1} style={btnPag}>‹</button>
-          {[...Array(Math.min(5,totalPags))].map((_,i) => {
-            const start = Math.max(1, Math.min(pagina-2, totalPags-4));
-            const p = start + i;
-            if(p > totalPags) return null;
-            return <button key={p} onClick={()=>setPagina(p)} style={{
-              ...btnPag, background:p===pagina?C.primary:C.surface,
-              color:p===pagina?'#fff':C.text, fontWeight:p===pagina?700:400 }}>{p}</button>;
-          })}
-          <button onClick={()=>setPagina(p=>Math.min(totalPags,p+1))} disabled={pagina===totalPags} style={btnPag}>›</button>
-          <button onClick={()=>setPagina(totalPags)} disabled={pagina===totalPags} style={btnPag}>»</button>
-          <span style={{ fontSize:12, color:C.text2, marginLeft:4 }}>
-            Pág {pagina}/{totalPags} · {totalReg} total
-          </span>
-        </div>
-      )}
     </div>
   );
 }
 
 function Seccion({ title }) {
   return (
-    <div style={{ fontSize:12,fontWeight:700,color:C.primary,borderBottom:`2px solid ${C.primary}`,
-      paddingBottom:4,marginTop:16,marginBottom:10,textTransform:'uppercase',letterSpacing:'0.05em' }}>
-      {title}
+    <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:20, marginBottom:12 }}>
+      <div style={{ width:3, height:16, borderRadius:2, background:C.primary, flexShrink:0 }} />
+      <span style={{ fontSize:11, fontWeight:700, color:C.primary, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+        {title}
+      </span>
+      <div style={{ flex:1, height:1, background:C.border }} />
     </div>
   );
 }
@@ -1093,7 +1210,8 @@ function SrvChip({ children }) {
 }
 
 const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };
-const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
+const lbl = { display:'block',fontSize:11,color:C.text2,fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em' };
+const inp2 = { width:'100%',padding:'10px 12px',border:`1.5px solid ${C.border}`,borderRadius:8,fontSize:14,outline:'none',color:C.text,background:C.surface,boxSizing:'border-box',transition:'border-color .15s' };
 const btnPag = {
   padding:'6px 12px', border:`1px solid ${C.border}`, borderRadius:6,
   background:C.surface, cursor:'pointer', fontSize:13, color:C.text,

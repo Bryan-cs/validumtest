@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender } from '@tanstack/react-table';
+import { toast } from 'sonner';
 import api from '../utils/api';
 import { C, PageHeader, Card, Btn, ConfirmModal } from '../components/UI';
 
@@ -61,7 +62,8 @@ export default function Actividad() {
   const [usuario, setUsuario] = useState('');
   const [buscar,  setBuscar]  = useState('');
   const [confirm, setConfirm] = useState(false);
-  const [page, setPage] = useState(1);
+  const [actSorting, setActSorting] = useState([]);
+  const [actPagination, setActPagination] = useState({ pageIndex: 0, pageSize: PER_PAGE });
 
   const { data: actRaw = { total: 0, items: [] }, isLoading } = useQuery({
     queryKey: ['actividad', desde, hasta, modulo, usuario],
@@ -78,9 +80,68 @@ export default function Actividad() {
       )
     : act;
 
-  const totalPages = Math.max(1, Math.ceil(filtradas.length / PER_PAGE));
-  const pagActual = Math.min(page, totalPages);
-  const paginadas = filtradas.slice((pagActual - 1) * PER_PAGE, pagActual * PER_PAGE);
+  const actColumns = useMemo(() => [
+    {
+      id: 'icono',
+      header: '',
+      enableSorting: false,
+      cell: ({ row }) => <span style={{ fontSize: 15, display: 'block', textAlign: 'center', width: 32 }}>{accionIcon(row.original.accion)}</span>,
+    },
+    {
+      accessorKey: 'fecha',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Fecha y hora {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ color: C.text2, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>{row.original.fecha}</span>,
+    },
+    {
+      accessorKey: 'usuario',
+      header: ({ column }) => (
+        <button type="button" onClick={() => column.toggleSorting(column.getIsSorted() === 'asc')}
+          className="flex items-center gap-1 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground hover:text-foreground">
+          Usuario {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
+        </button>
+      ),
+      cell: ({ row }) => <span style={{ fontWeight: 600, color: C.primary, whiteSpace: 'nowrap' }}>{row.original.usuario}</span>,
+    },
+    {
+      accessorKey: 'modulo',
+      header: 'Módulo',
+      enableSorting: false,
+      cell: ({ row }) => <ModuloBadge modulo={row.original.modulo} />,
+    },
+    {
+      accessorKey: 'accion',
+      header: 'Acción',
+      enableSorting: false,
+      cell: ({ row }) => <span style={{ color: C.text }}>{row.original.accion}</span>,
+    },
+    {
+      accessorKey: 'detalle',
+      header: 'Detalle',
+      enableSorting: false,
+      cell: ({ row }) => (
+        <span style={{ color: C.text2, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}
+          title={row.original.detalle}>
+          {row.original.detalle || '—'}
+        </span>
+      ),
+    },
+  ], []);
+
+  const actTable = useReactTable({
+    data: filtradas,
+    columns: actColumns,
+    state: { sorting: actSorting, pagination: actPagination },
+    onSortingChange: setActSorting,
+    onPaginationChange: setActPagination,
+    getCoreRowModel: getCoreRowModel(),
+    getSortedRowModel: getSortedRowModel(),
+    getPaginationRowModel: getPaginationRowModel(),
+  });
 
   // Usuarios únicos para el selector
   const usuariosUnicos = [...new Set(act.map(a => a.usuario).filter(Boolean))].sort();
@@ -97,7 +158,7 @@ export default function Actividad() {
   const limpiarFiltros = () => {
     setDesde(haceUnMes); setHasta(hoy);
     setModulo(''); setUsuario(''); setBuscar('');
-    setPage(1);
+    setActPagination(p => ({ ...p, pageIndex: 0 }));
   };
 
   return (
@@ -145,7 +206,7 @@ export default function Actividad() {
           {isLoading ? 'Cargando...' : (
             <><strong style={{ color: C.primary }}>{filtradas.length}</strong> registro{filtradas.length !== 1 ? 's' : ''}
             {buscar && ` de ${act.length} totales`}
-            {filtradas.length > PER_PAGE && <span style={{ marginLeft: 8 }}>— página <strong style={{ color: C.primary }}>{pagActual}</strong> de {totalPages}</span>}</>
+            {filtradas.length > PER_PAGE && <span style={{ marginLeft: 8 }}>— página <strong style={{ color: C.primary }}>{actTable.getState().pagination.pageIndex + 1}</strong> de {actTable.getPageCount()}</span>}</>
           )}
         </div>
       </Card>
@@ -155,61 +216,44 @@ export default function Actividad() {
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
             <thead>
-              <tr style={{ background: C.surface2 }}>
-                {['', 'Fecha y hora', 'Usuario', 'Módulo', 'Acción', 'Detalle'].map((h, i) => (
-                  <th key={i} style={{
-                    padding: '10px 12px', textAlign: 'left', color: C.text2,
-                    fontWeight: 600, borderBottom: `1px solid ${C.border}`,
-                    whiteSpace: 'nowrap', fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase',
-                  }}>{h}</th>
-                ))}
-              </tr>
+              {actTable.getHeaderGroups().map(hg => (
+                <tr key={hg.id} style={{ background: C.surface2 }}>
+                  {hg.headers.map(header => (
+                    <th key={header.id} style={{ padding: '10px 12px', textAlign: 'left', color: C.text2, fontWeight: 600, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap', fontSize: 11, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                      {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
+                    </th>
+                  ))}
+                </tr>
+              ))}
             </thead>
             <tbody>
               {isLoading ? (
-                <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: C.text2 }}>Cargando...</td></tr>
-              ) : filtradas.length === 0 ? (
-                <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: C.text2 }}>Sin registros para los filtros seleccionados</td></tr>
-              ) : (
-                paginadas.map((a, i) => (
-                  <tr key={a.id ?? i} style={{
-                    borderBottom: `1px solid ${C.border}`,
-                    background: i % 2 === 0 ? C.surface : C.surface2,
-                  }}>
-                    <td style={{ padding: '8px 10px', textAlign: 'center', fontSize: 15, width: 32 }}>
-                      {accionIcon(a.accion)}
+                <tr><td colSpan={actColumns.length} style={{ padding: 24, textAlign: 'center', color: C.text2 }}>Cargando...</td></tr>
+              ) : actTable.getRowModel().rows.length === 0 ? (
+                <tr><td colSpan={actColumns.length} style={{ padding: 24, textAlign: 'center', color: C.text2 }}>Sin registros para los filtros seleccionados</td></tr>
+              ) : actTable.getRowModel().rows.map((row, i) => (
+                <tr key={row.id} style={{ borderBottom: `1px solid ${C.border}`, background: i % 2 === 0 ? C.surface : C.surface2 }}>
+                  {row.getVisibleCells().map(cell => (
+                    <td key={cell.id} style={{ padding: '8px 12px' }}>
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </td>
-                    <td style={{ padding: '8px 12px', color: C.text2, whiteSpace: 'nowrap', fontFamily: 'monospace', fontSize: 11 }}>
-                      {a.fecha}
-                    </td>
-                    <td style={{ padding: '8px 12px', fontWeight: 600, color: C.primary, whiteSpace: 'nowrap' }}>
-                      {a.usuario}
-                    </td>
-                    <td style={{ padding: '8px 12px' }}>
-                      <ModuloBadge modulo={a.modulo} />
-                    </td>
-                    <td style={{ padding: '8px 12px', color: C.text }}>
-                      {a.accion}
-                    </td>
-                    <td style={{ padding: '8px 12px', color: C.text2, maxWidth: 320, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      title={a.detalle}>
-                      {a.detalle || '—'}
-                    </td>
-                  </tr>
-                ))
-              )}
+                  ))}
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </Card>
 
-      {totalPages > 1 && (
-        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 16 }}>
-          <Btn variant="secondary" size="sm" disabled={pagActual <= 1} onClick={() => setPage(p => p - 1)}>← Anterior</Btn>
-          <span style={{ fontSize: 13, color: C.text2 }}>Página {pagActual} de {totalPages}</span>
-          <Btn variant="secondary" size="sm" disabled={pagActual >= totalPages} onClick={() => setPage(p => p + 1)}>Siguiente →</Btn>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 16 }}>
+        <span style={{ fontSize: 13, color: C.text2 }}>
+          Página {actTable.getState().pagination.pageIndex + 1} de {actTable.getPageCount()} — {filtradas.length} total
+        </span>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+          <Btn variant="secondary" size="sm" disabled={!actTable.getCanPreviousPage()} onClick={() => actTable.previousPage()}>← Anterior</Btn>
+          <Btn variant="secondary" size="sm" disabled={!actTable.getCanNextPage()} onClick={() => actTable.nextPage()}>Siguiente →</Btn>
         </div>
-      )}
+      </div>
 
       <ConfirmModal
         open={confirm}

@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { toast } from 'sonner';
 import api from '../utils/api';
 import { C, Btn, PageHeader, ConfirmModal } from '../components/UI';
 
