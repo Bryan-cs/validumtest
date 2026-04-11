@@ -1,5 +1,9 @@
 // Shared UI Components for BBC File
 import React, { useEffect, useState, Component } from 'react';
+import { Button } from './ui/button';
+import { Badge as ShadBadge } from './ui/badge';
+import { Card as ShadCard } from './ui/card';
+import { cn } from '../lib/utils';
 
 export const C = {
   primary:  'var(--c-primary)',
@@ -22,84 +26,90 @@ export const C = {
 
 export function Card({ children, style }) {
   return (
-    <div style={{ background: C.surface, borderRadius: 12, border: `1px solid ${C.border}`,
-      padding: 20, ...style }}>
+    <ShadCard className="p-5" style={style}>
       {children}
-    </div>
+    </ShadCard>
   );
 }
 
-export function StatCard({ label, value, color = C.primary, icon, trend, trendUp = true }) {
+export function StatCard({ label, value, color, icon, trend, trendUp = true }) {
+  const accentColor = color || 'var(--c-primary)';
   return (
-    <div className="stat-card-lift" style={{
-      background: C.surface, border: `1px solid ${C.border}`, borderRadius: 14,
-      padding: '18px', flex: 1, position: 'relative', overflow: 'hidden', cursor: 'default',
-    }}>
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: `linear-gradient(135deg, ${color}15 0%, transparent 65%)`,
-        pointerEvents: 'none',
-      }} />
+    <div className="relative overflow-hidden rounded-xl border bg-card p-[18px] flex-1">
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `linear-gradient(135deg, ${accentColor}15 0%, transparent 65%)` }}
+      />
       {trend && (
-        <div style={{
-          position: 'absolute', top: 14, right: 14,
-          background: trendUp ? C.greenBg : C.redBg,
-          color: trendUp ? C.green : C.red,
-          borderRadius: 100, padding: '2px 8px',
-          fontSize: 11, fontWeight: 700,
-        }}>{trend}</div>
+        <div className={cn(
+          'absolute top-3.5 right-3.5 rounded-full px-2 py-0.5 text-[11px] font-bold',
+          trendUp ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+        )}>
+          {trend}
+        </div>
       )}
       {icon && (
-        <div style={{
-          width: 34, height: 34, borderRadius: 9,
-          background: `${color}18`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          fontSize: 15, marginBottom: 12, position: 'relative',
-        }}>{icon}</div>
+        <div
+          className="w-8 h-8 rounded-lg flex items-center justify-center text-sm mb-3 relative"
+          style={{ background: `${accentColor}18` }}
+        >
+          {icon}
+        </div>
       )}
-      <div style={{
-        fontFamily: "'DM Sans', sans-serif",
-        fontSize: 26, fontWeight: 700,
-        letterSpacing: '-0.3px', lineHeight: 1,
-        color, marginBottom: 4, position: 'relative',
-      }}>{value}</div>
-      <div style={{
-        fontSize: 11, color: C.text2, fontWeight: 600,
-        textTransform: 'uppercase', letterSpacing: '0.06em',
-        position: 'relative',
-      }}>{label}</div>
+      <div
+        className="text-2xl font-bold tracking-tight leading-none mb-1 relative"
+        style={{ color: accentColor }}
+      >
+        {value}
+      </div>
+      <div className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wide relative">
+        {label}
+      </div>
     </div>
   );
 }
 
-export function Badge({ label, color = C.text2, bg = C.surface2 }) {
+export function Badge({ label, color, bg }) {
   return (
-    <span style={{ background: bg, color, borderRadius: 12, padding: '2px 10px',
-      fontSize: 11, fontWeight: 600, whiteSpace:'nowrap' }}>
+    <ShadBadge
+      variant="outline"
+      style={{
+        color,
+        backgroundColor: bg,
+        borderColor: color ? `${color}44` : undefined,
+      }}
+    >
       {label}
-    </span>
+    </ShadBadge>
   );
 }
 
-export function Btn({ children, onClick, variant='primary', size='md', disabled, style }) {
-  const p = size === 'sm' ? '6px 14px' : '9px 20px';
-  const fs = size === 'sm' ? 12 : 14;
-  const base = {
-    border: 'none', borderRadius: 9, fontWeight: 600,
-    cursor: disabled ? 'not-allowed' : 'pointer',
-    opacity: disabled ? 0.6 : 1,
-    fontFamily: 'inherit', display: 'inline-flex', alignItems: 'center', gap: 6,
-    ...style,
+export function Btn({ children, onClick, variant = 'primary', size = 'md', disabled, style }) {
+  const variantMap = {
+    primary:   'default',
+    secondary: 'outline',
+    accent:    'default',
+    danger:    'destructive',
+    success:   'outline',
+    warning:   'outline',
   };
-  const variants = {
-    primary:   { background: C.primary, color: '#fff', padding: p, fontSize: fs, boxShadow: '0 1px 3px rgba(0,0,0,.12), 0 3px 8px rgba(0,0,0,.08)' },
-    secondary: { background: C.surface2, color: C.text, border: `1.5px solid ${C.border}`, padding: p, fontSize: fs, boxShadow: '0 1px 2px rgba(0,0,0,.04)' },
-    accent:    { background: C.accent, color: '#fff', padding: p, fontSize: fs, boxShadow: '0 1px 3px rgba(0,0,0,.12)' },
-    danger:    { background: C.redBg, color: C.red, border: `1.5px solid ${C.red}44`, padding: p, fontSize: fs },
-    success:   { background: C.greenBg, color: C.green, border: `1.5px solid ${C.green}44`, padding: p, fontSize: fs },
-    warning:   { background: C.amberBg, color: C.amber, border: `1.5px solid ${C.amber}44`, padding: p, fontSize: fs },
-  };
-  return <button onClick={onClick} disabled={disabled} className="btn-lift" style={{ ...base, ...variants[variant] }}>{children}</button>;
+  const sizeMap = { sm: 'sm', md: 'default' };
+  return (
+    <Button
+      onClick={onClick}
+      disabled={disabled}
+      variant={variantMap[variant] || 'default'}
+      size={sizeMap[size] || 'default'}
+      style={style}
+      className={cn(
+        variant === 'accent' && 'bg-[var(--c-accent)] hover:bg-[var(--c-accent)]/90 text-white',
+        variant === 'success' && 'text-[var(--c-green)] border-[var(--c-green)] hover:bg-[var(--c-green-bg)]',
+        variant === 'warning' && 'text-[var(--c-amber)] border-[var(--c-amber)] hover:bg-[var(--c-amber-bg)]',
+      )}
+    >
+      {children}
+    </Button>
+  );
 }
 
 export function Input({ label, value, onChange, placeholder, type='text', style }) {
@@ -212,23 +222,30 @@ export function PageHeader({ title, subtitle, action, crumb }) {
 }
 
 export function statusBadge(estado) {
-  const map = {
-    'ACTIVO':   [C.green, C.greenBg],
-    'RETIRADO': [C.red,   C.redBg],
-    'SUSPENDIDO':[C.amber, C.amberBg],
-    'HOY':      [C.green, C.greenBg],
-    'VENCIDO':  [C.red,   C.redBg],
-    'PROXIMO':  [C.text2, C.surface2],
-    'COBRADO':  [C.blue,  C.blueBg],
-    'pagado':   [C.green, C.greenBg],
-    'pendiente':[C.amber, C.amberBg],
+  const configs = {
+    'ACTIVO':            { cls: 'bg-green-50 text-green-700 border-green-200',   dot: true },
+    'RETIRADO':          { cls: 'bg-red-50 text-red-700 border-red-200' },
+    'SUSPENDIDO':        { cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    'HOY':               { cls: 'bg-green-50 text-green-700 border-green-200' },
+    'VENCIDO':           { cls: 'bg-red-50 text-red-700 border-red-200' },
+    'PROXIMO':           { cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+    'COBRADO':           { cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+    'pagado':            { cls: 'bg-green-50 text-green-700 border-green-200' },
+    'pendiente':         { cls: 'bg-amber-50 text-amber-700 border-amber-200' },
+    'DOBLE_AFILIACION':  { cls: 'bg-purple-50 text-purple-700 border-purple-200' },
+    'NO_ENCONTRADO':     { cls: 'bg-gray-50 text-gray-500 border-gray-200' },
+    'EN_ESPERA':         { cls: 'bg-blue-50 text-blue-700 border-blue-200' },
   };
-  const key = Object.keys(map).find(k => (estado||'').toUpperCase().includes(k.toUpperCase())) || '';
-  const [color, bg] = map[key] || [C.text2, C.surface2];
-  const isActivo = (estado||'').toUpperCase() === 'ACTIVO';
+  const key = Object.keys(configs).find(k =>
+    (estado || '').toUpperCase().includes(k.toUpperCase())
+  ) || '';
+  const { cls = 'bg-gray-50 text-gray-500 border-gray-200', dot } = configs[key] || {};
   return (
-    <span style={{ display:'inline-flex', alignItems:'center', background:bg, color, borderRadius:100, padding:'2px 9px', fontSize:11, fontWeight:700, letterSpacing:'.3px', textTransform:'uppercase' }}>
-      {isActivo && <span className="status-dot-activo" />}
+    <span className={cn(
+      'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-medium border',
+      cls
+    )}>
+      {dot && <span className="w-1.5 h-1.5 rounded-full bg-current" />}
       {estado}
     </span>
   );
