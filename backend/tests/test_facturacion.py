@@ -124,11 +124,13 @@ def test_crear_retiro(client, admin_token):
 
 
 def test_retiro_duplicado(client, admin_token):
+    # Desde el cambio de flujo, al aplicar retiro el afiliado pasa directo a eliminados.
+    # Un segundo intento devuelve 404 porque ya no existe en activos.
     h = {"Authorization": f"Bearer {admin_token}"}
     r = client.post("/retiros", json={
         "doc": "666000111", "fecha": "2026-03-26", "motivo": "Renuncia", "obs": "",
     }, headers=h)
-    assert r.status_code == 400
+    assert r.status_code == 404
 
 
 def test_retiro_afiliado_inexistente(client, admin_token):

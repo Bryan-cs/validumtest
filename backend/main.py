@@ -8,6 +8,7 @@ load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sist
 
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 import os
 from datetime import datetime, timezone
@@ -241,6 +242,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 from routers import auth as auth_router
