@@ -6,6 +6,22 @@ APP_VERSION = "1.2.0"
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
+# ─── SENTRY ───────────────────────────────────────────────────────────────────
+import os as _os
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.sqlalchemy import SqlalchemyIntegration
+
+_sentry_dsn = _os.getenv("SENTRY_DSN")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        integrations=[FastApiIntegration(), SqlalchemyIntegration()],
+        traces_sample_rate=0.2,   # 20% de requests para performance
+        send_default_pii=False,   # no enviar datos personales
+        environment=_os.getenv("RAILWAY_ENVIRONMENT", "development"),
+    )
+
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
