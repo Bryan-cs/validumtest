@@ -21,10 +21,12 @@ api.interceptors.response.use(
   async err => {
     const originalRequest = err.config;
 
-    if (err.response?.status === 401 && !_redirigiendo && !originalRequest._retry) {
+    const esLoginRequest = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh');
+
+    if (err.response?.status === 401 && !esLoginRequest && !_redirigiendo && !originalRequest._retry) {
       // Intentar refresh token antes de redirigir
       const refreshToken = localStorage.getItem('refresh_token');
-      if (refreshToken && !originalRequest.url?.includes('/auth/login')) {
+      if (refreshToken) {
         originalRequest._retry = true;
         try {
           const resp = await axios.post(
