@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useQuery, useQueryClient, keepPreviousData } from '@tanstack/react-query';
 import { useReactTable, getCoreRowModel, getSortedRowModel, getPaginationRowModel, flexRender } from '@tanstack/react-table';
 import { toast } from 'sonner';
 import api from '../utils/api';
@@ -69,16 +69,23 @@ export default function Actividad() {
     queryKey: ['actividad', desde, hasta, modulo, usuario],
     queryFn: () => api.get('/actividad', { params: { desde, hasta, modulo, usuario, limit: 500 } }).then(r => r.data),
     refetchInterval: 120_000,
+    placeholderData: keepPreviousData,
   });
   const act = actRaw.items || actRaw;
 
+  // Reset page to 0 when any filter changes
+  useEffect(() => {
+    setActPagination(p => ({ ...p, pageIndex: 0 }));
+  }, [desde, hasta, modulo, usuario, buscar]);
+
   // Filtro local por texto libre
-  const filtradas = buscar.trim()
+  const filtradas = useMemo(() => buscar.trim()
     ? act.filter(a =>
         [a.usuario, a.accion, a.modulo, a.detalle, a.fecha]
           .join(' ').toLowerCase().includes(buscar.toLowerCase())
       )
-    : act;
+    : act,
+  [act, buscar]);
 
   const actColumns = useMemo(() => [
     {
@@ -144,7 +151,10 @@ export default function Actividad() {
   });
 
   // Usuarios únicos para el selector
-  const usuariosUnicos = [...new Set(act.map(a => a.usuario).filter(Boolean))].sort();
+  const usuariosUnicos = useMemo(
+    () => [...new Set(act.map(a => a.usuario).filter(Boolean))].sort(),
+    [act]
+  );
 
   const handleLimpiar = async () => {
     try {

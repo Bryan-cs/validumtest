@@ -538,6 +538,10 @@ export default function Afiliados() {
     return Math.floor((Date.now() - new Date(fechaStr).getTime()) / 86_400_000);
   }
   function arlAlerta(row) { return row.estado === 'activo' && diasDesdeArl(row.fecha_afiliacion) >= 25; }
+  function diasRestantesArl(row) {
+    if (!row.fecha_afiliacion || row.estado !== 'activo') return null;
+    return 30 - diasDesdeArl(row.fecha_afiliacion);
+  }
   function toggleTodosArl() { setArlSeleccionados(todosArlSel ? [] : segArlFiltrado.map(r => r.id)); }
   function toggleUnoArl(id) { setArlSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); }
   function abrirNuevoArl() {
@@ -1104,7 +1108,7 @@ export default function Afiliados() {
                   <th style={{ padding:'10px 12px', width:36 }}>
                     <input type="checkbox" checked={todosArlSel} onChange={toggleTodosArl} />
                   </th>
-                  {['Nombre','Documento','Cliente','Empresa','Fecha afiliación','Nivel ARL','Estado','Observaciones','Acciones'].map(h => (
+                  {['Nombre','Documento','Cliente','Empresa','Fecha afiliación','Días','Nivel ARL','Estado','Observaciones','Acciones'].map(h => (
                     <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
                       color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
                   ))}
@@ -1112,12 +1116,21 @@ export default function Afiliados() {
               </thead>
               <tbody>
                 {segArlFiltrado.length === 0 && (
-                  <tr><td colSpan={10} style={{ padding:30, textAlign:'center', color:C.text2 }}>
+                  <tr><td colSpan={11} style={{ padding:30, textAlign:'center', color:C.text2 }}>
                     No hay registros de seguimiento ARL
                   </td></tr>
                 )}
                 {segArlFiltrado.map(row => {
                   const alerta = arlAlerta(row);
+                  const restantes = diasRestantesArl(row);
+                  const restColor = restantes === null ? C.text2
+                    : restantes <= 0  ? C.red
+                    : restantes <= 5  ? C.amber
+                    : C.green;
+                  const restBg = restantes === null ? 'transparent'
+                    : restantes <= 0  ? C.redBg
+                    : restantes <= 5  ? C.amberBg
+                    : C.greenBg;
                   return (
                     <tr key={row.id} style={{ borderBottom:`1px solid ${C.border}`, background: alerta ? C.amberBg : C.surface }}>
                       <td style={{ ...tdc, width:36 }}>
@@ -1127,10 +1140,14 @@ export default function Afiliados() {
                       <td style={{ ...tdc, fontFamily:'monospace', fontSize:12 }}>{row.documento}</td>
                       <td style={tdc}>{row.cliente||'—'}</td>
                       <td style={tdc}>{row.empresa||'—'}</td>
-                      <td style={tdc}>
-                        <span>{row.fecha_afiliacion||'—'}</span>
-                        {alerta && <span style={{ marginLeft:6, fontSize:11, fontWeight:700, color:C.amber,
-                          background:C.amberBg, borderRadius:4, padding:'2px 6px' }}>⚠️ Vence pronto</span>}
+                      <td style={tdc}>{row.fecha_afiliacion||'—'}</td>
+                      <td style={{ ...tdc, textAlign:'center' }}>
+                        {restantes === null ? <span style={{ color:C.text2 }}>—</span>
+                          : <span style={{ fontSize:12, fontWeight:700, color:restColor, background:restBg,
+                              borderRadius:6, padding:'2px 8px', whiteSpace:'nowrap' }}>
+                              {restantes <= 0 ? `Vencido ${Math.abs(restantes)}d` : `${restantes}d`}
+                            </span>
+                        }
                       </td>
                       <td style={{ ...tdc, fontSize:12 }}>{row.nivel_arl||'N/A'}</td>
                       <td style={tdc}>{statusBadge(row.estado==='activo'?'ACTIVO':row.estado==='retirar'?'PENDIENTE DE RETIRAR':'RETIRADO')}</td>

@@ -303,7 +303,9 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
                 pass
 
         total_val    = fac.costos or 0
-        estado_color = colors.HexColor("#16A34A") if fac.estado == "pagado" else colors.HexColor("#DC2626")
+        es_pagada    = fac.estado in ("pagado", "planilla_pagada")
+        estado_color = colors.HexColor("#16A34A") if es_pagada else colors.HexColor("#DC2626")
+        estado_label = "PAGADA" if es_pagada else "PENDIENTE"
 
         c.setFillColor(row_bg[idx % 2])
         c.rect(50, y - 4, W - 100, 16, fill=1, stroke=0)
@@ -317,11 +319,11 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
         c.setFillColor(colors.black)
         c.drawString(col_x[3], y, money(total_val))
         c.setFillColor(estado_color)
-        c.drawString(col_x[4], y, str(fac.estado or '').upper()[:10])
+        c.drawString(col_x[4], y, estado_label)
         c.setFillColor(colors.black)
         c.drawString(col_x[5], y, str(fac.banco or '')[:12])
 
-        if fac.estado == "pagado":
+        if es_pagada:
             total_pagado += total_val
         else:
             total_pendiente += total_val
