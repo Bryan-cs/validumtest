@@ -174,22 +174,9 @@ async def lifespan(app: FastAPI):
         _db.close()
     except Exception:
         pass
-    # Tareas programadas de limpieza — solo iniciar en un worker
-    # Usa un lock en DB para evitar que múltiples workers ejecuten el scheduler
-    _should_schedule = True
-    if not _is_sqlite:
-        try:
-            from database import SessionLocal
-            from sqlalchemy import text
-            _sdb = SessionLocal()
-            # Intentar advisory lock de PostgreSQL (no bloqueante)
-            _got_lock = _sdb.execute(text("SELECT pg_try_advisory_lock(1)")).scalar()
-            _sdb.close()
-            _should_schedule = bool(_got_lock)
-        except Exception as _lock_err:
-            from logger import logger as _log
-            _log.warning(f"Advisory lock falló — scheduler no iniciado en este worker: {_lock_err}")
-            _should_schedule = False  # si falla el lock, NO iniciar (evita duplicados)
+    # Tareas programadas de limpieza — solo iniciar si ENABLE_SCHEDULER=true
+    # En Railway configurar esa variable en el servicio principal únicamente
+    _should_schedule = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
     if _should_schedule:
         try:
             from apscheduler.schedulers.background import BackgroundScheduler

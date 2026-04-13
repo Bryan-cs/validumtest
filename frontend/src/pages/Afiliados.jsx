@@ -110,6 +110,10 @@ export default function Afiliados() {
   const [pendingFiles, setPendingFiles] = useState([]);
 
   // Seguimiento ARL state
+  const [textoModal, setTextoModal] = useState(null); // { titulo, nombre, texto }
+  const [fechaDesde, setFechaDesde] = useState('');
+  const [fechaHasta, setFechaHasta] = useState('');
+
   const [arlFiltroCliente, setArlFiltroCliente] = useState('');
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
   const [arlBulkEstado, setArlBulkEstado] = useState('activo');
@@ -189,6 +193,7 @@ export default function Afiliados() {
     return () => document.removeEventListener('mousedown', handler);
   }, [colMenuOpen]);
 
+
   const clientesUnicos = useMemo(() => [...new Set(todos.map(a=>a.cliente_txt).filter(Boolean))].sort(), [todos]);
   const subtiposUnicos = useMemo(() => [...new Set(todos.map(a=>a.subtipo).filter(Boolean))].sort(), [todos]);
   const estadosOpts    = useMemo(() => [...new Set(todos.map(a=>a.estado_srv||a.estado).filter(Boolean))].sort(), [todos]);
@@ -204,8 +209,10 @@ export default function Afiliados() {
     if (filtros.subtipo.length  && !filtros.subtipo.includes(a.subtipo))               return false;
     if (filtros.tipo_doc.length && !filtros.tipo_doc.includes(a.tipo_doc||'CC'))       return false;
     if (filtros.ccf?.length     && !filtros.ccf.includes(a.ccf))                       return false;
+    if (fechaDesde && a.fecha_afiliacion && a.fecha_afiliacion < fechaDesde)           return false;
+    if (fechaHasta && a.fecha_afiliacion && a.fecha_afiliacion > fechaHasta)           return false;
     return true;
-  }), [fuenteDatos, busquedaDefer, filtros]);
+  }), [fuenteDatos, busquedaDefer, filtros, fechaDesde, fechaHasta]);
 
   const sugerenciasPagos = useMemo(() => busquedaPagos.length >= 2
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
@@ -286,23 +293,23 @@ export default function Afiliados() {
       accessorKey: 'novedades',
       header: 'Novedades',
       enableSorting: false,
-      cell: ({ row }) => (
-        <span style={{ fontSize: 13, color: C.text2, display: '-webkit-box',
-          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 160 }}>
-          {row.original.novedades || '—'}
+      cell: ({ row }) => row.original.novedades ? (
+        <span style={{ fontSize: 13, color: C.amber, fontWeight: 600, cursor: 'pointer',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 160 }}>
+          📝 {row.original.novedades}
         </span>
-      ),
+      ) : <span style={{ fontSize: 13, color: C.text2 }}>—</span>,
     },
     {
       accessorKey: 'detalle',
       header: 'Detalle',
       enableSorting: false,
-      cell: ({ row }) => (
-        <span style={{ fontSize: 13, color: C.blue, display: '-webkit-box',
-          WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 180 }}>
-          {row.original.detalle || '—'}
+      cell: ({ row }) => row.original.detalle ? (
+        <span style={{ fontSize: 13, color: C.blue, fontWeight: 600, cursor: 'pointer',
+          display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', maxWidth: 180 }}>
+          💬 {row.original.detalle}
         </span>
-      ),
+      ) : <span style={{ fontSize: 13, color: C.text2 }}>—</span>,
     },
     {
       id: 'acciones',
@@ -329,7 +336,7 @@ export default function Afiliados() {
         );
       },
     },
-  ], []);
+  ], [setTextoModal]);
 
   const table = useReactTable({
     data: dataFiltrada,
@@ -639,8 +646,23 @@ export default function Afiliados() {
               { key:'tipo_doc', label:'Tipo doc',  icon:'🪪', options: ['CC','CE','PT','PA','NIT'] },
               { key:'ccf',      label:'CCF',       icon:'🏦', options: listas.ccf||[] },
             ]}
-            valores={filtros} onChange={setFiltro} onLimpiar={limpiar}
+            valores={filtros} onChange={setFiltro} onLimpiar={() => { limpiar(); setFechaDesde(''); setFechaHasta(''); }}
           />
+          <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10, flexWrap:'wrap' }}>
+            <span style={{ fontSize:12, color:C.text2, fontWeight:600 }}>Afiliación:</span>
+            <input type="date" value={fechaDesde} onChange={e => { setFechaDesde(e.target.value); setPagina(1); }}
+              style={{ padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13,
+                background:C.surface, color:C.text, outline:'none' }} />
+            <span style={{ fontSize:12, color:C.text2 }}>—</span>
+            <input type="date" value={fechaHasta} onChange={e => { setFechaHasta(e.target.value); setPagina(1); }}
+              style={{ padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13,
+                background:C.surface, color:C.text, outline:'none' }} />
+            {(fechaDesde || fechaHasta) && (
+              <button onClick={() => { setFechaDesde(''); setFechaHasta(''); setPagina(1); }}
+                style={{ padding:'5px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:12,
+                  background:C.surface, color:C.text2, cursor:'pointer' }}>✕ Limpiar fecha</button>
+            )}
+          </div>
           <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
               <thead>
@@ -664,11 +686,18 @@ export default function Afiliados() {
                     style={{ borderBottom: `1px solid ${C.border}`, transition:'background .1s' }}
                     onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
                     onMouseLeave={e=>e.currentTarget.style.background=''}>
-                    {row.getVisibleCells().map(cell => (
-                      <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}>
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                      </td>
-                    ))}
+                    {row.getVisibleCells().map(cell => {
+                      const val = cell.column.id === 'novedades' ? row.original.novedades
+                                : cell.column.id === 'detalle'   ? row.original.detalle
+                                : null;
+                      return (
+                        <td key={cell.id} style={{ padding: '8px 12px', fontSize: 13 }}
+                          onClick={val ? () => setTextoModal({ titulo: cell.column.id === 'novedades' ? 'Novedades' : 'Detalle', nombre: row.original.nombre, texto: val }) : undefined}
+                        >
+                          {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        </td>
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -1000,16 +1029,22 @@ export default function Afiliados() {
                       ) : <span style={{ fontSize:11,color:C.text2 }}>—</span>}
                     </td>
                     <td style={{ ...tdc,maxWidth:160 }}>
-                      <span style={{ fontSize:11,color:C.text2,display:'-webkit-box',
-                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                        {a.novedades||'—'}
-                      </span>
+                      {a.novedades ? (
+                        <span onClick={() => setTextoModal({ titulo:'Novedades', nombre:a.nombre, texto:a.novedades })}
+                          style={{ fontSize:11,color:C.amber,fontWeight:600,cursor:'pointer',display:'-webkit-box',
+                            WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+                          📝 {a.novedades}
+                        </span>
+                      ) : <span style={{ fontSize:11,color:C.text2 }}>—</span>}
                     </td>
                     <td style={{ ...tdc,maxWidth:180 }}>
-                      <span style={{ fontSize:11,color:C.blue,display:'-webkit-box',
-                        WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
-                        {a.detalle||'—'}
-                      </span>
+                      {a.detalle ? (
+                        <span onClick={() => setTextoModal({ titulo:'Detalle', nombre:a.nombre, texto:a.detalle })}
+                          style={{ fontSize:11,color:C.blue,fontWeight:600,cursor:'pointer',display:'-webkit-box',
+                            WebkitLineClamp:2,WebkitBoxOrient:'vertical',overflow:'hidden' }}>
+                          💬 {a.detalle}
+                        </span>
+                      ) : <span style={{ fontSize:11,color:C.text2 }}>—</span>}
                     </td>
                     <td style={tdc}>
                       <div style={{ display:'flex',gap:4 }}>
@@ -1319,6 +1354,31 @@ export default function Afiliados() {
         </div>
       </Modal>
 
+      {/* Overlay texto completo (novedades / detalle) — sin Radix, sin click-outside issues */}
+      {textoModal && (
+        <div
+          style={{ position:'fixed', inset:0, zIndex:9999, background:'rgba(0,0,0,0.55)',
+            display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}
+          onClick={() => setTextoModal(null)}
+        >
+          <div
+            style={{ background:C.surface, borderRadius:14, padding:'24px 28px', maxWidth:540,
+              width:'100%', maxHeight:'80vh', overflowY:'auto', position:'relative',
+              boxShadow:'0 8px 40px rgba(0,0,0,0.3)', border:`1px solid ${C.border}` }}
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontWeight:700, fontSize:16, marginBottom:16, color:C.text, paddingRight:28 }}>
+              {textoModal.titulo === 'Novedades' ? '📝' : '💬'} {textoModal.titulo} — {textoModal.nombre}
+            </div>
+            <p style={{ margin:0, fontSize:14, color:C.text, lineHeight:1.6, whiteSpace:'pre-wrap' }}>
+              {textoModal.texto}
+            </p>
+            <button onClick={() => setTextoModal(null)}
+              style={{ position:'absolute', top:14, right:18, background:'none', border:'none',
+                cursor:'pointer', fontSize:20, color:C.text2, lineHeight:1, padding:0 }}>✕</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

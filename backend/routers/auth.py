@@ -79,8 +79,15 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
         _set_attempts(db, ip, rec["count"] + 1, now)
         logger.warning(f"Login fallido para '{data.username}' desde IP {ip} (intento {rec['count']+1})")
         raise HTTPException(status_code=401, detail=_generic_error)
-    # Login exitoso — limpiar intentos fallidos
+    # Login exitoso — limpiar intentos fallidos y registros expirados
     _clear_attempts(db, ip)
+    db.query(models.TokenBlacklist).filter(
+        models.TokenBlacklist.expires_at < datetime.now(timezone.utc)
+    ).delete()
+    db.query(models.LoginAttempt).filter(
+        models.LoginAttempt.last_attempt < now - _BLOCK_WINDOW
+    ).delete()
+    db.commit()
 
     # Migrar passwords en texto plano a bcrypt
     if user.password and not user.password.startswith("$2"):

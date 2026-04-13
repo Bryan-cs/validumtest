@@ -477,12 +477,14 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     filtros.anio.length > 1 || filtros.mes.length > 1 ||
     filtros.cliente.length > 1 || filtros.estado.length > 1;
 
-  // Si hay filtros activos, traer todos y filtrar localmente; si no, paginar
+  // Con mes seleccionado: traer todos del mes y filtrar localmente (dataset acotado)
+  // Sin mes: siempre paginar en servidor aunque haya otros filtros activos
+  const hayMes = !!mesB;
   const { data: respF={total:0,items:[]}, isLoading } = useQuery({
     queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros],
-    queryFn: () => api.get('/facturas', { params: hayFiltros
+    queryFn: () => api.get('/facturas', { params: hayFiltros && hayMes
       ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0 }
-      : { skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F }
+      : { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F }
     }).then(r=>r.data),
     placeholderData: (prev) => prev,
   });
