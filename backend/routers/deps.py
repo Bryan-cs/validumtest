@@ -15,7 +15,7 @@ if _is_production and (not SECRET_KEY or SECRET_KEY in _INSECURE_KEYS):
 if not SECRET_KEY:
     SECRET_KEY = "dev-only-key-do-not-use-in-prod"
 ALGORITHM  = "HS256"
-TOKEN_EXPIRE_HOURS = 12
+TOKEN_EXPIRE_MINUTES = 15          # access token de corta duración
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 security = HTTPBearer()
@@ -81,7 +81,7 @@ def is_token_blacklisted(jti: str) -> bool:
 def create_token(data: dict, expires: timedelta = None):
     payload = data.copy()
     if expires is None:
-        expires = timedelta(hours=TOKEN_EXPIRE_HOURS)
+        expires = timedelta(minutes=TOKEN_EXPIRE_MINUTES)
     payload["exp"] = datetime.now(timezone.utc) + expires
     payload["jti"] = str(uuid.uuid4())  # ID único por token
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)

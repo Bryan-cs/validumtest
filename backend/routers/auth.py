@@ -114,48 +114,68 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
 @router.post("/refresh")
 @_limiter.limit("10/minute")
 def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
-    """Obtiene un nuevo access token usando el refresh token."""
+    """Obtiene nuevos tokens usando el refresh token (con rotation obligatoria)."""
+    ip = _get_ip(request)
     try:
         payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Token no es de tipo refresh")
     except jwt.ExpiredSignatureError:
+        logger.info(f"token_refresh_expired: ip={ip}")
         raise HTTPException(status_code=401, detail="Refresh token expirado")
     except jwt.InvalidTokenError:
+        logger.warning(f"token_refresh_invalid: ip={ip}")
         raise HTTPException(status_code=401, detail="Refresh token inválido")
 
-    # Verificar que el refresh token no esté en la blacklist (logout explícito)
-    if is_token_blacklisted(payload.get("jti")):
+    jti = payload.get("jti")
+    sub = payload.get("sub", "")
+
+    # Verificar que el refresh token no esté en la blacklist (logout o rotation anterior)
+    if is_token_blacklisted(jti):
+        logger.warning(f"token_refresh_blacklisted: usuario={sub} ip={ip} jti={str(jti)[:8]}...")
         raise HTTPException(status_code=401, detail="Token invalidado — inicia sesión nuevamente")
 
     # Verificar que el usuario siga activo
-    user = crud.get_user_by_username(db, payload.get("sub", ""))
+    user = crud.get_user_by_username(db, sub)
     if not user or not user.activo:
+        logger.warning(f"token_refresh_inactive_user: usuario={sub} ip={ip}")
         raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")
 
-    claims = {"sub": payload["sub"], "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
+    # Rotation: invalidar el refresh token usado antes de emitir uno nuevo
+    if jti:
+        expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
+        existing = db.query(models.TokenBlacklist).filter_by(jti=jti).first()
+        if not existing:
+            db.add(models.TokenBlacklist(jti=jti, expires_at=expires_at))
+            db.commit()
+
+    claims = {"sub": user.username, "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
     new_access = create_token(claims)
     new_refresh = create_token(
         {**claims, "type": "refresh"},
         expires=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
+    logger.info(f"token_refresh_ok: usuario={sub} ip={ip}")
     return {"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"}
 
 
 @router.post("/logout")
-def logout(body: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
+def logout(request: Request, body: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
     """Invalida el refresh token — impide renovar el access token tras cerrar sesión."""
+    ip = _get_ip(request)
     try:
         payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
         jti = payload.get("jti")
+        sub = payload.get("sub", "desconocido")
         if jti:
             expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
             existing = db.query(models.TokenBlacklist).filter_by(jti=jti).first()
             if not existing:
                 db.add(models.TokenBlacklist(jti=jti, expires_at=expires_at))
                 db.commit()
+        logger.info(f"logout_ok: usuario={sub} ip={ip}")
     except Exception as _e:
-        logger.warning(f"logout: no se pudo blacklistear token: {_e}")
+        logger.warning(f"logout_warn: no se pudo blacklistear token ip={ip}: {_e}")
     return {"ok": True}
 
 

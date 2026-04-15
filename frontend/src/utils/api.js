@@ -34,7 +34,10 @@ api.interceptors.response.use(
             { refresh_token: refreshToken }
           );
           const newToken = resp.data.access_token;
+          const newRefresh = resp.data.refresh_token;
           localStorage.setItem('token', newToken);
+          // Rotation: guardar el nuevo refresh token (el anterior queda invalidado en el backend)
+          if (newRefresh) localStorage.setItem('refresh_token', newRefresh);
           // Actualizar Zustand store si está disponible
           try {
             const mod = await import('../hooks/useAuth');

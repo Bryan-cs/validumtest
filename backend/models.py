@@ -352,12 +352,12 @@ class AvisoCliente(Base):
 
 
 class TokenBlacklist(Base):
-    """Refresh tokens invalidados explícitamente (logout)."""
+    """Refresh tokens invalidados explícitamente (logout o rotation)."""
     __tablename__ = "token_blacklist"
     id         = Column(Integer, primary_key=True, index=True)
-    jti        = Column(String(64), unique=True, index=True)  # JWT ID único
-    expires_at = Column(DateTime)                              # para limpieza automática
-    creado     = Column(DateTime, default=_utcnow)
+    jti        = Column(String(64), unique=True, index=True)        # JWT ID único
+    expires_at = Column(DateTime(timezone=True))                    # timezone=True evita bugs de comparación en PostgreSQL
+    creado     = Column(DateTime(timezone=True), default=_utcnow)
 
 class SeguimientoArl(Base):
     __tablename__ = "seguimiento_arl"
