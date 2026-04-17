@@ -19,22 +19,52 @@ const PALETTES = [
   { id: 'slate',    label: 'Slate',      dot: '#475569' },
 ];
 
-const navItems = (rol) => [
-  { to: '/',            label: '🏠 Dashboard',           section: 'PRINCIPAL' },
-  { to: '/afiliados',   label: '👥 Afiliados',            section: 'GESTIÓN' },
-  { to: '/retiros',     label: '↪️ Retiros',               section: null },
-  { to: '/tareas',      label: '✅ Tareas',                section: null },
-  { to: '/facturacion', label: '🧾 Facturación',           section: 'FINANCIERO' },
-  { to: '/cobro',       label: '💰 Módulo de cobro',       section: null },
-  { to: '/planillas-ss', label: '📋 Planillas SS',          section: null },
+const navGroups = (rol) => [
+  {
+    id: 'principal',
+    label: null,
+    items: [
+      { to: '/', label: '🏠 Dashboard' },
+    ],
+  },
+  {
+    id: 'operaciones',
+    label: 'OPERACIONES',
+    items: [
+      { to: '/afiliados',   label: '👥 Afiliados' },
+      { to: '/retiros',     label: '↪️ Retiros' },
+      { to: '/tareas',      label: '✅ Tareas' },
+      ...(rol === 'admin' ? [{ to: '/empleados', label: '👔 Empleados' }] : []),
+    ],
+  },
+  {
+    id: 'finanzas',
+    label: 'FINANZAS',
+    items: [
+      { to: '/facturacion',  label: '🧾 Facturación' },
+      { to: '/cobro',        label: '💰 Cobro' },
+      { to: '/planillas-ss', label: '📋 Planillas SS' },
+    ],
+  },
   ...(rol === 'admin' ? [
-    { to: '/empleados',          label: '👔 Empleados',           section: 'ADMINISTRACIÓN' },
-    { to: '/usuarios',           label: '⚙️ Usuarios',             section: null },
-    { to: '/listas',             label: '📋 Listas y opciones',   section: null },
-    { to: '/calculadora',        label: '🧮 Calculadora aportes', section: null },
-    { to: '/actividad',          label: '📜 Registro actividad',  section: null },
-    { to: '/novedades-clientes', label: '📬 Novedades clientes',  section: null },
-    { to: '/backups',            label: '💾 Backups',              section: null },
+    {
+      id: 'configuracion',
+      label: 'CONFIGURACIÓN',
+      items: [
+        { to: '/usuarios',           label: '⚙️ Usuarios' },
+        { to: '/listas',             label: '📋 Listas' },
+        { to: '/calculadora',        label: '🧮 Calculadora' },
+        { to: '/novedades-clientes', label: '📬 Novedades clientes' },
+        { to: '/backups',            label: '💾 Backups' },
+      ],
+    },
+    {
+      id: 'gestion',
+      label: 'GESTIÓN',
+      items: [
+        { to: '/actividad', label: '📜 Actividad' },
+      ],
+    },
   ] : []),
 ];
 
@@ -118,9 +148,21 @@ export default function Layout() {
     };
   }, []);
 
+  const [collapsedGroups, setCollapsedGroups] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sb-collapsed-groups') || '{}'); }
+    catch { return {}; }
+  });
+  const toggleGroup = useCallback((id) => {
+    setCollapsedGroups(prev => {
+      const next = { ...prev, [id]: !prev[id] };
+      localStorage.setItem('sb-collapsed-groups', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const handleLogout = useCallback(async () => { await logout(); navigate('/login'); }, [logout, navigate]);
   const { showWarning, extender } = useInactivity(handleLogout);
-  const items = navItems(user?.rol);
+  const groups = navGroups(user?.rol);
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
@@ -188,34 +230,58 @@ export default function Layout() {
 
         {/* Nav */}
         <nav style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', paddingBottom: 12 }}>
-          {items.map((item) => (
-            <React.Fragment key={item.to}>
-              {item.section && !collapsed && (
-                <div style={{ fontSize: 9.5, color: '#4B5563', padding: '14px 18px 5px', fontWeight: 700, letterSpacing: '.15em', whiteSpace: 'nowrap', display:'flex', alignItems:'center', gap:8 }}>
-                  {item.section}
-                  <span style={{ flex:1, height:1, background:'#1F2937', borderTop: '1px solid #1F2937' }} />
-                </div>
-              )}
-              <NavLink to={item.to} end={item.to === '/'}
-                title={collapsed ? item.label : undefined}
-                className={({ isActive }) => ['sb-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
-                style={({ isActive }) => ({
-                  display: 'flex', alignItems: 'center', position: 'relative',
-                  padding: collapsed ? '10px 0' : '9px 10px',
-                  margin: '1px 8px', borderRadius: 9, textDecoration: 'none', fontSize: 13,
-                  color: isActive ? '#F9FAFB' : '#9CA3AF',
-                  background: isActive ? '#1F2937' : 'transparent',
-                  fontWeight: isActive ? 600 : 400,
-                  justifyContent: collapsed ? 'center' : 'flex-start',
-                  whiteSpace: 'nowrap', overflow: 'hidden',
-                })}>
-                <span style={{ fontSize: collapsed ? 15 : 13, flexShrink: 0 }}>
-                  {item.label.split(' ')[0]}
-                </span>
-                {!collapsed && <span style={{ marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.label.split(' ').slice(1).join(' ')}</span>}
-              </NavLink>
-            </React.Fragment>
-          ))}
+          {groups.map((group) => {
+            const isGroupCollapsed = !collapsed && !!collapsedGroups[group.id];
+            return (
+              <React.Fragment key={group.id}>
+                {/* Group header */}
+                {group.label && !collapsed && (
+                  <button
+                    onClick={() => toggleGroup(group.id)}
+                    style={{
+                      width: '100%', background: 'none', border: 'none', cursor: 'pointer',
+                      fontSize: 9.5, color: '#6B7280', padding: '14px 18px 5px',
+                      fontWeight: 700, letterSpacing: '.15em', whiteSpace: 'nowrap',
+                      display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
+                    }}
+                  >
+                    {group.label}
+                    <span style={{ flex: 1, height: 1, borderTop: '1px solid #1F2937' }} />
+                    <span style={{ fontSize: 8, color: '#4B5563', transition: 'transform .2s', display: 'inline-block', transform: isGroupCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)' }}>▼</span>
+                  </button>
+                )}
+                {/* Collapsed sidebar: thin separator between groups */}
+                {group.label && collapsed && (
+                  <div style={{ margin: '6px 10px', borderTop: '1px solid #1F2937' }} />
+                )}
+                {/* Group items */}
+                {!isGroupCollapsed && group.items.map((item) => (
+                  <NavLink key={item.to} to={item.to} end={item.to === '/'}
+                    title={collapsed ? item.label : undefined}
+                    className={({ isActive }) => ['sb-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
+                    style={({ isActive }) => ({
+                      display: 'flex', alignItems: 'center', position: 'relative',
+                      padding: collapsed ? '10px 0' : '9px 10px',
+                      margin: '1px 8px', borderRadius: 9, textDecoration: 'none', fontSize: 13,
+                      color: isActive ? '#F9FAFB' : '#9CA3AF',
+                      background: isActive ? '#1F2937' : 'transparent',
+                      fontWeight: isActive ? 600 : 400,
+                      justifyContent: collapsed ? 'center' : 'flex-start',
+                      whiteSpace: 'nowrap', overflow: 'hidden',
+                    })}>
+                    <span style={{ fontSize: collapsed ? 15 : 13, flexShrink: 0 }}>
+                      {item.label.split(' ')[0]}
+                    </span>
+                    {!collapsed && (
+                      <span style={{ marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        {item.label.split(' ').slice(1).join(' ')}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+              </React.Fragment>
+            );
+          })}
         </nav>
 
         {/* Notificaciones */}

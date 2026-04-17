@@ -21,6 +21,12 @@ export default function Dashboard() {
     refetchInterval: 120_000,
   });
 
+  const { data: recientes = [] } = useQuery({
+    queryKey: ['afiliados-recientes'],
+    queryFn: () => api.get('/afiliados/recientes').then(r => r.data),
+    refetchInterval: 30_000,
+  });
+
   const sel = { padding:'7px 12px', border:`1px solid ${C.border}`, borderRadius:7,
     fontSize:13, outline:'none', background:C.surface, color:C.text };
 
@@ -75,6 +81,42 @@ export default function Dashboard() {
               icon={(d?.utilidad_neta ?? 0) >= 0 ? '📈' : '📉'} />
           </>
         }
+      </div>
+
+      {/* Últimos afiliados */}
+      <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: C.text2, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 14 }}>
+          👥 Últimos afiliados
+        </div>
+        {recientes.length === 0 ? (
+          <p style={{ color: C.text2, fontSize: 13, margin: 0 }}>Sin datos</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {recientes.map(a => (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: '50%',
+                  background: C.surface2, border: `1px solid ${C.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 13, fontWeight: 700, color: C.primary, flexShrink: 0,
+                }}>
+                  {a.nombre?.charAt(0)?.toUpperCase() ?? '?'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {a.nombre}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.text2 }}>
+                    {a.doc}{a.empresa ? ` · ${a.empresa}` : ''}
+                  </div>
+                </div>
+                <div style={{ fontSize: 11, color: C.text2, flexShrink: 0 }}>
+                  {a.creado ? new Date(a.creado).toLocaleDateString('es-CO', { day:'2-digit', month:'short' }) : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

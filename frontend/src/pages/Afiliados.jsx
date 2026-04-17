@@ -394,22 +394,28 @@ export default function Afiliados() {
         fecha_afiliacion: form.fecha_afiliacion || new Date().toISOString().slice(0,10),
       };
       const res = modal==='nuevo' ? await api.post('/afiliados',payload) : await api.put(`/afiliados/${modal.id}`,payload);
-      const doc = res.data?.doc || form.doc;
-      if (pendingFiles.length > 0 && doc) {
-        await Promise.all(pendingFiles.map(file => {
-          const { fd } = buildUploadForm(file, { afiliado_doc: doc, contexto: 'afiliado' });
-          return api.post('/documentos', fd);
-        }));
-      }
       return res;
     },
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       toast.success(modal==='nuevo'?'Afiliado registrado':'Actualizado');
-      if (pendingFiles.length > 0) toast.success(`${pendingFiles.length} documento(s) adjuntado(s)`);
+      // Subir documentos DESPUÉS de invalidar caché — error de docs no cancela el guardado
+      const doc = res.data?.doc || form.doc;
+      if (pendingFiles.length > 0 && doc) {
+        try {
+          await Promise.all(pendingFiles.map(file => {
+            const { fd } = buildUploadForm(file, { afiliado_doc: doc, contexto: 'afiliado' });
+            return api.post('/documentos', fd);
+          }));
+          toast.success(`${pendingFiles.length} documento(s) adjuntado(s)`);
+        } catch {
+          toast.error('Afiliado guardado. Error al subir documentos, intenta de nuevo.');
+        }
+      }
       if (modal === 'nuevo') {
         // invalidateQueries para ['afiliados'] (paginado): no sabemos en qué página aparece el nuevo registro
         qc.invalidateQueries({ queryKey: ['afiliados'] });
         qc.invalidateQueries({ queryKey: ['afiliados-filter-options'] });
+        qc.invalidateQueries({ queryKey: ['afiliados-recientes'] });
         qc.setQueryData(['afiliados_all'], prev => [res.data, ...(prev || [])]);
       } else {
         qc.setQueriesData({ queryKey: ['afiliados'] }, prev =>

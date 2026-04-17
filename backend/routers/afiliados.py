@@ -20,6 +20,29 @@ def filter_options(db: Session = Depends(get_db), token=Depends(verify_token)):
     return crud.get_afiliados_filter_options(db)
 
 
+@router.get("/recientes")
+def afiliados_recientes(db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Últimos 5 afiliados activos por fecha de creación."""
+    rows = (
+        db.query(models.Afiliado)
+        .filter(models.Afiliado.activo == True)
+        .order_by(models.Afiliado.creado.desc())
+        .limit(5)
+        .all()
+    )
+    return [
+        {
+            "id": a.id,
+            "nombre": a.nombre,
+            "doc": a.doc,
+            "empresa": a.empresa,
+            "eps": a.eps,
+            "creado": a.creado.isoformat() if a.creado else None,
+        }
+        for a in rows
+    ]
+
+
 @router.get("")
 def list_afiliados(
     q: str = "", estado: str = "", empresa: str = "",
