@@ -2,7 +2,7 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
-import api from '../utils/api';
+import api, { buildUploadForm } from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -210,11 +210,11 @@ function ModalNovedadPago({ seleccionados, afiliados, onClose, onSuccess }) {
       if (archivos.length > 0 && novId) {
         setSubiendo(true);
         await Promise.all(archivos.map(file => {
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('afiliado_doc', seleccionados[0] || '');
-          fd.append('contexto', 'novedad_pago');
-          fd.append('contexto_id', String(novId));
+          const { fd } = buildUploadForm(file, {
+            afiliado_doc: seleccionados[0] || '',
+            contexto: 'novedad_pago',
+            contexto_id: String(novId),
+          });
           return api.post('/documentos', fd);
         }));
         setSubiendo(false);
@@ -319,11 +319,11 @@ function ModalNovedadAfiliado({ afiliado, onClose, onSuccess }) {
       if (archivos.length > 0 && novId) {
         setSubiendo(true);
         await Promise.all(archivos.map(file => {
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('afiliado_doc', afiliado.doc);
-          fd.append('contexto', 'novedad_afil');
-          fd.append('contexto_id', String(novId));
+          const { fd } = buildUploadForm(file, {
+            afiliado_doc: afiliado.doc,
+            contexto: 'novedad_afil',
+            contexto_id: String(novId),
+          });
           return api.post('/documentos', fd);
         }));
         setSubiendo(false);

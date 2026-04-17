@@ -126,28 +126,52 @@ def reporte_financiero(
     ws.title = "Facturación"
     cols = ["#", "Código", "Afiliado", "Documento", "Empresa", "Subtipo", "Servicios",
             "Cliente", "Mes", "Año", "Período (días)", "Ingresos", "Planilla", "Costo Adm.",
-            "Utilidad", "Banco", "Estado"]
+            "Utilidad", "Banco", "Estado", "Fecha pago"]
     _hdr_style(ws, cols)
     tot_ing = tot_plan = tot_util = 0
+    docs_con_factura = set()
     for i, f in enumerate(items, 1):
         emp, sub = afil_map.get(f.get("doc"), ("", ""))
         servicios_txt = ", ".join(s["servicio"] for s in (f.get("servicios_detalle") or []) if s.get("servicio"))
+        _fp = f.get("pagado_en") or ""
+        if _fp and len(_fp) >= 10:
+            _d = _fp[:10].split("-")  # YYYY-MM-DD → DD/MM/YYYY
+            fecha_pago = f"{_d[2]}/{_d[1]}/{_d[0]}" if len(_d) == 3 else _fp[:10]
+        else:
+            fecha_pago = ""
         ws.append([i, f.get("codigo"), f.get("nombre_afiliado"), f.get("doc"),
                    emp, sub, servicios_txt,
                    f.get("cliente"), f.get("mes"), f.get("anio"), f.get("periodo"),
                    f.get("ingresos", 0), f.get("costos", 0), f.get("costo_adm", 0),
-                   f.get("utilidad", 0), f.get("banco"), f.get("estado")])
+                   f.get("utilidad", 0), f.get("banco"), f.get("estado"), fecha_pago])
         tot_ing += f.get("ingresos", 0) or 0
         tot_plan += f.get("costos", 0) or 0
         tot_util += f.get("utilidad", 0) or 0
+        if f.get("doc"):
+            docs_con_factura.add(f["doc"])
     last = ws.max_row + 1
     ws.cell(last, 1, "TOTAL")
     ws.cell(last, 1).font = Font(bold=True)
     ws.cell(last, 12, tot_ing).font = Font(bold=True)
     ws.cell(last, 13, tot_plan).font = Font(bold=True)
     ws.cell(last, 15, tot_util).font = Font(bold=True)
+
+    # ── Sección: Afiliados sin factura en el período ──
+    afiliados_activos = db.query(models.Afiliado).filter_by(activo=True).order_by(models.Afiliado.nombre).all()
+    sin_factura = [a for a in afiliados_activos if a.doc not in docs_con_factura]
+    if sin_factura:
+        periodo_label = f"{mes} {anio}".strip() if (mes or anio) else "el período"
+        sep_row = ws.max_row + 2
+        ws.cell(sep_row, 1, f"AFILIADOS SIN FACTURA EN {periodo_label.upper()}").font = Font(bold=True, size=12, color="DC2626")
+        hdr_row = sep_row + 1
+        sin_cols = ["#", "Nombre", "Documento", "Empresa", "Subtipo", "EPS", "ARL", "Estado"]
+        _hdr_style(ws, sin_cols, row=hdr_row)
+        for j, a in enumerate(sin_factura, 1):
+            ws.append([j, a.nombre, a.doc, a.empresa or "", a.subtipo or "",
+                       a.eps or "", a.arl or "", a.estado_srv or a.estado or ""])
+
     for col in ws.columns:
-        ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
+        ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 14)
     return _xlsx_response(wb, f"financiero{'_'+anio if anio else ''}{'_'+mes if mes else ''}.xlsx")
 
 

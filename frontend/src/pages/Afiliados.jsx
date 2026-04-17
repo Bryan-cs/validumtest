@@ -2,7 +2,7 @@ import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react'
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../components/ui/tooltip';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import api from '../utils/api';
+import api, { buildUploadForm } from '../utils/api';
 import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 import useAuthStore from '../hooks/useAuth';
@@ -10,7 +10,6 @@ import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
-  getPaginationRowModel,
   flexRender,
 } from '@tanstack/react-table';
 
@@ -137,21 +136,57 @@ export default function Afiliados() {
   const [colMenuOpen, setColMenuOpen] = useState(false);
 
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
-  // Sin paginación: para filtros y exportaciones (no necesita polling cada 10s)
-  const { data: todos=[] } = useQuery({
-    queryKey:['afiliados_all'],
-    queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]),
-    refetchInterval: false,
-    staleTime: 60_000,
+
+  // Opciones de filtros — endpoint ligero, cacheado en backend (no carga datos de afiliados)
+  const { data: filterOpts={} } = useQuery({
+    queryKey:['afiliados-filter-options'],
+    queryFn:()=>api.get('/afiliados/filter-options').then(r=>r.data),
+    staleTime: 120_000,
   });
-  // Con paginación: para la tabla principal
+
+  // Debounce búsqueda: evita recalcular en cada keystroke
+  const [busquedaDefer, setBusquedaDefer] = useState('');
+  const timerRef = useRef(null);
+  useEffect(() => {
+    timerRef.current = setTimeout(() => {
+      setBusquedaDefer(busqueda);
+      setPagina(1);
+      setTablePagination(p => ({ ...p, pageIndex: 0 }));
+    }, 300);
+    return () => clearTimeout(timerRef.current);
+  }, [busqueda]);
+
+  // Construir params con filtros multi-valor (CSV) para el backend
+  const filterParams = useMemo(() => {
+    const p = {};
+    if (busquedaDefer) p.q = busquedaDefer;
+    if (filtros.estado.length)   p.estado   = filtros.estado.join(',');
+    if (filtros.empresa.length)  p.empresa  = filtros.empresa.join(',');
+    if (filtros.cliente.length)  p.cliente  = filtros.cliente.join(',');
+    if (filtros.subtipo.length)  p.subtipo  = filtros.subtipo.join(',');
+    if (filtros.tipo_doc.length) p.tipo_doc = filtros.tipo_doc.join(',');
+    if (filtros.ccf?.length)     p.ccf      = filtros.ccf.join(',');
+    return p;
+  }, [busquedaDefer, filtros]);
+
+  // Query ÚNICA paginada — filtros van al backend como CSV
   const { data: resp={total:0,items:[]}, isLoading } = useQuery({
-    queryKey:['afiliados', pagina, tablePagination.pageSize],
-    queryFn:()=>api.get('/afiliados', { params:{ skip:(pagina-1)*tablePagination.pageSize, limit:tablePagination.pageSize } }).then(r=>r.data),
+    queryKey:['afiliados', pagina, tablePagination.pageSize, filterParams],
+    queryFn:()=>api.get('/afiliados', { params:{ ...filterParams, skip:(pagina-1)*tablePagination.pageSize, limit:tablePagination.pageSize } }).then(r=>r.data),
     placeholderData: (prev) => prev,
   });
   const data     = resp.items || [];
   const totalReg = resp.total || 0;
+
+  // `todos` ligero — solo se carga bajo demanda para tabs de Pagos/Documentos (autocompletar)
+  const [todosNeeded, setTodosNeeded] = useState(false);
+  const { data: todos=[] } = useQuery({
+    queryKey:['afiliados_all'],
+    queryFn:()=>api.get('/afiliados').then(r=>r.data.items||[]),
+    enabled: todosNeeded,
+    staleTime: 120_000,
+    refetchInterval: false,
+  });
   const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data?.items||r.data), enabled: esAdmin });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
@@ -177,14 +212,6 @@ export default function Afiliados() {
   });
   const segArlData = qSegArl.data || [];
 
-  // Debounce búsqueda: evita recalcular en cada keystroke
-  const [busquedaDefer, setBusquedaDefer] = useState('');
-  const timerRef = useRef(null);
-  useEffect(() => {
-    timerRef.current = setTimeout(() => setBusquedaDefer(busqueda), 300);
-    return () => clearTimeout(timerRef.current);
-  }, [busqueda]);
-
   // Cerrar menú de columnas al click fuera
   useEffect(() => {
     if (!colMenuOpen) return;
@@ -194,25 +221,22 @@ export default function Afiliados() {
   }, [colMenuOpen]);
 
 
-  const clientesUnicos = useMemo(() => [...new Set(todos.map(a=>a.cliente_txt).filter(Boolean))].sort(), [todos]);
-  const subtiposUnicos = useMemo(() => [...new Set(todos.map(a=>a.subtipo).filter(Boolean))].sort(), [todos]);
-  const estadosOpts    = useMemo(() => [...new Set(todos.map(a=>a.estado_srv||a.estado).filter(Boolean))].sort(), [todos]);
+  // Opciones de filtros desde endpoint ligero (no requiere cargar todos los afiliados)
+  const clientesUnicos = filterOpts.clientes || [];
+  const subtiposUnicos = filterOpts.subtipos || [];
+  const estadosOpts    = filterOpts.estados  || [];
 
   const hayFiltrosActivos = busquedaDefer || Object.values(filtros).some(v => v.length > 0);
-  const fuenteDatos = hayFiltrosActivos ? todos : data;
-  const dataFiltrada = useMemo(() => fuenteDatos.filter(a => {
-    const q = busquedaDefer.toLowerCase();
-    if (busquedaDefer && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
-    if (filtros.empresa.length  && !filtros.empresa.includes(a.empresa))               return false;
-    if (filtros.cliente.length  && !filtros.cliente.includes(a.cliente_txt))           return false;
-    if (filtros.estado.length   && !filtros.estado.includes(a.estado_srv||a.estado))   return false;
-    if (filtros.subtipo.length  && !filtros.subtipo.includes(a.subtipo))               return false;
-    if (filtros.tipo_doc.length && !filtros.tipo_doc.includes(a.tipo_doc||'CC'))       return false;
-    if (filtros.ccf?.length     && !filtros.ccf.includes(a.ccf))                       return false;
-    if (fechaDesde && a.fecha_afiliacion && a.fecha_afiliacion < fechaDesde)           return false;
-    if (fechaHasta && a.fecha_afiliacion && a.fecha_afiliacion > fechaHasta)           return false;
-    return true;
-  }), [fuenteDatos, busquedaDefer, filtros, fechaDesde, fechaHasta]);
+  // Filtrado ahora es server-side — `data` ya viene filtrada por el backend.
+  // Solo aplicamos filtros de fecha de afiliación localmente (no están en el backend aún).
+  const dataFiltrada = useMemo(() => {
+    if (!fechaDesde && !fechaHasta) return data;
+    return data.filter(a => {
+      if (fechaDesde && a.fecha_afiliacion && a.fecha_afiliacion < fechaDesde) return false;
+      if (fechaHasta && a.fecha_afiliacion && a.fecha_afiliacion > fechaHasta) return false;
+      return true;
+    });
+  }, [data, fechaDesde, fechaHasta]);
 
   const sugerenciasPagos = useMemo(() => busquedaPagos.length >= 2
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
@@ -230,7 +254,7 @@ export default function Afiliados() {
       cell: ({ row }) => (
         <div>
           <span style={{ fontWeight: 700, cursor: 'pointer', color: C.primary }}
-            onClick={() => { setDocSeleccionado(row.original.doc); setTab('pagos'); }}>
+            onClick={() => { setDocSeleccionado(row.original.doc); setTab('pagos'); setTodosNeeded(true); }}>
             {row.original.nombre}
           </span>
           <div style={{ fontSize: 12, fontWeight: 700, color: C.text2, letterSpacing: '0.02em' }}>
@@ -322,16 +346,6 @@ export default function Afiliados() {
           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
             <Btn size="sm" variant="secondary" onClick={() => openEditar(a)}>✏️ Editar</Btn>
             <Btn size="sm" variant="secondary" onClick={() => dlExcel(`/afiliados/${a.id}/certificado`, `certificado_${a.nombre.replace(/ /g, '_')}.pdf`)}>📄 Cert.</Btn>
-            <Btn size="sm" variant="danger" disabled={eliminar.isPending}
-              onClick={async () => {
-                let msg = `¿Eliminar a "${a.nombre}" (${a.doc})? Esta acción moverá al afiliado a eliminados.`;
-                try {
-                  const r = await api.get('/facturas', { params: { doc: a.doc, estado: 'pendiente', limit: 0 } });
-                  const pend = r.data?.total || 0;
-                  if (pend > 0) msg += `\n\n⚠️ ATENCIÓN: Este afiliado tiene ${pend} factura${pend !== 1 ? 's' : ''} pendiente${pend !== 1 ? 's' : ''} de pago.`;
-                } catch {}
-                setConfirm({ title: 'Eliminar afiliado', message: msg, onConfirm: () => eliminar.mutate(a.id) });
-              }}>×</Btn>
           </div>
         );
       },
@@ -341,13 +355,13 @@ export default function Afiliados() {
   const table = useReactTable({
     data: dataFiltrada,
     columns,
-    state: { sorting, pagination: tablePagination, columnVisibility },
+    state: { sorting, columnVisibility },
     onSortingChange: setSorting,
-    onPaginationChange: setTablePagination,
     onColumnVisibilityChange: setColumnVisibility,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    manualPagination: true,  // paginación es server-side
+    pageCount: Math.ceil(totalReg / tablePagination.pageSize),
   });
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
@@ -382,13 +396,10 @@ export default function Afiliados() {
       const res = modal==='nuevo' ? await api.post('/afiliados',payload) : await api.put(`/afiliados/${modal.id}`,payload);
       const doc = res.data?.doc || form.doc;
       if (pendingFiles.length > 0 && doc) {
-        for (const file of pendingFiles) {
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('afiliado_doc', doc);
-          fd.append('contexto', 'afiliado');
-          await api.post('/documentos', fd);
-        }
+        await Promise.all(pendingFiles.map(file => {
+          const { fd } = buildUploadForm(file, { afiliado_doc: doc, contexto: 'afiliado' });
+          return api.post('/documentos', fd);
+        }));
       }
       return res;
     },
@@ -398,6 +409,7 @@ export default function Afiliados() {
       if (modal === 'nuevo') {
         // invalidateQueries para ['afiliados'] (paginado): no sabemos en qué página aparece el nuevo registro
         qc.invalidateQueries({ queryKey: ['afiliados'] });
+        qc.invalidateQueries({ queryKey: ['afiliados-filter-options'] });
         qc.setQueryData(['afiliados_all'], prev => [res.data, ...(prev || [])]);
       } else {
         qc.setQueriesData({ queryKey: ['afiliados'] }, prev =>
@@ -422,6 +434,7 @@ export default function Afiliados() {
       );
       qc.setQueryData(['afiliados_all'], prev => prev?.filter(a => a.id !== id));
       qc.invalidateQueries({queryKey:['eliminados']});
+      qc.invalidateQueries({queryKey:['afiliados-filter-options']});
     },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
@@ -566,13 +579,13 @@ export default function Afiliados() {
   // Filtro por año y totales
   const aniosDisponibles = [...new Set(factAfil.map(f => String(f.anio)).filter(Boolean))].sort().reverse();
   const factAfil_filtradas = anioFiltro === 'Todos' ? factAfil : factAfil.filter(f => String(f.anio) === anioFiltro);
-  const totalPagado    = factAfil_filtradas.filter(f=>f.estado==='pagado').reduce((s,f)=>s+(f.costos||0),0);
-  const totalPendiente = factAfil_filtradas.filter(f=>f.estado!=='pagado').reduce((s,f)=>s+(f.costos||0),0);
+  const totalPagado    = factAfil_filtradas.filter(f=>f.estado==='pagado'||f.estado==='planilla_pagada').reduce((s,f)=>s+(f.costos||0),0);
+  const totalPendiente = factAfil_filtradas.filter(f=>f.estado!=='pagado'&&f.estado!=='planilla_pagada').reduce((s,f)=>s+(f.costos||0),0);
 
   return (
     <div>
       <PageHeader title="👥 Afiliados"
-        subtitle={tab==='activos' ? `${dataFiltrada.length} de ${totalReg} registros` : tab==='eliminados' ? `${eliminados.length} eliminados` : ''}
+        subtitle={tab==='activos' ? `${totalReg} registros${hayFiltrosActivos ? ' (filtrado)' : ''}` : tab==='eliminados' ? `${eliminados.length} eliminados` : ''}
         action={tab==='activos' && (
           <div style={{ display:'flex', gap:8 }}>
             <Btn variant="secondary" onClick={() => {
@@ -598,7 +611,7 @@ export default function Afiliados() {
           { key:'seguimiento', label:'📋 En seguimiento' },
           { key:'arl', label:'🔵 Seguimiento ARL' },
         ].map(t => (
-          <button key={t.key} onClick={() => setTab(t.key)} style={{
+          <button key={t.key} onClick={() => { setTab(t.key); if (t.key === 'pagos' || t.key === 'documentos' || t.key === 'seguimiento') setTodosNeeded(true); }} style={{
             padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
             background: tab===t.key ? C.primary : 'transparent',
             color: tab===t.key ? '#fff' : C.text2,
@@ -708,14 +721,11 @@ export default function Afiliados() {
             </table>
           </div>
 
-          {/* Paginación — server-side sin filtros, client-side con filtros */}
+          {/* Paginación — siempre server-side (filtros van al backend como CSV) */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, gap: 8, flexWrap: 'wrap' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <span style={{ fontSize: 12, color: C.text2 }}>
-                {hayFiltrosActivos
-                  ? `Página ${table.getState().pagination.pageIndex + 1} de ${table.getPageCount()} — ${dataFiltrada.length} resultados`
-                  : `Página ${pagina} de ${Math.ceil(totalReg / tablePagination.pageSize) || 1} — ${totalReg} total`
-                }
+                Página {pagina} de {Math.ceil(totalReg / tablePagination.pageSize) || 1} — {totalReg} resultado{totalReg !== 1 ? 's' : ''}
               </span>
               <select value={tablePagination.pageSize}
                 onChange={e => { const sz = Number(e.target.value); table.setPageSize(sz); setTablePagination(p => ({ ...p, pageSize: sz, pageIndex: 0 })); setPagina(1); }}
@@ -724,17 +734,8 @@ export default function Afiliados() {
               </select>
             </div>
             <div style={{ display: 'flex', gap: 4 }}>
-              {hayFiltrosActivos ? (
-                <>
-                  <Btn size="sm" variant="secondary" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>← Ant.</Btn>
-                  <Btn size="sm" variant="secondary" onClick={() => table.nextPage()} disabled={!table.getCanNextPage()}>Sig. →</Btn>
-                </>
-              ) : (
-                <>
-                  <Btn size="sm" variant="secondary" onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina <= 1}>← Ant.</Btn>
-                  <Btn size="sm" variant="secondary" onClick={() => setPagina(p => p + 1)} disabled={pagina * tablePagination.pageSize >= totalReg}>Sig. →</Btn>
-                </>
-              )}
+              <Btn size="sm" variant="secondary" onClick={() => setPagina(p => Math.max(1, p - 1))} disabled={pagina <= 1}>← Ant.</Btn>
+              <Btn size="sm" variant="secondary" onClick={() => setPagina(p => p + 1)} disabled={pagina * tablePagination.pageSize >= totalReg}>Sig. →</Btn>
             </div>
           </div>
         </>
@@ -1465,16 +1466,15 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
   const afilSel = todos.find(a=>a.doc===docDocSel);
 
   const handleUpload = async (files) => {
-    if (!docDocSel || !files.length) return;
+    if (!docDocSel || !files.length || uploading) return;  // guard doble click/drop
     setUploading(true);
+    // Generar upload_id por archivo ANTES de la petición para que los reintentos sean idempotentes
+    const uploads = files.map(file => ({
+      file,
+      ...buildUploadForm(file, { afiliado_doc: docDocSel, contexto: 'afiliado' }),
+    }));
     const resultados = await Promise.allSettled(
-      files.map(file => {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('afiliado_doc', docDocSel);
-        fd.append('contexto', 'afiliado');
-        return api.post('/documentos', fd);
-      })
+      uploads.map(({ fd }) => api.post('/documentos', fd))
     );
     await qc.refetchQueries({ queryKey: ['documentos', docDocSel] });
     setUploading(false);
@@ -1574,15 +1574,17 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
           </div>
 
           {/* Zona de upload */}
-          <div style={{ border:`2px dashed ${C.border}`,borderRadius:10,padding:'20px',
-            textAlign:'center',marginBottom:14,background:C.surface2,cursor:'pointer',position:'relative' }}
-            onClick={()=>document.getElementById('doc-file-input')?.click()}
-            onDragOver={e=>{e.preventDefault();e.currentTarget.style.borderColor=C.blue;}}
-            onDragLeave={e=>{e.currentTarget.style.borderColor=C.border;}}
-            onDrop={e=>{e.preventDefault();e.currentTarget.style.borderColor=C.border;handleUpload(Array.from(e.dataTransfer.files));}}>
+          <div style={{ border:`2px dashed ${uploading ? C.text2 : C.border}`,borderRadius:10,padding:'20px',
+            textAlign:'center',marginBottom:14,background:C.surface2,
+            cursor: uploading ? 'not-allowed' : 'pointer',
+            opacity: uploading ? 0.7 : 1, position:'relative' }}
+            onClick={()=>{ if (!uploading) document.getElementById('doc-file-input')?.click(); }}
+            onDragOver={e=>{ if (uploading) return; e.preventDefault();e.currentTarget.style.borderColor=C.blue;}}
+            onDragLeave={e=>{e.currentTarget.style.borderColor=uploading ? C.text2 : C.border;}}
+            onDrop={e=>{ if (uploading) return; e.preventDefault();e.currentTarget.style.borderColor=C.border;handleUpload(Array.from(e.dataTransfer.files));}}>
             <input id="doc-file-input" type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.gif,.doc,.docx,.xls,.xlsx"
-              style={{ display:'none' }}
-              onChange={e=>{ if(e.target.files.length) handleUpload(Array.from(e.target.files)); e.target.value=''; }} />
+              style={{ display:'none' }} disabled={uploading}
+              onChange={e=>{ if(!uploading && e.target.files.length) handleUpload(Array.from(e.target.files)); e.target.value=''; }} />
             <div style={{ fontSize:28,marginBottom:6 }}>📂</div>
             <div style={{ fontSize:13,color:C.text2 }}>
               {uploading ? 'Subiendo...' : 'Click o arrastra archivos aquí (PDF, imágenes, Word, Excel — máx 10 MB)'}

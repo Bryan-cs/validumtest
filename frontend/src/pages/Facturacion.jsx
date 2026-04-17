@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
@@ -504,8 +504,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const MESES_ORDER    = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const mesesOrd       = MESES_ORDER.filter(m=>mesesUnicos.includes(m));
 
-  // Filtrado local
-  const rowsFiltradas = rows.filter(f => {
+  // Filtrado local (memoizado — evita recalcular en cada render)
+  const rowsFiltradas = useMemo(() => rows.filter(f => {
     const q = busqueda.toLowerCase();
     if (busqueda && !`${f.nombre_afiliado} ${f.doc} ${f.cliente} ${f.codigo}`.toLowerCase().includes(q)) return false;
     if (filtros.anio.length    && !filtros.anio.includes(f.anio))                    return false;
@@ -515,7 +515,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       f.estado==='pagado' ? 'Pagada' : f.estado==='planilla_pagada' ? 'Planilla Pagada' : 'Pendiente'
     )) return false;
     return true;
-  });
+  }), [rows, busqueda, filtros]);
 
   const [modalPagar, setModalPagar] = useState(null);
   const [bancoPago, setBancoPago] = useState('');

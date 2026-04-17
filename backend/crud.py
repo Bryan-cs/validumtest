@@ -149,11 +149,47 @@ def delete_usuario(db, id, user=""):
     db.commit()
 
 # ─── AFILIADOS ────────────────────────────────────────────────────────────────
+def _split_csv(val: str) -> list:
+    """Convierte string CSV en lista, ignorando vacíos."""
+    return [v.strip() for v in val.split(",") if v.strip()] if val else []
+
+
+def get_afiliados_filter_options(db):
+    """Retorna opciones únicas para cada filtro de afiliados (sin cargar datos completos).
+    Cacheado para no consultar en cada render.
+    """
+    cached = _cache_get("afiliados:filtros")
+    if cached is not None:
+        return cached
+    from sqlalchemy import distinct, func
+    A = models.Afiliado
+    base = db.query(A).filter_by(activo=True)
+    result = {
+        "empresas":  sorted(set(r[0] for r in base.with_entities(A.empresa).distinct()  if r[0])),
+        "clientes":  sorted(set(r[0] for r in base.with_entities(A.cliente_txt).distinct() if r[0])),
+        "subtipos":  sorted(set(r[0] for r in base.with_entities(A.subtipo).distinct()  if r[0])),
+        "estados":   sorted(set(r[0] for r in base.with_entities(A.estado_srv).distinct() if r[0])),
+        "tipos_doc": sorted(set(r[0] for r in base.with_entities(A.tipo_doc).distinct()  if r[0])),
+        "ccfs":      sorted(set(r[0] for r in base.with_entities(A.ccf).distinct()       if r[0])),
+    }
+    _cache_set("afiliados:filtros", result, ttl=120)
+    return result
+
+
 def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
+                  tipo_doc="", ccf="",
                   skip: int = 0, limit: int = 0):
     """Lista afiliados con filtros opcionales y paginación (skip/limit).
     Si limit=0 devuelve todos (para compatibilidad con exportaciones Excel).
+    Cada filtro acepta múltiples valores separados por coma (CSV).
+    Sin filtros ni paginación → devuelve resultado cacheado (TTL_AFILIADOS).
     """
+    sin_filtros = not any([q, estado, empresa, cliente, subtipo, tipo_doc, ccf])
+    if sin_filtros and skip == 0 and limit == 0:
+        cached = _cache_get("afiliados:all")
+        if cached is not None:
+            return cached
+
     query = db.query(models.Afiliado).filter_by(activo=True)
     if q:
         query = query.filter(or_(
@@ -162,24 +198,40 @@ def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
             models.Afiliado.empresa.ilike(f"%{q}%"),
             models.Afiliado.cliente_txt.ilike(f"%{q}%"),
         ))
-    if estado:  query = query.filter(or_(models.Afiliado.estado_srv==estado, models.Afiliado.estado==estado))
-    if empresa: query = query.filter_by(empresa=empresa)
-    if cliente: query = query.filter_by(cliente_txt=cliente)
-    if subtipo: query = query.filter_by(subtipo=subtipo)
+    # Filtros multi-valor: acepta "valor1,valor2" → IN clause
+    estados = _split_csv(estado)
+    if estados:
+        query = query.filter(or_(
+            models.Afiliado.estado_srv.in_(estados),
+            models.Afiliado.estado.in_(estados),
+        ))
+    empresas = _split_csv(empresa)
+    if empresas: query = query.filter(models.Afiliado.empresa.in_(empresas))
+    clientes = _split_csv(cliente)
+    if clientes: query = query.filter(models.Afiliado.cliente_txt.in_(clientes))
+    subtipos = _split_csv(subtipo)
+    if subtipos: query = query.filter(models.Afiliado.subtipo.in_(subtipos))
+    tipos_doc = _split_csv(tipo_doc)
+    if tipos_doc: query = query.filter(models.Afiliado.tipo_doc.in_(tipos_doc))
+    ccfs = _split_csv(ccf)
+    if ccfs: query = query.filter(models.Afiliado.ccf.in_(ccfs))
     total = query.count()
     query = query.order_by(models.Afiliado.nombre)
     if limit > 0:
         query = query.offset(skip).limit(limit)
     else:
         query = query.limit(50_000)  # cap de seguridad — evita retornar millones de filas
-    return {"total": total, "items": [_afiliado_to_dict(a) for a in query.all()]}
+    result = {"total": total, "items": [_afiliado_to_dict(a) for a in query.all()]}
+    if sin_filtros and skip == 0 and limit == 0:
+        _cache_set("afiliados:all", result, ttl=TTL_AFILIADOS)
+    return result
 
 def get_afiliado(db, id): a = db.query(models.Afiliado).filter_by(id=id, activo=True).first(); return _afiliado_to_dict(a) if a else None
 def get_afiliado_by_doc(db, doc): return db.query(models.Afiliado).filter_by(doc=doc, activo=True).first()
 
 def create_afiliado(db, data: schemas.AfiliadoCreate):
     from sqlalchemy.exc import IntegrityError
-    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("afiliados:")
     a = models.Afiliado(**{
         "nombre":data.nombre,"tipo_doc":data.tipo_doc,"doc":data.doc,"empresa":data.empresa,
         "cargo":data.cargo,"cliente_txt":data.cliente_txt,
@@ -202,7 +254,7 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
 def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     from sqlalchemy.exc import IntegrityError
     from fastapi import HTTPException
-    cache_invalidar("cobro:"); cache_invalidar("dashboard:")
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("afiliados:")
     # Lock de fila para evitar edición concurrente con eliminación
     a = db.query(models.Afiliado).filter_by(id=id, activo=True).with_for_update().first()
     if not a:
@@ -228,7 +280,7 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     db.refresh(a); return _afiliado_to_dict(a)
 
 def delete_afiliado(db, id, deleted_by=""):
-    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # eliminar afiliado afecta cobro
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("afiliados:")
     a = db.query(models.Afiliado).filter_by(id=id).first()
     if not a: return
     # Guardar en eliminados
@@ -717,16 +769,25 @@ def get_dashboard(db, anio="", mes=""):
         func.sum(case((models.Afiliado.estado_srv.ilike("%ESPERA%"), 1), else_=0)).label("en_espera"),
     ).filter(models.Afiliado.activo==True).one()
 
-    fq = db.query(
-        func.count(models.Factura.id).label("n"),
-        func.coalesce(func.sum(case((models.Factura.estado.in_(["pagado","planilla_pagada"]), models.Factura.ingresos), else_=0)), 0).label("ingresos"),
-        func.coalesce(func.sum(case((models.Factura.estado.in_(["pagado","planilla_pagada"]), models.Factura.utilidad), else_=0)), 0).label("utilidad"),
-        func.coalesce(func.sum(case((models.Factura.estado=="pendiente", models.Factura.ingresos), else_=0)), 0).label("pendiente"),
-        func.sum(case((models.Factura.estado=="pendiente", 1), else_=0)).label("n_pend"),
-    )
-    if anio: fq = fq.filter(models.Factura.anio==anio)
-    if mes:  fq = fq.filter(models.Factura.mes==mes)
-    facts = fq.one()
+    # Una sola query cubre el período filtrado Y el total histórico de pendiente.
+    # Se usan CASE en vez de WHERE para poder calcular pend_total (sin filtro) en el mismo SELECT.
+    from sqlalchemy import and_, true as sa_true
+    period_conds = []
+    if anio: period_conds.append(models.Factura.anio == anio)
+    if mes:  period_conds.append(models.Factura.mes == mes)
+    period_ok  = and_(*period_conds) if period_conds else sa_true()
+    paid_ok    = models.Factura.estado.in_(["pagado", "planilla_pagada"])
+    pending_ok = models.Factura.estado == "pendiente"
+
+    facts = db.query(
+        func.sum(case((period_ok, 1), else_=0)).label("n"),
+        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.ingresos), else_=0)), 0).label("ingresos"),
+        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.utilidad), else_=0)), 0).label("utilidad"),
+        func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos), else_=0)), 0).label("pendiente"),
+        func.sum(case((and_(pending_ok, period_ok), 1), else_=0)).label("n_pend"),
+        # pend_total: pendiente histórico completo (sin filtro de período)
+        func.coalesce(func.sum(case((pending_ok, models.Factura.ingresos), else_=0)), 0).label("pend_total"),
+    ).one()
 
     # Nómina y gastos: si hay mes específico → ese mes; si hay solo año → suma todos los meses del año
     _anio_ref = int(anio) if anio else datetime.now(COL_TZ).year
@@ -760,10 +821,7 @@ def get_dashboard(db, anio="", mes=""):
     ing_adic = float(ing_adic)
     util_neta = float(facts.utilidad) + ing_adic - float(nominas) - float(gastos)
 
-    # Pendiente total siempre (sin filtro de periodo)
-    pend_total = db.query(
-        func.coalesce(func.sum(case((models.Factura.estado=="pendiente", models.Factura.ingresos), else_=0)), 0)
-    ).scalar()
+    pend_total = float(facts.pend_total)
 
     # Factor de meses para las etiquetas
     meses_factor = 1 if (mes or not anio) else 12

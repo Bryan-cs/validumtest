@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
-import api from '../utils/api';
+import api, { buildUploadForm } from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 import { C, ConfirmModal } from '../components/UI';
 
@@ -155,25 +155,35 @@ export default function Tareas() {
 
   const crear = useMutation({
     mutationFn: (payload) => api.post('/tareas', payload),
+    onMutate: async (payload) => {
+      await qc.cancelQueries({ queryKey: ['tareas'] });
+      const prev = qc.getQueryData(['tareas']);
+      const optimistic = {
+        id: `temp-${Date.now()}`, ...payload,
+        estado: 'pendiente', creado: new Date().toISOString(),
+        creado_por: user?.username || '', comentarios: [],
+      };
+      qc.setQueryData(['tareas'], old => [optimistic, ...(old || [])]);
+      setModalNueva(false);
+      setForm({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
+      return { prev };
+    },
+    onError: (e, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(['tareas'], ctx.prev);
+      const d = e.response?.data?.detail;
+      toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error'));
+    },
     onSuccess: (res) => {
       const tareaId = res.data?.id;
       toast.success('Tarea creada');
-      qc.setQueryData(['tareas'], prev => [res.data, ...(prev || [])]);
-      setModalNueva(false);
-      setForm({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
 
-      // Subir archivos en background (no bloquea el modal)
+      // Subir archivos en background
       if (tareaId && nuevaFiles.length > 0) {
-        const filesToUpload = [...nuevaFiles];
+        const uploads = nuevaFiles.map(file =>
+          buildUploadForm(file, { afiliado_doc: '', contexto: 'tarea', contexto_id: String(tareaId) })
+        );
         setNuevaFiles([]);
-        Promise.all(filesToUpload.map(file => {
-          const fd = new FormData();
-          fd.append('file', file);
-          fd.append('afiliado_doc', '');
-          fd.append('contexto', 'tarea');
-          fd.append('contexto_id', String(tareaId));
-          return api.post('/documentos', fd);
-        })).then(() => {
+        Promise.all(uploads.map(({ fd }) => api.post('/documentos', fd))).then(() => {
           qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
         }).catch(err => {
           toast.error('Error al subir adjunto: ' + (err?.response?.data?.detail || err.message));
@@ -182,7 +192,9 @@ export default function Tareas() {
         setNuevaFiles([]);
       }
     },
-    onError: e => { const d = e.response?.data?.detail; toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error')); },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ['tareas'] });
+    },
   });
 
   const cambiarEstado = useMutation({
@@ -577,14 +589,10 @@ export default function Tareas() {
                             const files = completarFiles[t.id] || [];
                             if (files.length > 0) {
                               try {
-                                for (const file of files) {
-                                  const fd = new FormData();
-                                  fd.append('file', file);
-                                  fd.append('afiliado_doc', '');
-                                  fd.append('contexto', 'tarea');
-                                  fd.append('contexto_id', String(t.id));
-                                  await api.post('/documentos', fd);
-                                }
+                                await Promise.all(files.map(file => {
+                                  const { fd } = buildUploadForm(file, { afiliado_doc: '', contexto: 'tarea', contexto_id: String(t.id) });
+                                  return api.post('/documentos', fd);
+                                }));
                               } catch(err) {
                                 toast.error('Error al subir archivo: ' + (err?.response?.data?.detail || err.message));
                                 return;
@@ -751,17 +759,13 @@ function TareaDocumentos({ tareaId }) {
   });
 
   const handleUpload = async (files) => {
-    if (!files.length) return;
+    if (!files.length || uploading) return;  // guard doble click
     setUploading(true);
     try {
-      for (const file of files) {
-        const fd = new FormData();
-        fd.append('file', file);
-        fd.append('afiliado_doc', '');
-        fd.append('contexto', 'tarea');
-        fd.append('contexto_id', String(tareaId));
-        await api.post('/documentos', fd);
-      }
+      await Promise.all(files.map(file => {
+        const { fd } = buildUploadForm(file, { afiliado_doc: '', contexto: 'tarea', contexto_id: String(tareaId) });
+        return api.post('/documentos', fd);
+      }));
       qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
     } catch (e) {
       alert(e.response?.data?.detail || 'Error subiendo archivo');

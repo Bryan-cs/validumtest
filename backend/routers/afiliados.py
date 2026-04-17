@@ -14,25 +14,34 @@ from .deps import verify_token, require_admin
 router = APIRouter(prefix="/afiliados", tags=["afiliados"])
 
 
+@router.get("/filter-options")
+def filter_options(db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Retorna opciones únicas para cada filtro de afiliados (ligero, cacheado)."""
+    return crud.get_afiliados_filter_options(db)
+
+
 @router.get("")
 def list_afiliados(
     q: str = "", estado: str = "", empresa: str = "",
     cliente: str = "", subtipo: str = "",
+    tipo_doc: str = "", ccf: str = "",
     skip: int = 0, limit: int = 0,
     db: Session = Depends(get_db), token=Depends(verify_token)
 ):
-    """Lista afiliados. Con skip/limit activa paginación.
-    Sin limit devuelve todos (usado por exportaciones Excel).
-    Respuesta: {"total": N, "items": [...]}
+    """Lista afiliados con filtros multi-valor (CSV) y paginación.
+
+    Cada filtro acepta valores separados por coma: ?empresa=A,B&estado=ACTIVO,SUSPENDIDO
+    Con skip/limit activa paginación. Sin limit devuelve todos (exportaciones Excel).
     """
-    # Clientes solo ven sus propios afiliados (mismo filtro que /portal/afiliados)
+    # Clientes solo ven sus propios afiliados
     if token.get("rol") == "cliente":
         cliente_ref = (token.get("cliente_ref") or "").strip()
         if not cliente_ref:
             return {"total": 0, "items": []}
-        cliente = cliente_ref  # forzar filtro por su cliente_ref
+        cliente = cliente_ref
     return crud.get_afiliados(db, q=q, estado=estado, empresa=empresa,
                                cliente=cliente, subtipo=subtipo,
+                               tipo_doc=tipo_doc, ccf=ccf,
                                skip=skip, limit=limit)
 
 

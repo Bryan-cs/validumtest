@@ -60,4 +60,28 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Genera un UUID v4 para usar como upload_id.
+ * Permite que el backend detecte reintentos y evite duplicados.
+ */
+export function genUploadId() {
+  return crypto.randomUUID();
+}
+
+/**
+ * Construye un FormData con upload_id incluido.
+ * @param {File} file
+ * @param {Object} extras - campos adicionales (afiliado_doc, contexto, contexto_id, etc.)
+ * @param {string} uploadId - UUID generado antes de la petición
+ */
+export function buildUploadForm(file, extras = {}, uploadId = genUploadId()) {
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('upload_id', uploadId);
+  for (const [k, v] of Object.entries(extras)) {
+    if (v !== undefined && v !== null) fd.append(k, String(v));
+  }
+  return { fd, uploadId };
+}
+
 export default api;

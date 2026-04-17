@@ -54,9 +54,9 @@ export default function Actividad() {
   const qc = useQueryClient();
 
   const hoy = new Date().toISOString().slice(0, 10);
-  const haceUnMes = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+  const ayer = new Date(Date.now() - 86400_000).toISOString().slice(0, 10);
 
-  const [desde,   setDesde]   = useState(haceUnMes);
+  const [desde,   setDesde]   = useState(ayer);
   const [hasta,   setHasta]   = useState(hoy);
   const [modulo,  setModulo]  = useState('');
   const [usuario, setUsuario] = useState('');
@@ -166,7 +166,7 @@ export default function Actividad() {
   };
 
   const limpiarFiltros = () => {
-    setDesde(haceUnMes); setHasta(hoy);
+    setDesde(ayer); setHasta(hoy);
     setModulo(''); setUsuario(''); setBuscar('');
     setActPagination(p => ({ ...p, pageIndex: 0 }));
   };

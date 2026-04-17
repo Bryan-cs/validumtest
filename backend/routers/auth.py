@@ -1,6 +1,7 @@
 """Router de autenticación."""
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from datetime import timedelta, datetime, timezone
 import jwt, time
 from database import get_db
@@ -15,6 +16,21 @@ from slowapi.util import get_remote_address
 from logger import logger
 
 _limiter = Limiter(key_func=get_remote_address)
+
+
+def _blacklist_jti(db: Session, jti: str, expires_at) -> bool:
+    """Inserta jti en token_blacklist de forma atómica (race-safe).
+
+    Retorna True si se insertó, False si ya existía (otro request ganó la carrera).
+    Usar IntegrityError en lugar de SELECT+INSERT evita el race condition TOCTOU.
+    """
+    try:
+        db.add(models.TokenBlacklist(jti=jti, expires_at=expires_at))
+        db.commit()
+        return True
+    except IntegrityError:
+        db.rollback()
+        return False
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -141,13 +157,11 @@ def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Sessi
         logger.warning(f"token_refresh_inactive_user: usuario={sub} ip={ip}")
         raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")
 
-    # Rotation: invalidar el refresh token usado antes de emitir uno nuevo
+    # Rotation: invalidar el refresh token usado antes de emitir uno nuevo.
+    # _blacklist_jti usa INSERT directo + captura IntegrityError — atómico y race-safe.
     if jti:
         expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
-        existing = db.query(models.TokenBlacklist).filter_by(jti=jti).first()
-        if not existing:
-            db.add(models.TokenBlacklist(jti=jti, expires_at=expires_at))
-            db.commit()
+        _blacklist_jti(db, jti, expires_at)
 
     claims = {"sub": user.username, "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
     new_access = create_token(claims)
@@ -169,10 +183,7 @@ def logout(request: Request, body: schemas.RefreshTokenRequest, db: Session = De
         sub = payload.get("sub", "desconocido")
         if jti:
             expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
-            existing = db.query(models.TokenBlacklist).filter_by(jti=jti).first()
-            if not existing:
-                db.add(models.TokenBlacklist(jti=jti, expires_at=expires_at))
-                db.commit()
+            _blacklist_jti(db, jti, expires_at)
         logger.info(f"logout_ok: usuario={sub} ip={ip}")
     except Exception as _e:
         logger.warning(f"logout_warn: no se pudo blacklistear token ip={ip}: {_e}")

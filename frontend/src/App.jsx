@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import useAuthStore from './hooks/useAuth';
 
 import { ErrorBoundary, OfflineBanner } from './components/UI';
+import PWAUpdateBanner from './components/PWAUpdateBanner';
 import Login          from './pages/Login';
 import Layout         from './components/Layout';
 
@@ -64,6 +65,7 @@ export default function App() {
     <QueryClientProvider client={qc}>
       <BrowserRouter future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
         <OfflineBanner />
+        <PWAUpdateBanner />
         <Toaster position="bottom-center" richColors closeButton />
         <ErrorBoundary>
         <Suspense fallback={<div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh',color:'#888'}}>Cargando...</div>}>

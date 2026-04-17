@@ -310,6 +310,7 @@ class Documento(Base):
         Index('ix_documento_contexto_id', 'contexto', 'contexto_id'),
     )
     id           = Column(Integer, primary_key=True, index=True)
+    upload_id    = Column(String(36), unique=True, nullable=True, index=True)  # UUID idempotency key
     afiliado_doc = Column(String(20), index=True)       # doc del afiliado dueño
     nombre       = Column(String(200))                   # nombre original del archivo
     tipo         = Column(String(20))                    # extension: pdf, jpg, png, docx, xlsx

@@ -163,15 +163,33 @@ def listar_r2_cliente(
             })
     return {"cliente": cliente, "prefix": prefix, "total": len(archivos), "archivos": archivos}
 
+def _doc_to_dict(doc: models.Documento) -> dict:
+    return {
+        "id": doc.id, "nombre": doc.nombre, "tipo": doc.tipo,
+        "tamano": doc.tamano, "creado": doc.creado.isoformat() if doc.creado else None,
+    }
+
+
 @router.post("")
 async def subir_documento(
     file: UploadFile = File(...),
     afiliado_doc: str = Form(''),
     contexto: CONTEXTOS_VALIDOS = Form("afiliado"),
     contexto_id: int = Form(None),
+    upload_id: str = Form(None),   # UUID generado por el cliente — permite idempotencia en reintentos
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
+    # ── Idempotencia: si este upload_id ya existe, retornar el registro existente ──
+    # Esto cubre el caso en que el cliente reintenta porque su conexión falló
+    # pero el backend ya procesó la petición exitosamente.
+    if upload_id:
+        existing = db.query(models.Documento).filter_by(upload_id=upload_id).first()
+        if existing:
+            from logger import logger
+            logger.info(f"upload_idempotente: upload_id={upload_id} doc_id={existing.id}")
+            return _doc_to_dict(existing)
+
     ext = (file.filename or '').rsplit('.', 1)[-1].lower()
     if ext not in ALLOWED_EXT:
         raise HTTPException(400, f"Formato no permitido. Permitidos: {', '.join(sorted(ALLOWED_EXT))}")
@@ -180,13 +198,11 @@ async def subir_documento(
     if len(content) > MAX_SIZE:
         raise HTTPException(400, "Archivo demasiado grande (máx 10 MB)")
 
-    # Sanitizar nombre: solo alfanuméricos, guiones, puntos y guiones bajos
     import re
     safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'archivo')
     file_id = f"{uuid.uuid4().hex[:8]}_{safe_name}"
     if afiliado_doc:
         safe_doc = re.sub(r'[^\w\-]', '_', afiliado_doc)
-        # Organizar por cliente si el afiliado existe en la DB
         afil = db.query(models.Afiliado).filter_by(doc=afiliado_doc).first()
         if afil and afil.cliente_txt:
             safe_cliente = re.sub(r'[^\w\-]', '_', afil.cliente_txt)
@@ -202,9 +218,13 @@ async def subir_documento(
         unique_name = f"novedades/{contexto_id}/{file_id}" if contexto_id else f"novedades/{file_id}"
     else:
         unique_name = file_id
+
+    # ── Subir a R2 / disco ──
     _upload_file(unique_name, content)
 
+    # ── Guardar en DB — si falla, limpiar el archivo ya subido ──
     doc = models.Documento(
+        upload_id=upload_id or None,
         afiliado_doc=afiliado_doc,
         nombre=file.filename,
         tipo=ext,
@@ -214,10 +234,18 @@ async def subir_documento(
         contexto=contexto,
         contexto_id=contexto_id,
     )
-    db.add(doc)
-    db.commit()
-    db.refresh(doc)
-    return {"id": doc.id, "nombre": doc.nombre, "tipo": doc.tipo, "tamano": doc.tamano, "creado": doc.creado.isoformat() if doc.creado else None}
+    try:
+        db.add(doc)
+        db.commit()
+        db.refresh(doc)
+    except Exception as e:
+        db.rollback()
+        _delete_file(unique_name)   # Evitar archivo huérfano en R2
+        from logger import logger
+        logger.error(f"upload_db_fail: {unique_name} — {e}")
+        raise HTTPException(500, "Error al registrar el documento. El archivo no fue guardado.")
+
+    return _doc_to_dict(doc)
 
 
 @router.get("")
