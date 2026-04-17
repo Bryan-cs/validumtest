@@ -3,6 +3,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../com
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api, { buildUploadForm } from '../utils/api';
+import { empresaStyle } from '../utils/colors';
 import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 import useAuthStore from '../hooks/useAuth';
@@ -15,20 +16,9 @@ import {
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5','N/A'];
 
-const EMPRESA_COLOR = {
-  'carsecoop':  { bg: '#F3E8FF', color: '#7C3AED' },
-  'protsecoop': { bg: '#FEF9C3', color: '#A16207' },
-  'technova':   { bg: '#FEF3C7', color: '#D97706' },
-  'techplanet': { bg: '#DCFCE7', color: '#16A34A' },
-};
-function empresaStyle(nombre = '') {
-  const key = Object.keys(EMPRESA_COLOR).find(k => nombre.toLowerCase().includes(k));
-  return key ? EMPRESA_COLOR[key] : null;
-}
 function EmpresaBadge({ nombre }) {
   if (!nombre) return <span style={{ color: C.text2 }}>—</span>;
   const s = empresaStyle(nombre);
-  if (!s) return <span style={{ fontSize: 13, color: C.text2 }}>{nombre}</span>;
   return (
     <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 6, padding: '2px 8px',
       background: s.bg, color: s.color, whiteSpace: 'nowrap' }}>
@@ -112,6 +102,7 @@ export default function Afiliados() {
   const [textoModal, setTextoModal] = useState(null); // { titulo, nombre, texto }
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
+  const [buscarElim, setBuscarElim] = useState('');
 
   const [arlFiltroCliente, setArlFiltroCliente] = useState('');
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
@@ -166,8 +157,10 @@ export default function Afiliados() {
     if (filtros.subtipo.length)  p.subtipo  = filtros.subtipo.join(',');
     if (filtros.tipo_doc.length) p.tipo_doc = filtros.tipo_doc.join(',');
     if (filtros.ccf?.length)     p.ccf      = filtros.ccf.join(',');
+    if (fechaDesde) p.fecha_desde = fechaDesde;
+    if (fechaHasta) p.fecha_hasta = fechaHasta;
     return p;
-  }, [busquedaDefer, filtros]);
+  }, [busquedaDefer, filtros, fechaDesde, fechaHasta]);
 
   // Query ÚNICA paginada — filtros van al backend como CSV
   const { data: resp={total:0,items:[]}, isLoading } = useQuery({
@@ -226,17 +219,9 @@ export default function Afiliados() {
   const subtiposUnicos = filterOpts.subtipos || [];
   const estadosOpts    = filterOpts.estados  || [];
 
-  const hayFiltrosActivos = busquedaDefer || Object.values(filtros).some(v => v.length > 0);
-  // Filtrado ahora es server-side — `data` ya viene filtrada por el backend.
-  // Solo aplicamos filtros de fecha de afiliación localmente (no están en el backend aún).
-  const dataFiltrada = useMemo(() => {
-    if (!fechaDesde && !fechaHasta) return data;
-    return data.filter(a => {
-      if (fechaDesde && a.fecha_afiliacion && a.fecha_afiliacion < fechaDesde) return false;
-      if (fechaHasta && a.fecha_afiliacion && a.fecha_afiliacion > fechaHasta) return false;
-      return true;
-    });
-  }, [data, fechaDesde, fechaHasta]);
+  const hayFiltrosActivos = busquedaDefer || Object.values(filtros).some(v => v.length > 0) || fechaDesde || fechaHasta;
+  // Filtrado completamente server-side — `data` ya viene filtrada incluyendo fechas.
+  const dataFiltrada = data;
 
   const sugerenciasPagos = useMemo(() => busquedaPagos.length >= 2
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
@@ -673,11 +658,11 @@ export default function Afiliados() {
           />
           <div style={{ display:'flex', gap:8, alignItems:'center', marginBottom:10, flexWrap:'wrap' }}>
             <span style={{ fontSize:12, color:C.text2, fontWeight:600 }}>Afiliación:</span>
-            <input type="date" value={fechaDesde} onChange={e => { setFechaDesde(e.target.value); setPagina(1); }}
+            <input type="date" value={fechaDesde} onChange={e => { setFechaDesde(e.target.value); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); }}
               style={{ padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13,
                 background:C.surface, color:C.text, outline:'none' }} />
             <span style={{ fontSize:12, color:C.text2 }}>—</span>
-            <input type="date" value={fechaHasta} onChange={e => { setFechaHasta(e.target.value); setPagina(1); }}
+            <input type="date" value={fechaHasta} onChange={e => { setFechaHasta(e.target.value); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); }}
               style={{ padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13,
                 background:C.surface, color:C.text, outline:'none' }} />
             {(fechaDesde || fechaHasta) && (
@@ -754,6 +739,14 @@ export default function Afiliados() {
             padding:'10px 14px', marginBottom:14, fontSize:12, color:C.amber, fontWeight:500 }}>
             ⚠️ Afiliados eliminados del sistema. Puedes restaurarlos como ACTIVOS con el botón ↩ Restaurar.
           </div>
+          <input
+            placeholder="🔍 Buscar por nombre, documento o empresa..."
+            value={buscarElim}
+            onChange={e => setBuscarElim(e.target.value)}
+            style={{ width:'100%', padding:'10px 14px', border:`1px solid ${C.border}`, borderRadius:8,
+              fontSize:14, outline:'none', boxSizing:'border-box', background:C.surface,
+              color:C.text, marginBottom:10 }}
+          />
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
@@ -769,7 +762,13 @@ export default function Afiliados() {
                 {!loadElim && eliminados.length===0 && (
                   <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros eliminados</td></tr>
                 )}
-                {eliminados.map(e=>(
+                {eliminados.filter(e => {
+                  if (!buscarElim) return true;
+                  const q = buscarElim.toLowerCase();
+                  return (e.nombre||'').toLowerCase().includes(q) ||
+                         (e.doc||'').toLowerCase().includes(q) ||
+                         (e.empresa||'').toLowerCase().includes(q);
+                }).map(e=>(
                   <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`, background:C.redBg }}>
                     <td style={{ ...tdc,fontWeight:600,color:C.red }}>{e.nombre}</td>
                     <td style={tdc}>{e.empresa||'—'}</td>

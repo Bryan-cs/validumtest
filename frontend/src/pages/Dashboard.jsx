@@ -2,10 +2,12 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
 import { StatCard, SkeletonCard, C, fmt } from '../components/UI';
+import { bancoColor } from '../utils/colors';
 
 const MESES = ['Todos','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const anioActual = new Date().getFullYear().toString();
+
 
 export default function Dashboard() {
   const [anio, setAnio] = useState(anioActual);
@@ -82,6 +84,40 @@ export default function Dashboard() {
           </>
         }
       </div>
+
+      {/* Ingresos por banco */}
+      {d?.ingresos_por_banco?.length > 0 && (
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px', marginBottom: 16 }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: C.text2, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 14 }}>
+            🏦 Ingresos por banco
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {d.ingresos_por_banco.map(b => {
+              const pct = d.ingresos > 0 ? Math.round((b.total / d.ingresos) * 100) : 0;
+              const bc = bancoColor(b.banco);
+              return (
+                <div key={b.banco} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, borderRadius: 6, padding: '2px 10px',
+                    background: bc.badge, color: bc.text, minWidth: 160, whiteSpace: 'nowrap',
+                    overflow: 'hidden', textOverflow: 'ellipsis', display: 'inline-block' }}>
+                    {b.banco}
+                  </span>
+                  <div style={{ flex: 1, background: C.surface2, borderRadius: 4, height: 8, overflow: 'hidden' }}>
+                    <div style={{ width: `${pct}%`, height: '100%', background: bc.bar, borderRadius: 4,
+                      transition: 'width .4s ease' }} />
+                  </div>
+                  <div style={{ fontSize: 13, color: bc.text, fontWeight: 700, minWidth: 110, textAlign: 'right' }}>
+                    {fmt(b.total)}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.text2, minWidth: 36, textAlign: 'right' }}>
+                    {pct}%
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Últimos afiliados */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>

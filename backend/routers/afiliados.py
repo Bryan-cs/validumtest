@@ -48,6 +48,7 @@ def list_afiliados(
     q: str = "", estado: str = "", empresa: str = "",
     cliente: str = "", subtipo: str = "",
     tipo_doc: str = "", ccf: str = "",
+    fecha_desde: str = "", fecha_hasta: str = "",
     skip: int = 0, limit: int = 0,
     db: Session = Depends(get_db), token=Depends(verify_token)
 ):
@@ -65,6 +66,7 @@ def list_afiliados(
     return crud.get_afiliados(db, q=q, estado=estado, empresa=empresa,
                                cliente=cliente, subtipo=subtipo,
                                tipo_doc=tipo_doc, ccf=ccf,
+                               fecha_desde=fecha_desde, fecha_hasta=fecha_hasta,
                                skip=skip, limit=limit)
 
 

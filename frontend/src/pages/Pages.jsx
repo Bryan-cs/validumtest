@@ -126,8 +126,24 @@ export function Retiros() {
   const [fecha, setFecha]= useState(new Date().toISOString().slice(0,10));
   const [motivo,setMotivo]=useState('Renuncia');
   const [obs,   setObs]  = useState('');
+  // Estado para búsqueda previa en modal
+  const [modalDocBuscar, setModalDocBuscar] = useState('');
+  const [modalDocQuery,  setModalDocQuery]  = useState('');
+  const [afiliadoRetiro, setAfiliadoRetiro] = useState(null); // null = no buscado aún, false = no encontrado
 
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
+
+  // Búsqueda del afiliado antes de aplicar retiro
+  const { isLoading: loadBuscandoAfil } = useQuery({
+    queryKey: ['afiliado_retiro_buscar', modalDocQuery],
+    queryFn: () => api.get('/afiliados', { params: { q: modalDocQuery, limit: 20 } }).then(r => {
+      const exact = (r.data.items || []).find(a => a.doc === modalDocQuery);
+      setAfiliadoRetiro(exact || false);
+      if (exact) setDoc(exact.doc);
+      return r.data;
+    }),
+    enabled: !!modalDocQuery,
+  });
 
   const aplicar = useMutation({
     mutationFn: ()=>api.post('/retiros',{doc,fecha,motivo,obs}),
@@ -136,7 +152,7 @@ export function Retiros() {
       toast.success(n ? `Retiro aplicado. ${n} factura(s) pendiente(s) del mes` : 'Retiro aplicado');
       qc.invalidateQueries({queryKey:['retiros']});
       qc.invalidateQueries({queryKey:['afiliados']});
-      setModal(false); setDoc(''); setObs('');
+      setModal(false); setDoc(''); setObs(''); setAfiliadoRetiro(null); setModalDocBuscar(''); setModalDocQuery('');
     },
     onError:(e)=>{ const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Afiliado no encontrado')); },
   });
@@ -146,6 +162,11 @@ export function Retiros() {
     queryFn: () => api.get('/retiros', { params: { doc: docConsulta } }).then(r => r.data.items||[]),
     enabled: !!docConsulta,
   });
+
+  const cerrarModal = () => {
+    setModal(false); setDoc(''); setObs('');
+    setAfiliadoRetiro(null); setModalDocBuscar(''); setModalDocQuery('');
+  };
 
   return (
     <div>
@@ -235,23 +256,63 @@ export function Retiros() {
       </>
       {modal && (
         <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.45)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <div style={{ background:C.surface,borderRadius:14,padding:28,width:420,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
+          <div style={{ background:C.surface,borderRadius:14,padding:28,width:460,boxShadow:'0 20px 60px rgba(0,0,0,.25)' }}>
             <h3 style={{ margin:'0 0 18px',color:C.primary }}>Aplicar retiro</h3>
+
+            {/* Paso 1: Buscar afiliado */}
             <label style={lbl}>Cédula del afiliado *</label>
-            <input style={inp} value={doc} onChange={e=>setDoc(e.target.value)} placeholder="Número de documento" />
-            <label style={lbl}>Fecha de retiro</label>
-            <input type="date" style={inp} value={fecha} onChange={e=>setFecha(e.target.value)} />
-            <label style={lbl}>Motivo</label>
-            <select style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)}>
-              {(listas.motivos_retiro||['Renuncia','Despido','Pension','Otro']).map(m=><option key={m}>{m}</option>)}
-            </select>
-            <label style={lbl}>Observaciones</label>
-            <textarea style={{ ...inp, height:70, textTransform:'uppercase' }} value={obs} onChange={e=>setObs(UP(e.target.value))} />
-            <div style={{ display:'flex', gap:10, marginTop:14, justifyContent:'flex-end' }}>
-              <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>
-              <Btn onClick={()=>aplicar.mutate()} disabled={aplicar.isPending||!doc}>
-                {aplicar.isPending?'Procesando...':'Aplicar retiro'}
+            <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+              <input style={{ ...inp, flex:1, margin:0 }} value={modalDocBuscar}
+                onChange={e=>{ setModalDocBuscar(e.target.value); setAfiliadoRetiro(null); }}
+                onKeyDown={e=>{ if(e.key==='Enter' && modalDocBuscar.trim()) setModalDocQuery(modalDocBuscar.trim()); }}
+                placeholder="Número de documento" />
+              <Btn onClick={()=>{ if(modalDocBuscar.trim()) setModalDocQuery(modalDocBuscar.trim()); }}
+                disabled={!modalDocBuscar.trim() || loadBuscandoAfil}>
+                {loadBuscandoAfil ? '...' : 'Buscar'}
               </Btn>
+            </div>
+
+            {/* Resultado de búsqueda */}
+            {modalDocQuery && afiliadoRetiro === false && (
+              <div style={{ padding:'10px 14px', borderRadius:8, background:C.redBg,
+                border:`1px solid ${C.red}`, marginBottom:14, fontSize:13, color:C.red, fontWeight:500 }}>
+                ❌ Afiliado no encontrado en el sistema (doc: {modalDocQuery})
+              </div>
+            )}
+
+            {afiliadoRetiro && (
+              <div style={{ padding:'12px 14px', borderRadius:8, background:C.greenBg,
+                border:`1px solid ${C.green}`, marginBottom:14 }}>
+                <div style={{ fontSize:12, fontWeight:700, color:C.green, marginBottom:6 }}>✅ Afiliado encontrado</div>
+                <div style={{ fontSize:14, fontWeight:700, color:C.text }}>{afiliadoRetiro.nombre}</div>
+                <div style={{ fontSize:12, color:C.text2, marginTop:2 }}>
+                  {afiliadoRetiro.empresa || '—'} · Doc: {afiliadoRetiro.doc}
+                  {afiliadoRetiro.eps ? ` · EPS: ${afiliadoRetiro.eps}` : ''}
+                </div>
+              </div>
+            )}
+
+            {/* Paso 2: Formulario — solo visible si afiliado encontrado */}
+            {afiliadoRetiro && (
+              <>
+                <label style={lbl}>Fecha de retiro</label>
+                <input type="date" style={inp} value={fecha} onChange={e=>setFecha(e.target.value)} />
+                <label style={lbl}>Motivo</label>
+                <select style={inp} value={motivo} onChange={e=>setMotivo(e.target.value)}>
+                  {(listas.motivos_retiro||['Renuncia','Despido','Pension','Otro']).map(m=><option key={m}>{m}</option>)}
+                </select>
+                <label style={lbl}>Observaciones</label>
+                <textarea style={{ ...inp, height:70, textTransform:'uppercase' }} value={obs} onChange={e=>setObs(UP(e.target.value))} />
+              </>
+            )}
+
+            <div style={{ display:'flex', gap:10, marginTop:14, justifyContent:'flex-end' }}>
+              <Btn variant="secondary" onClick={cerrarModal}>Cancelar</Btn>
+              {afiliadoRetiro && (
+                <Btn onClick={()=>aplicar.mutate()} disabled={aplicar.isPending}>
+                  {aplicar.isPending?'Procesando...':'Aplicar retiro'}
+                </Btn>
+              )}
             </div>
           </div>
         </div>

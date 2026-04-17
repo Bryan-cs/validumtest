@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import api, { buildUploadForm } from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
+import { empresaStyle } from '../utils/colors';
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const anioActual = new Date().getFullYear();
@@ -29,17 +30,9 @@ const inp = { width:'100%', padding:'8px 10px', border:`1px solid ${C.border}`, 
 const lbl = { fontSize:12, fontWeight:600, color:C.text2, display:'block', marginBottom:4 };
 const tdc = { padding:'10px 12px', fontSize:13, color:C.text, verticalAlign:'middle' };
 
-const EMPRESA_COLOR = {
-  'carsecoop':  { bg: '#F3E8FF', color: '#7C3AED' },
-  'protsecoop': { bg: '#FEF9C3', color: '#A16207' },
-  'technova':   { bg: '#FEF3C7', color: '#D97706' },
-  'techplanet': { bg: '#DCFCE7', color: '#16A34A' },
-};
 function EmpresaBadge({ nombre }) {
   if (!nombre) return <span style={{ color:C.text2 }}>—</span>;
-  const key = Object.keys(EMPRESA_COLOR).find(k => nombre.toLowerCase().includes(k));
-  if (!key) return <span style={{ fontSize:13, color:C.text }}>{nombre}</span>;
-  const s = EMPRESA_COLOR[key];
+  const s = empresaStyle(nombre);
   return (
     <span style={{ fontSize:12, fontWeight:700, borderRadius:6, padding:'2px 8px',
       background:s.bg, color:s.color, whiteSpace:'nowrap', display:'inline-block' }}>

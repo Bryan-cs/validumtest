@@ -177,14 +177,14 @@ def get_afiliados_filter_options(db):
 
 
 def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
-                  tipo_doc="", ccf="",
+                  tipo_doc="", ccf="", fecha_desde="", fecha_hasta="",
                   skip: int = 0, limit: int = 0):
     """Lista afiliados con filtros opcionales y paginación (skip/limit).
     Si limit=0 devuelve todos (para compatibilidad con exportaciones Excel).
     Cada filtro acepta múltiples valores separados por coma (CSV).
     Sin filtros ni paginación → devuelve resultado cacheado (TTL_AFILIADOS).
     """
-    sin_filtros = not any([q, estado, empresa, cliente, subtipo, tipo_doc, ccf])
+    sin_filtros = not any([q, estado, empresa, cliente, subtipo, tipo_doc, ccf, fecha_desde, fecha_hasta])
     if sin_filtros and skip == 0 and limit == 0:
         cached = _cache_get("afiliados:all")
         if cached is not None:
@@ -215,6 +215,8 @@ def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
     if tipos_doc: query = query.filter(models.Afiliado.tipo_doc.in_(tipos_doc))
     ccfs = _split_csv(ccf)
     if ccfs: query = query.filter(models.Afiliado.ccf.in_(ccfs))
+    if fecha_desde: query = query.filter(models.Afiliado.fecha_afiliacion >= fecha_desde)
+    if fecha_hasta: query = query.filter(models.Afiliado.fecha_afiliacion <= fecha_hasta)
     total = query.count()
     query = query.order_by(models.Afiliado.nombre)
     if limit > 0:
@@ -826,6 +828,20 @@ def get_dashboard(db, anio="", mes=""):
     # Factor de meses para las etiquetas
     meses_factor = 1 if (mes or not anio) else 12
 
+    # Ingresos por banco (facturas pagadas/planilla_pagada en el período)
+    banco_q = db.query(
+        models.Factura.banco,
+        func.coalesce(func.sum(models.Factura.ingresos), 0).label("total"),
+    ).filter(
+        models.Factura.estado.in_(["pagado", "planilla_pagada"]),
+        period_ok,
+    ).group_by(models.Factura.banco).all()
+    ingresos_por_banco = [
+        {"banco": row.banco or "Sin banco", "total": float(row.total)}
+        for row in banco_q if float(row.total) > 0
+    ]
+    ingresos_por_banco.sort(key=lambda x: x["total"], reverse=True)
+
     result = {
         "activos": int(stats.activos or 0), "suspendidos": int(stats.suspendidos or 0),
         "doble_afiliacion": int(stats.doble_afiliacion or 0),
@@ -837,6 +853,7 @@ def get_dashboard(db, anio="", mes=""):
         "gastos_fijos": float(gastos), "utilidad_neta": util_neta, "ingresos_adicionales": ing_adic,
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "pendiente_cobro_total": float(pend_total), "meses_factor": meses_factor,
+        "ingresos_por_banco": ingresos_por_banco,
     }
     _cache_set(cache_key, result, ttl=TTL_DASHBOARD)
     return result

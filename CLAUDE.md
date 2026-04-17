@@ -128,3 +128,77 @@ React Page → Axios (api.js) → FastAPI (main.py) → crud.py → SQLAlchemy �
 ## Credenciales dev por defecto
 - `admin / admin1234`
 - `empleado1 / emp1234`
+
+## Agents Team
+
+BBC File tiene un equipo de 8 agentes especializados orquestados por la sesión principal de Claude Code. Los prompts de cada agente están en `bbcfile/.claude/agents/`.
+
+### Cuándo usar agentes (NECESARIO, no por defecto)
+
+**USAR agentes cuando:**
+- La tarea toca 3+ archivos en capas distintas (DB + backend + frontend)
+- Feature nueva que requiere nuevo endpoint + UI
+- Auditoría o revisión independiente de un módulo completo
+- Trabajo en módulo complejo o poco familiar
+
+**NO usar agentes cuando:**
+- Bug en 1 archivo → implementar directo en sesión principal
+- Fix de UI menor, ajuste de estilo, cambio de texto
+- Cambio de configuración o variable
+- Cualquier tarea describible en 1 línea
+- El orquestador ya conoce el contexto completo y el cambio es trivial
+
+**Regla:** Si puedes hacerlo directo en menos tiempo del que tarda el pipeline de agentes, hazlo directo. Los agentes son para calidad y paralelismo en trabajo complejo, no un modo por defecto.
+
+### Agentes disponibles
+
+| Agente | Archivo | Rol |
+|---|---|---|
+| `bbc-explorer` | `.claude/agents/bbc-explorer.md` | Exploración read-only del codebase |
+| `bbc-architect` | `.claude/agents/bbc-architect.md` | Revisión arquitectónica antes de implementar |
+| `bbc-planner` | `.claude/agents/bbc-planner.md` | Descomposición de tareas con dependencias |
+| `bbc-db` | `.claude/agents/bbc-db.md` | Modelos SQLAlchemy + migraciones Alembic |
+| `bbc-backend` | `.claude/agents/bbc-backend.md` | FastAPI, crud.py, routers |
+| `bbc-frontend` | `.claude/agents/bbc-frontend.md` | React pages, TanStack Query |
+| `bbc-domain-reviewer` | `.claude/agents/bbc-domain-reviewer.md` | Validación de lógica de negocio SS colombiana |
+| `bbc-reviewer` | `.claude/agents/bbc-reviewer.md` | Revisión de calidad y bugs |
+| `bbc-tester` | `.claude/agents/bbc-tester.md` | Tests pytest (SQLite + PostgreSQL integración) |
+| `bbc-changelog` | `.claude/agents/bbc-changelog.md` | Actualización Obsidian |
+
+### Cómo despachar un agente
+
+El orquestador lee el skill + _shared-context antes de despachar:
+
+```python
+# Pseudocódigo — el orquestador (sesión principal) hace esto antes de cada Agent() call:
+shared = Read(".claude/agents/_shared-context.md")
+skill  = Read(".claude/agents/bbc-backend.md")  # o el agente que corresponda
+
+Agent(
+  description="Implementar endpoint GET /nuevo-modulo",
+  prompt=f"{shared}\n\n{skill}\n\n## Tarea\n{tarea}\n\n## Context del Explorer\n{handoff_explorer}"
+)
+```
+
+### Hot Context Injection
+
+Antes de despachar el primer agente de cualquier tarea, leer:
+1. Últimas 2 entradas de `Changelog.md` en Obsidian Vault
+2. Nota del módulo afectado en `Obsidian Vault/BBC File/Módulos/`
+
+### Estrategias de ejecución
+
+```
+Bug simple:             explorer → [backend|frontend] → domain-reviewer? → reviewer
+Feature con endpoint:   explorer → architect → planner → db? → backend → domain-reviewer? → frontend → reviewer → tester → changelog
+Feature solo frontend:  explorer → planner → frontend → reviewer → changelog
+Feature paralela:       explorer → architect → planner → backend ∥ frontend (worktrees) → domain-reviewer? → reviewer → tester → changelog
+Auditoría:              explorer → backend + frontend (paralelo) → domain-reviewer → reviewer
+Cambio SS/facturación:  explorer → architect → planner → backend → domain-reviewer → reviewer → tester → changelog
+```
+
+`domain-reviewer` es obligatorio cuando la tarea toca: cálculos SS, estados de factura, cobro, planillas, ingresos/utilidad.
+`architect` es obligatorio cuando la tarea toca: nuevo modelo, nuevo endpoint, cambio en auth, lógica de caché.
+
+### Spec completo
+Ver: `docs/superpowers/specs/2026-04-17-bbc-agents-team-design.md`

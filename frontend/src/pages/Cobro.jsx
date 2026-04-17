@@ -32,14 +32,20 @@ const ESTADO_CONFIG = {
 const ANIOS = [String(new Date().getFullYear()), String(new Date().getFullYear() - 1)];
 const POR_PAG = 50;
 
+function loadFiltrosCobro() {
+  try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros')) ?? {}; }
+  catch { return {}; }
+}
+
 export default function Cobro() {
-  const [filtros, setFiltros] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.filtros ?? { empresa:[], cliente:[], estado:[], subtipo:[] }; } catch { return { empresa:[], cliente:[], estado:[], subtipo:[] }; } });
-  const [expanded, setExp] = useState(null);
+  const saved = loadFiltrosCobro();
+  const [filtros,    setFiltros]    = useState(saved.filtros    ?? { empresa:[], cliente:[], estado:[], subtipo:[] });
+  const [expanded,   setExp]        = useState(null);
   const [novedadModal, setNovedadModal] = useState(null);
-  const [mesFiltro,  setMesFiltro]  = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.mesFiltro ?? ''; } catch { return ''; } });
-  const [anioFiltro, setAnioFiltro] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.anioFiltro ?? ''; } catch { return ''; } });
-  const [docBuscar, setDocBuscar] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.docBuscar ?? ''; } catch { return ''; } });
-  const [docFiltro, setDocFiltro] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_cobro_filtros'))?.docFiltro ?? ''; } catch { return ''; } });
+  const [mesFiltro,  setMesFiltro]  = useState(saved.mesFiltro  ?? '');
+  const [anioFiltro, setAnioFiltro] = useState(saved.anioFiltro ?? '');
+  const [docBuscar,  setDocBuscar]  = useState(saved.docBuscar  ?? '');
+  const [docFiltro,  setDocFiltro]  = useState(saved.docFiltro  ?? '');
   const [pagina, setPagina] = useState(1);
 
   useEffect(() => { try { localStorage.setItem('bbc_cobro_filtros', JSON.stringify({ filtros, mesFiltro, anioFiltro, docBuscar, docFiltro })); } catch {} }, [filtros, mesFiltro, anioFiltro, docBuscar, docFiltro]);
