@@ -2,8 +2,10 @@
 backend/logs/
 *.log
 
-# Env local frontend
+# Env files
 frontend/.env.local
+frontend/.env.*
+.env.*
 
 # Claude / Superpowers
 .claude/
