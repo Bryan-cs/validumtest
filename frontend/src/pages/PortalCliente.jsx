@@ -160,9 +160,14 @@ function ModalResumen({ doc, onClose }) {
                         <td style={tdc}>{f.mes} {f.anio}</td>
                         <td style={tdc}>{f.codigo}</td>
                         <td style={tdc}>
-                          <Badge color={f.estado==='pagado'?C.green:C.red} bg={f.estado==='pagado'?C.greenBg:C.redBg}>
-                            {f.estado?.toUpperCase()}
-                          </Badge>
+                          {(() => {
+                            const pagado = f.estado === 'pagado' || f.estado === 'planilla_pagada';
+                            return (
+                              <Badge color={pagado ? C.green : C.red} bg={pagado ? C.greenBg : C.redBg}>
+                                {pagado ? 'PAGADA' : (f.estado?.toUpperCase() ?? '—')}
+                              </Badge>
+                            );
+                          })()}
                         </td>
                         <td style={tdc}>{money(f.costos)}</td>
                         <td style={tdc}>{f.banco||'—'}</td>

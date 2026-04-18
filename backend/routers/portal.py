@@ -112,7 +112,7 @@ def portal_resumen(doc: str, db: Session = Depends(get_db), token=Depends(_requi
             "pagado_en": f.pagado_en.isoformat() if f.pagado_en else None,
         } for f in facturas],
         "total_pendiente": sum(f.costos or 0 for f in facturas if f.estado == "pendiente"),
-        "total_pagado":    sum(f.costos or 0 for f in facturas if f.estado == "pagado"),
+        "total_pagado":    sum(f.costos or 0 for f in facturas if f.estado in ("pagado", "planilla_pagada")),
     }
 
 
