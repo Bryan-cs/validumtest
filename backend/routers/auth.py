@@ -2,6 +2,7 @@
 from fastapi import APIRouter, HTTPException, Depends, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import timedelta, datetime, timezone
 import jwt, time
 from database import get_db
@@ -21,14 +22,20 @@ _limiter = Limiter(key_func=get_remote_address)
 def _blacklist_jti(db: Session, jti: str, expires_at) -> bool:
     """Inserta jti en token_blacklist de forma atómica (race-safe).
 
-    Retorna True si se insertó, False si ya existía (otro request ganó la carrera).
-    Usar IntegrityError en lugar de SELECT+INSERT evita el race condition TOCTOU.
+    Usa ON CONFLICT DO NOTHING para evitar error logs en PostgreSQL cuando
+    requests concurrentes intentan blacklistear el mismo token simultáneamente.
+    Retorna True si se insertó, False si ya existía.
     """
     try:
-        db.add(models.TokenBlacklist(jti=jti, expires_at=expires_at))
+        stmt = pg_insert(models.TokenBlacklist).values(
+            jti=jti,
+            expires_at=expires_at,
+            creado=datetime.now(timezone.utc),
+        ).on_conflict_do_nothing(index_elements=["jti"])
+        result = db.execute(stmt)
         db.commit()
-        return True
-    except IntegrityError:
+        return result.rowcount > 0
+    except Exception:
         db.rollback()
         return False
 
