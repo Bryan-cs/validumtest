@@ -65,7 +65,7 @@ def backup_db_to_r2():
         key = f"backups/{ts}.json"
         s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=dump)
         size_mb = len(dump) / (1024 * 1024)
-        _log.info(f"Backup: {key} ({size_mb:.1f} MB) subido a R2")
+        _log.info(f"backup_ok: archivo={key} tamaño={size_mb:.2f}MB tablas={len(backup_data)}")
         # Limpiezas post-backup
         _cleanup_old_backups(s3, _R2_BUCKET, _log)
         _cleanup_old_activity(_log)
