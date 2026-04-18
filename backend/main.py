@@ -217,7 +217,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
     allow_credentials=False,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )
 
@@ -394,6 +394,8 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(re
     db.delete(e)
     crud._log(db, token.get("sub","sistema"), "restauró un afiliado eliminado", "Afiliados", e.nombre)
     crud.cache_invalidar("cobro:")
+    crud.cache_invalidar("afiliados:")
+    crud.cache_invalidar("dashboard:")
     db.commit()
     return {"ok": True, "nombre": e.nombre}
 

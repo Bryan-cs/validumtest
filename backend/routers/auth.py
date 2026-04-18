@@ -200,3 +200,19 @@ def logout(request: Request, body: schemas.RefreshTokenRequest, db: Session = De
 @router.get("/me")
 def me(token=Depends(verify_token)):
     return token
+
+
+@router.post("/verify-password")
+def verify_password_endpoint(
+    data: dict,
+    db: Session = Depends(get_db),
+    token=Depends(verify_token),
+):
+    """Verifica contraseña del usuario autenticado sin registrar intentos fallidos.
+    Usado por modales internos (ej. finalizar-lote en Tareas) para no bloquear la IP."""
+    password = data.get("password", "")
+    username = token.get("sub", "")
+    u = crud.get_user_by_username(db, username)
+    if not u or not crud.verify_password(password, u.password):
+        raise HTTPException(401, "Contraseña incorrecta")
+    return {"ok": True}

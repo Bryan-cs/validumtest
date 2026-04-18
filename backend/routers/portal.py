@@ -108,11 +108,11 @@ def portal_resumen(doc: str, db: Session = Depends(get_db), token=Depends(_requi
         },
         "facturas": [{
             "id": f.id, "codigo": f.codigo, "mes": f.mes, "anio": f.anio,
-            "estado": f.estado, "costos": f.costos, "banco": f.banco,
+            "estado": f.estado, "ingresos": f.ingresos, "banco": f.banco,
             "pagado_en": f.pagado_en.isoformat() if f.pagado_en else None,
         } for f in facturas],
-        "total_pendiente": sum(f.costos or 0 for f in facturas if f.estado == "pendiente"),
-        "total_pagado":    sum(f.costos or 0 for f in facturas if f.estado in ("pagado", "planilla_pagada")),
+        "total_pendiente": sum(f.ingresos or 0 for f in facturas if f.estado == "pendiente"),
+        "total_pagado":    sum(f.ingresos or 0 for f in facturas if f.estado in ("pagado", "planilla_pagada")),
     }
 
 
@@ -766,7 +766,7 @@ def portal_reporte(
                     "periodo": f"{f.mes} {f.anio}" if f.mes else (anio or ""),
                     "codigo": f.codigo or "",
                     "estado_factura": "Pagada" if f.estado in PAGADOS else f.estado.capitalize(),
-                    "valor": f.costos or 0,
+                    "valor": f.ingresos or 0,
                     "banco": f.banco or "",
                     "fecha_pago": f.pagado_en.strftime("%Y-%m-%d") if f.pagado_en else "",
                     "sin_factura": False,

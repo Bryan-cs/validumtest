@@ -367,7 +367,7 @@ function PlanillaDetalle({ afiliado, cobroRow, config }) {
                   {f.mes} {f.anio}
                 </span>
                 <span style={{ color:C.text2,marginLeft:4 }}>{f.estado==='pagado'?'✓ Pagado':'⏳ Pend.'}</span>
-                {f.costos>0 && <span style={{ color:C.text2,marginLeft:4 }}>${Number(f.costos).toLocaleString('es-CO')}</span>}
+                {f.ingresos>0 && <span style={{ color:C.text2,marginLeft:4 }}>${Number(f.ingresos).toLocaleString('es-CO')}</span>}
               </div>
             ))}
           </div>

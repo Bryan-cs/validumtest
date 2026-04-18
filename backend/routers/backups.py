@@ -81,7 +81,7 @@ def _cleanup_old_backups(s3, bucket, _log):
         cutoff = datetime.now(timezone.utc) - timedelta(days=30)
         resp = s3.list_objects_v2(Bucket=bucket, Prefix="backups/")
         for obj in resp.get("Contents", []):
-            if obj["LastModified"].replace(tzinfo=timezone.utc) < cutoff:
+            if obj["LastModified"].astimezone(timezone.utc) < cutoff:
                 s3.delete_object(Bucket=bucket, Key=obj["Key"])
                 _log.info(f"Backup: eliminado backup antiguo {obj['Key']}")
     except Exception as e:
@@ -288,6 +288,8 @@ async def restaurar_backup(
                 for c in columns:
                     if not _COL_RE.match(c):
                         raise ValueError(f"Nombre de columna inválido: {c}")
+                # Savepoint por tabla: un fallo solo deshace esa tabla, no las anteriores
+                db.execute(text("SAVEPOINT sp_restore_table"))
                 db.execute(text(f'TRUNCATE TABLE "{table_name}" CASCADE'))
                 count = 0
                 for row in rows:
@@ -296,11 +298,11 @@ async def restaurar_backup(
                     params = {f"v{i}": row.get(c) for i, c in enumerate(columns)}
                     db.execute(text(f'INSERT INTO "{table_name}" ({cols}) VALUES ({placeholders})'), params)
                     count += 1
+                db.execute(text("RELEASE SAVEPOINT sp_restore_table"))
                 restored.append({"tabla": table_name, "filas": count})
             except Exception as e:
                 errors.append(f"Error en '{table_name}': {str(e)[:200]}")
-                db.rollback()
-                db.execute(text("SET session_replication_role = 'replica'"))
+                db.execute(text("ROLLBACK TO SAVEPOINT sp_restore_table"))
                 continue
 
         # Reactivar foreign keys

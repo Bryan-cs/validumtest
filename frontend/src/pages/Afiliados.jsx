@@ -570,8 +570,8 @@ export default function Afiliados() {
   // Filtro por año y totales
   const aniosDisponibles = [...new Set(factAfil.map(f => String(f.anio)).filter(Boolean))].sort().reverse();
   const factAfil_filtradas = anioFiltro === 'Todos' ? factAfil : factAfil.filter(f => String(f.anio) === anioFiltro);
-  const totalPagado    = factAfil_filtradas.filter(f=>f.estado==='pagado'||f.estado==='planilla_pagada').reduce((s,f)=>s+(f.costos||0),0);
-  const totalPendiente = factAfil_filtradas.filter(f=>f.estado!=='pagado'&&f.estado!=='planilla_pagada').reduce((s,f)=>s+(f.costos||0),0);
+  const totalPagado    = factAfil_filtradas.filter(f=>f.estado==='pagado'||f.estado==='planilla_pagada').reduce((s,f)=>s+(f.ingresos||0),0);
+  const totalPendiente = factAfil_filtradas.filter(f=>f.estado!=='pagado'&&f.estado!=='planilla_pagada').reduce((s,f)=>s+(f.ingresos||0),0);
 
   return (
     <div>
@@ -901,7 +901,7 @@ export default function Afiliados() {
                         <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{f.codigo}</td>
                         <td style={tdc}>{f.mes}</td>
                         <td style={tdc}>{f.anio}</td>
-                        <td style={{ ...tdc,fontWeight:600 }}>${(f.costos||0).toLocaleString('es-CO')}</td>
+                        <td style={{ ...tdc,fontWeight:600 }}>${(f.ingresos||0).toLocaleString('es-CO')}</td>
                         <td style={tdc}>
                           <span style={{
                             padding:'3px 8px',borderRadius:6,fontSize:11,fontWeight:600,

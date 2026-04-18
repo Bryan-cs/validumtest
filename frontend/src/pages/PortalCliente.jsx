@@ -169,7 +169,7 @@ function ModalResumen({ doc, onClose }) {
                             );
                           })()}
                         </td>
-                        <td style={tdc}>{money(f.costos)}</td>
+                        <td style={tdc}>{money(f.ingresos)}</td>
                         <td style={tdc}>{f.banco||'—'}</td>
                       </tr>
                     ))}

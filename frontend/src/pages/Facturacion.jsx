@@ -458,6 +458,9 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [modalEditar, setModalEditar] = useState(null);
   const [prefill, setPrefill] = useState(null);
   const [expandedRow, setExpandedRow] = useState(null);
+  const [seleccionadas, setSeleccionadas] = useState(new Set());
+  const [modalBulkPagar, setModalBulkPagar] = useState(false);
+  const [bancoBulk, setBancoBulk] = useState('');
 
   useEffect(() => {
     if (prefillAfiliado) { setPrefill(prefillAfiliado); setModalNueva(true); }
@@ -477,12 +480,12 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     filtros.anio.length > 1 || filtros.mes.length > 1 ||
     filtros.cliente.length > 1 || filtros.estado.length > 1;
 
-  // Con mes seleccionado: traer todos del mes y filtrar localmente (dataset acotado)
-  // Sin mes: siempre paginar en servidor aunque haya otros filtros activos
+  // Con mes seleccionado O búsqueda activa: traer todos y filtrar localmente
+  // Sin mes ni búsqueda: paginar en servidor
   const hayMes = !!mesB;
   const { data: respF={total:0,items:[]}, isLoading } = useQuery({
-    queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros],
-    queryFn: () => api.get('/facturas', { params: hayFiltros && hayMes
+    queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, busqueda, hayFiltros],
+    queryFn: () => api.get('/facturas', { params: hayFiltros && (hayMes || busqueda)
       ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0 }
       : { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F }
     }).then(r=>r.data),
@@ -576,6 +579,45 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     onSuccess: (res) => { toast.success('Planilla marcada como pagada'); qc.setQueryData(['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros], prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar planilla'),
   });
+
+  const pagarBulk = useMutation({
+    mutationFn: async ({ ids, banco }) => {
+      const results = await Promise.allSettled(ids.map(id => api.patch(`/facturas/${id}/pagar`, null, { params: { banco } })));
+      const ok = results.filter(r => r.status === 'fulfilled').length;
+      const err = results.filter(r => r.status === 'rejected').length;
+      return { ok, err };
+    },
+    onSuccess: ({ ok, err }) => {
+      if (ok) toast.success(`${ok} factura(s) marcada(s) como pagada`);
+      if (err) toast.error(`${err} factura(s) no se pudieron pagar`);
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+      setSeleccionadas(new Set()); setModalBulkPagar(false); setBancoBulk('');
+    },
+  });
+
+  const planillaBulk = useMutation({
+    mutationFn: async (ids) => {
+      const results = await Promise.allSettled(ids.map(id => api.patch(`/facturas/${id}/planilla-pagada`)));
+      const ok = results.filter(r => r.status === 'fulfilled').length;
+      const err = results.filter(r => r.status === 'rejected').length;
+      return { ok, err };
+    },
+    onSuccess: ({ ok, err }) => {
+      if (ok) toast.success(`${ok} factura(s) marcada(s) como planilla pagada`);
+      if (err) toast.error(`${err} factura(s) no se pudieron actualizar`);
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+      setSeleccionadas(new Set());
+    },
+  });
+
+  const toggleSel = (id) => setSeleccionadas(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleTodos = () => {
+    const pendientes = rowsFiltradas.filter(f => f.estado === 'pendiente').map(f => f.id);
+    const todosSel = pendientes.every(id => seleccionadas.has(id));
+    setSeleccionadas(todosSel ? new Set() : new Set(pendientes));
+  };
+  const selPendientes = rowsFiltradas.filter(f => f.estado === 'pendiente' && seleccionadas.has(f.id));
+  const selPagadas    = rowsFiltradas.filter(f => f.estado === 'pagado'    && seleccionadas.has(f.id));
 
   const esPagada = f => f.estado === 'pagado' || f.estado === 'planilla_pagada';
   const totIng  = rowsFiltradas.filter(esPagada).reduce((s,f)=>s+(f.ingresos||0),0) + totIngAd;
@@ -692,10 +734,34 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         onLimpiar={limpiar}
       />
 
+      {seleccionadas.size > 0 && (
+        <div style={{ display:'flex',gap:8,alignItems:'center',background:C.blueBg,border:`1px solid ${C.blue}`,
+          borderRadius:8,padding:'8px 14px',marginBottom:10,flexWrap:'wrap' }}>
+          <span style={{ fontSize:13,fontWeight:600,color:C.blue }}>{seleccionadas.size} seleccionada(s)</span>
+          {selPendientes.length > 0 && (
+            <Btn size="sm" variant="success" onClick={()=>{ setBancoBulk(''); setModalBulkPagar(true); }}>
+              ✓ Marcar {selPendientes.length} como Pagada
+            </Btn>
+          )}
+          {selPagadas.length > 0 && (
+            <Btn size="sm" variant="secondary" disabled={planillaBulk.isPending}
+              onClick={()=>planillaBulk.mutate(selPagadas.map(f=>f.id))}>
+              📋 Marcar {selPagadas.length} como Planilla Pagada
+            </Btn>
+          )}
+          <Btn size="sm" variant="secondary" onClick={()=>setSeleccionadas(new Set())}>Limpiar selección</Btn>
+        </div>
+      )}
+
       <div style={{ overflowX:'auto',borderRadius:10,border:`1px solid ${C.border}` }}>
         <table style={{ width:'100%',borderCollapse:'collapse',background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
+              <th style={{ padding:'10px 12px',borderBottom:`1px solid ${C.border}` }}>
+                <input type="checkbox"
+                  checked={rowsFiltradas.filter(f=>f.estado==='pendiente').length > 0 && rowsFiltradas.filter(f=>f.estado==='pendiente').every(f=>seleccionadas.has(f.id))}
+                  onChange={toggleTodos} title="Seleccionar todas las pendientes" />
+              </th>
               {['Código','Afiliado','Cliente','Período','Ingreso','Planilla','Utilidad','Banco','Estado','Novedades','Acciones'].map(h=>(
                 <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                   color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
@@ -703,16 +769,20 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
             </tr>
           </thead>
           <tbody>
-            {isLoading && [1,2,3,4,5].map(i => <SkeletonRow key={i} cols={10} />)}
+            {isLoading && [1,2,3,4,5].map(i => <SkeletonRow key={i} cols={11} />)}
             {rowsFiltradas.map(f => {
               const isHuerfana = f.afiliado_eliminado && f.estado==='pendiente';
               const isExpanded = expandedRow === f.id;
               const ai = f.afil_info || {};
+              const isSel = seleccionadas.has(f.id);
               return (<React.Fragment key={f.id}>
-                <tr style={{ borderBottom: isExpanded ? 'none' : `1px solid ${C.border}`,background:isHuerfana?C.redBg:C.surface,cursor:'pointer',transition:'background .1s' }}
+                <tr style={{ borderBottom: isExpanded ? 'none' : `1px solid ${C.border}`,background:isSel?C.blueBg:isHuerfana?C.redBg:C.surface,cursor:'pointer',transition:'background .1s' }}
                   onClick={()=>setExpandedRow(isExpanded ? null : f.id)}
-                  onMouseEnter={e=>{ if(!isHuerfana) e.currentTarget.style.background=C.surface2; }}
-                  onMouseLeave={e=>{ e.currentTarget.style.background=isHuerfana?C.redBg:C.surface; }}>
+                  onMouseEnter={e=>{ if(!isHuerfana&&!isSel) e.currentTarget.style.background=C.surface2; }}
+                  onMouseLeave={e=>{ e.currentTarget.style.background=isSel?C.blueBg:isHuerfana?C.redBg:C.surface; }}>
+                  <td style={tdc} onClick={e=>e.stopPropagation()}>
+                    <input type="checkbox" checked={isSel} onChange={()=>toggleSel(f.id)} />
+                  </td>
                   <td style={tdc}><span style={{ fontFamily:'monospace',fontSize:12 }}>{f.codigo}</span></td>
                   <td style={{ ...tdc,color:isHuerfana?C.red:C.blue }}>
                     <span style={{ textDecoration:'underline',cursor:'pointer' }}>{f.nombre_afiliado}</span>
@@ -772,7 +842,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                 </tr>
                 {isExpanded && Object.keys(ai).length > 0 && (
                   <tr style={{ borderBottom:`1px solid ${C.border}`,background:C.blueBg }}>
-                    <td colSpan={11} style={{ padding:'10px 16px' }}>
+                    <td colSpan={12} style={{ padding:'10px 16px' }}>
                       <div style={{ display:'flex',gap:24,flexWrap:'wrap',fontSize:12,color:C.text }}>
                         <div><strong style={{ color:C.blue }}>Doc:</strong> {f.doc}</div>
                         <div><strong style={{ color:C.blue }}>Tel:</strong> {ai.tel||'—'}</div>
@@ -794,7 +864,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
               </React.Fragment>);
             })}
             {!isLoading && rowsFiltradas.length===0 && (
-              <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas</td></tr>
+              <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin facturas</td></tr>
             )}
           </tbody>
         </table>
@@ -847,6 +917,27 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
               onClick={()=>crearIngAd.mutate({ concepto:formIngAd.concepto, descripcion:formIngAd.descripcion,
                 valor:parseFloat(formIngAd.valor), mes:formIngAd.mes, anio:formIngAd.anio })}>
               {crearIngAd.isPending ? 'Guardando...' : 'Agregar'}
+            </Btn>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal pago masivo */}
+      <Modal open={modalBulkPagar} onClose={()=>setModalBulkPagar(false)} width={420} title={`✓ Marcar ${selPendientes.length} factura(s) como pagada`}>
+        <div>
+          <p style={{ margin:'0 0 14px',fontSize:13,color:C.text2 }}>
+            Se marcarán como pagadas <strong style={{ color:C.text }}>{selPendientes.length} factura(s)</strong> pendientes seleccionadas.
+          </p>
+          <label style={lbl}>Banco / Forma de pago</label>
+          <select style={{ ...inp, marginBottom:20 }} value={bancoBulk} onChange={e=>setBancoBulk(e.target.value)}>
+            <option value="">Seleccionar banco...</option>
+            {(listas?.bancos||[]).map(b=><option key={b}>{b}</option>)}
+          </select>
+          <div style={{ display:'flex',justifyContent:'flex-end',gap:10 }}>
+            <Btn variant="secondary" onClick={()=>setModalBulkPagar(false)}>Cancelar</Btn>
+            <Btn variant="success" disabled={pagarBulk.isPending}
+              onClick={()=>pagarBulk.mutate({ ids: selPendientes.map(f=>f.id), banco: bancoBulk })}>
+              {pagarBulk.isPending ? 'Guardando...' : `✓ Confirmar ${selPendientes.length} pago(s)`}
             </Btn>
           </div>
         </div>

@@ -91,8 +91,8 @@ class FacturaCreate(BaseModel):
     @field_validator('estado', mode='before')
     @classmethod
     def estado_valido(cls, v):
-        if v is not None and v not in ('pendiente', 'pagado'):
-            raise ValueError('Estado debe ser "pendiente" o "pagado"')
+        if v is not None and v not in ('pendiente', 'pagado', 'planilla_pagada'):
+            raise ValueError('Estado debe ser "pendiente", "pagado" o "planilla_pagada"')
         return v or 'pendiente'
 
 class FacturaUpdate(BaseModel):
@@ -121,8 +121,8 @@ class FacturaUpdate(BaseModel):
     @field_validator('estado', mode='before')
     @classmethod
     def estado_valido(cls, v):
-        if v is not None and v not in ('pendiente', 'pagado'):
-            raise ValueError('Estado debe ser "pendiente" o "pagado"')
+        if v is not None and v not in ('pendiente', 'pagado', 'planilla_pagada'):
+            raise ValueError('Estado debe ser "pendiente", "pagado" o "planilla_pagada"')
         return v
 
 class RetiroCreate(BaseModel):

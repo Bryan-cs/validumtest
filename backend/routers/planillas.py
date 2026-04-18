@@ -55,18 +55,12 @@ async def crear_planilla(
     db: Session = Depends(get_db),
     token=Depends(require_admin),
 ):
-    planilla = models.PlanillaPago(
-        cliente_ref=cliente_ref, mes=mes, anio=anio,
-        observaciones=observaciones, subido_por=token.get("sub", ""),
-    )
-    db.add(planilla)
-    db.commit()
-    db.refresh(planilla)
-
     from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE
     s3 = _get_s3()
     subidos = []
-    omitidos = []  # {"nombre": ..., "motivo": ...}
+    omitidos = []
+    docs_pendientes = []  # acumular hasta confirmar que hay archivos válidos
+
     for file in files:
         nombre = file.filename or "archivo"
         ext = nombre.rsplit(".", 1)[-1].lower() if "." in nombre else ""
@@ -94,13 +88,26 @@ async def crear_planilla(
         except Exception as e:
             omitidos.append({"nombre": nombre, "motivo": f"Error al guardar: {e}"})
             continue
-        doc = models.Documento(
-            afiliado_doc="", nombre=nombre, tipo=ext, ruta=ruta,
-            tamano=len(content), subido_por=token.get("sub", ""),
-            contexto="planilla_pago", contexto_id=planilla.id,
-        )
-        db.add(doc)
+        docs_pendientes.append({"nombre": nombre, "ext": ext, "ruta": ruta, "tamano": len(content)})
         subidos.append(nombre)
+
+    if not subidos:
+        raise HTTPException(400, f"Ningún archivo fue aceptado. Omitidos: {[o['motivo'] for o in omitidos]}")
+
+    # Solo crear registro si hay al menos un archivo válido
+    planilla = models.PlanillaPago(
+        cliente_ref=cliente_ref, mes=mes, anio=anio,
+        observaciones=observaciones, subido_por=token.get("sub", ""),
+    )
+    db.add(planilla)
+    db.flush()  # obtener planilla.id sin commit aún
+
+    for d in docs_pendientes:
+        db.add(models.Documento(
+            afiliado_doc="", nombre=d["nombre"], tipo=d["ext"], ruta=d["ruta"],
+            tamano=d["tamano"], subido_por=token.get("sub", ""),
+            contexto="planilla_pago", contexto_id=planilla.id,
+        ))
     crud._log(db, token.get("sub", ""), "Subió planilla SS", "Facturación",
               f"{cliente_ref} - {mes} {anio} ({len(subidos)} archivos, {len(omitidos)} omitidos)")
     db.commit()

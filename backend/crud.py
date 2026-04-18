@@ -836,10 +836,24 @@ def get_dashboard(db, anio="", mes=""):
         models.Factura.estado.in_(["pagado", "planilla_pagada"]),
         period_ok,
     ).group_by(models.Factura.banco).all()
-    ingresos_por_banco = [
-        {"banco": row.banco or "Sin banco", "total": float(row.total)}
-        for row in banco_q if float(row.total) > 0
-    ]
+    # Normaliza nombres (ej. "DaviPlata" y "Daviplata" → mismo grupo)
+    _BANCO_CANON = {
+        "daviplata": "Daviplata",
+        "nequi": "Nequi",
+        "davivienda": "Davivienda",
+        "bancolombia": "Bancolombia",
+        "banco de bogotá": "Banco de Bogotá",
+        "banco de bogota": "Banco de Bogotá",
+        "efectivo": "Efectivo",
+    }
+    _merged: dict[str, float] = {}
+    for row in banco_q:
+        if float(row.total) <= 0:
+            continue
+        raw = (row.banco or "Sin banco").strip()
+        canon = _BANCO_CANON.get(raw.lower(), raw)
+        _merged[canon] = _merged.get(canon, 0.0) + float(row.total)
+    ingresos_por_banco = [{"banco": k, "total": v} for k, v in _merged.items()]
     ingresos_por_banco.sort(key=lambda x: x["total"], reverse=True)
 
     result = {
@@ -867,7 +881,7 @@ def get_dashboard_meses(db, anio=""):
     periodos = [(MESES[m], anio_ref) for m in range(12)]
     rows = db.query(
         models.Factura.mes, models.Factura.anio,
-        func.sum(models.Factura.ingresos).label("total_ingresos"),
+        func.coalesce(func.sum(sql_case((models.Factura.estado.in_(["pagado", "planilla_pagada"]), models.Factura.ingresos), else_=0)), 0).label("total_ingresos"),
         func.count(models.Factura.id).label("total_facturas"),
         func.coalesce(func.sum(sql_case((models.Factura.estado=="pendiente", models.Factura.ingresos), else_=0)), 0).label("total_pendiente"),
     ).filter(
@@ -1042,14 +1056,17 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     _corte = (cfg.anio_inicio_cobro, cfg.mes_inicio_cobro) if cfg and cfg.anio_inicio_cobro and cfg.mes_inicio_cobro else None
 
     # Pre-cargar TODAS las facturas de los últimos 6 meses → set de (doc, mes, anio)
+    # Usamos pares exactos (anio, mes) para evitar que una factura de Nov 2026 cuente como Nov 2025
     anios_ventana = list({str(y) for y, _ in meses_ventana})
     meses_ventana_nombres = list({MESES[m-1] for _, m in meses_ventana})
+    _pares_validos = {(str(y), MESES[m-1]) for y, m in meses_ventana}
     facturas_set = set(
         (f.doc, f.mes, f.anio)
         for f in db.query(models.Factura.doc, models.Factura.mes, models.Factura.anio)
         .filter(models.Factura.anio.in_(anios_ventana))
         .filter(models.Factura.mes.in_(meses_ventana_nombres))
         .all()
+        if (f.anio, f.mes) in _pares_validos  # excluye combinaciones inválidas entre años
     )
 
     afils = db.query(models.Afiliado).filter(

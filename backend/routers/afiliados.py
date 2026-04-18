@@ -336,7 +336,7 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
             except Exception:
                 pass
 
-        total_val    = fac.costos or 0
+        total_val    = fac.ingresos or 0
         es_pagada    = fac.estado in ("pagado", "planilla_pagada")
         estado_color = colors.HexColor("#16A34A") if es_pagada else colors.HexColor("#DC2626")
         estado_label = "PAGADA" if es_pagada else "PENDIENTE"

@@ -292,7 +292,7 @@ export default function Tareas() {
   // Verificar contraseña y luego finalizar lote
   const handleConfirmPassword = async (pwd) => {
     try {
-      await api.post('/auth/login', { username: user.username, password: pwd });
+      await api.post('/auth/verify-password', { password: pwd });
     } catch (e) {
       if (e.response?.status === 401) {
         throw new Error('Contraseña incorrecta');

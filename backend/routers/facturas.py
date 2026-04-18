@@ -300,7 +300,9 @@ def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(
         # ── Formas de pago disponibles (solo facturas pendientes) ────────────
         bancos_lista = []
         try:
-            lista_bancos = db.query(models.Lista).filter_by(nombre='bancos').first()
+            lista_bancos = db.query(models.Lista).filter_by(nombre='bancos_cuentas').first()
+            if not lista_bancos:
+                lista_bancos = db.query(models.Lista).filter_by(nombre='bancos').first()
             if lista_bancos:
                 bancos_lista = [b for b in json.loads(lista_bancos.items or "[]")
                                 if b.strip()]

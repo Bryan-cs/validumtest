@@ -1124,7 +1124,8 @@ Fecha Emisión: {{fecha_emision}}
 TOTAL: \${{total}}
 {{servicios}}
 *Medios de pago:*
--Nequi / Daviplata: 3170296773
+-Nequi: 3170296773
+-Daviplata: 3170296773
 -Davivienda (Ahorros): 0550108900642357
 -Banco de Bogotá (Ahorros): 462547688
 -Llave Banco Bogotá: @BBJMF23103

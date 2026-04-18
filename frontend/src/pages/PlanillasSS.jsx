@@ -45,13 +45,23 @@ export default function PlanillasSS() {
 
   const descargarArchivo = async (docId, nombre) => {
     try {
-      const res = await api.get(`/documentos/${docId}/descargar`, { responseType: 'blob' });
-      const url = URL.createObjectURL(res.data);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = nombre;
-      a.click();
-      URL.revokeObjectURL(url);
+      const res = await api.get(`/documentos/${docId}/descargar`);
+      const presigned = res.data?.url;
+      if (presigned) {
+        const a = document.createElement('a');
+        a.href = presigned;
+        a.download = nombre;
+        a.click();
+      } else {
+        // fallback local dev (blob directo)
+        const r2 = await api.get(`/documentos/${docId}/descargar`, { responseType: 'blob' });
+        const url = URL.createObjectURL(r2.data);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = nombre;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
     } catch { toast.error('Error al descargar'); }
   };
 
