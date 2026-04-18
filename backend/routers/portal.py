@@ -706,3 +706,279 @@ def eliminar_aviso(aviso_id: int, db: Session = Depends(get_db), token=Depends(v
     db.delete(aviso)
     db.commit()
     return {"ok": True}
+
+
+# ─── REPORTES DEL CLIENTE ─────────────────────────────────────────────────────
+
+@router.get("/reportes")
+def portal_reporte(
+    mes: str = "",
+    anio: str = "",
+    formato: str = "excel",
+    db: Session = Depends(get_db),
+    token=Depends(_require_portal),
+):
+    """Descarga reporte Excel o PDF de afiliados del cliente para un período."""
+    import openpyxl
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    rol         = token.get("rol", "")
+    cliente_ref = (token.get("cliente_ref") or "").strip()
+
+    if rol != "admin" and not cliente_ref:
+        raise HTTPException(400, "Usuario sin cliente asociado")
+
+    # ── Afiliados del cliente ─────────────────────────────────────────────────
+    query = db.query(models.Afiliado).filter(models.Afiliado.activo == True)
+    if rol != "admin":
+        query = query.filter(
+            models.Afiliado.cliente_txt == cliente_ref,
+            models.Afiliado.cliente_txt != None,
+            models.Afiliado.cliente_txt != "",
+        )
+    afiliados = query.order_by(models.Afiliado.nombre).limit(2000).all()
+
+    # ── Facturas del período para cada afiliado ───────────────────────────────
+    PAGADOS = ("pagado", "planilla_pagada")
+
+    reporte = []
+    for a in afiliados:
+        fq = db.query(models.Factura).filter_by(doc=a.doc, afiliado_eliminado=False)
+        if mes:
+            fq = fq.filter(models.Factura.mes == mes)
+        if anio:
+            fq = fq.filter(models.Factura.anio == anio)
+        facturas = fq.order_by(models.Factura.id.desc()).all()
+
+        try:
+            srvs = json.loads(a.servicios or "[]")
+        except Exception:
+            srvs = []
+
+        if facturas:
+            for f in facturas:
+                reporte.append({
+                    "nombre": a.nombre, "doc": a.doc, "tipo_doc": a.tipo_doc,
+                    "empresa": a.empresa, "cargo": a.cargo or "",
+                    "eps": a.eps or "", "afp": a.afp or "", "arl": a.arl or "", "ccf": a.ccf or "",
+                    "servicios": ", ".join(srvs),
+                    "estado_afil": a.estado,
+                    "periodo": f"{f.mes} {f.anio}" if f.mes else (anio or ""),
+                    "codigo": f.codigo or "",
+                    "estado_factura": "Pagada" if f.estado in PAGADOS else f.estado.capitalize(),
+                    "valor": f.costos or 0,
+                    "banco": f.banco or "",
+                    "fecha_pago": f.pagado_en.strftime("%Y-%m-%d") if f.pagado_en else "",
+                    "sin_factura": False,
+                })
+        else:
+            reporte.append({
+                "nombre": a.nombre, "doc": a.doc, "tipo_doc": a.tipo_doc,
+                "empresa": a.empresa, "cargo": a.cargo or "",
+                "eps": a.eps or "", "afp": a.afp or "", "arl": a.arl or "", "ccf": a.ccf or "",
+                "servicios": ", ".join(srvs),
+                "estado_afil": a.estado,
+                "periodo": f"{mes} {anio}".strip() if (mes or anio) else "Sin período",
+                "codigo": "", "estado_factura": "Sin factura", "valor": 0,
+                "banco": "", "fecha_pago": "", "sin_factura": True,
+            })
+
+    # ── Totales ───────────────────────────────────────────────────────────────
+    total_afil    = len(afiliados)
+    con_factura   = [r for r in reporte if not r["sin_factura"]]
+    sin_factura   = [r for r in reporte if r["sin_factura"]]
+    total_pagado  = sum(r["valor"] for r in con_factura if r["estado_factura"] == "Pagada")
+    total_pendiente = sum(r["valor"] for r in con_factura if r["estado_factura"] != "Pagada")
+    periodo_label = f"{mes} {anio}".strip() if (mes or anio) else "Todos los períodos"
+    fecha_gen     = datetime.now().strftime("%d/%m/%Y %H:%M")
+    cliente_label = cliente_ref if rol != "admin" else "Administrador"
+
+    if formato == "excel":
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Reporte Afiliados"
+
+        # Estilos
+        hdr_font  = Font(bold=True, color="FFFFFF", size=11)
+        hdr_fill  = PatternFill("solid", fgColor="1B3A6B")
+        sub_fill  = PatternFill("solid", fgColor="E8F0FA")
+        ok_fill   = PatternFill("solid", fgColor="D1FAE5")
+        pend_fill = PatternFill("solid", fgColor="FEE2E2")
+        no_fill   = PatternFill("solid", fgColor="FEF9C3")
+        thin      = Border(
+            left=Side(style="thin", color="CCCCCC"),
+            right=Side(style="thin", color="CCCCCC"),
+            top=Side(style="thin", color="CCCCCC"),
+            bottom=Side(style="thin", color="CCCCCC"),
+        )
+        center    = Alignment(horizontal="center", vertical="center")
+        money_fmt = '#,##0'
+
+        # Título
+        ws.merge_cells("A1:N1")
+        ws["A1"] = f"Reporte de Afiliados — {cliente_label} — {periodo_label}"
+        ws["A1"].font = Font(bold=True, size=14, color="1B3A6B")
+        ws["A1"].alignment = center
+
+        ws.merge_cells("A2:N2")
+        ws["A2"] = f"Generado: {fecha_gen}  |  Total afiliados: {total_afil}  |  Con factura: {len(con_factura)}  |  Sin factura: {len(sin_factura)}"
+        ws["A2"].font = Font(italic=True, size=10, color="555555")
+        ws["A2"].alignment = center
+
+        # Resumen financiero
+        ws.append([])
+        ws.merge_cells("A3:N3")
+        ws["A3"] = f"Total pagado: ${total_pagado:,.0f}   |   Total pendiente: ${total_pendiente:,.0f}"
+        ws["A3"].font = Font(bold=True, size=11)
+        ws["A3"].alignment = center
+
+        ws.append([])  # fila 4 vacía
+
+        # Cabecera
+        headers = ["Nombre", "Documento", "Tipo Doc", "Empresa", "Cargo",
+                   "EPS", "AFP", "ARL", "CCF", "Servicios",
+                   "Estado Afiliado", "Período", "Código", "Estado Factura",
+                   "Valor ($)", "Banco", "Fecha Pago"]
+        ws.append(headers)
+        hdr_row = ws.max_row
+        for col, _ in enumerate(headers, 1):
+            cell = ws.cell(row=hdr_row, column=col)
+            cell.font = hdr_font
+            cell.fill = hdr_fill
+            cell.alignment = center
+            cell.border = thin
+
+        # Filas de datos
+        for r in reporte:
+            row = [
+                r["nombre"], r["doc"], r["tipo_doc"], r["empresa"], r["cargo"],
+                r["eps"], r["afp"], r["arl"], r["ccf"], r["servicios"],
+                r["estado_afil"], r["periodo"], r["codigo"], r["estado_factura"],
+                r["valor"], r["banco"], r["fecha_pago"],
+            ]
+            ws.append(row)
+            dr = ws.max_row
+            # Color por estado
+            if r["sin_factura"]:
+                fill = no_fill
+            elif r["estado_factura"] == "Pagada":
+                fill = ok_fill
+            else:
+                fill = pend_fill
+            for col in range(1, len(headers) + 1):
+                cell = ws.cell(row=dr, column=col)
+                cell.fill = fill
+                cell.border = thin
+                if col == 15:  # Valor
+                    cell.number_format = money_fmt
+
+        # Anchos de columna
+        col_widths = [32, 14, 9, 20, 16, 12, 12, 12, 12, 22, 14, 14, 12, 16, 14, 14, 12]
+        for i, w in enumerate(col_widths, 1):
+            ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
+
+        ws.freeze_panes = f"A{hdr_row + 1}"
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        fname = f"reporte-afiliados-{mes or 'todos'}-{anio or 'todos'}.xlsx"
+        return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                 headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+    elif formato == "pdf":
+        from reportlab.lib.pagesizes import A4, landscape
+        from reportlab.lib import colors
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=landscape(A4),
+                                leftMargin=1.5*cm, rightMargin=1.5*cm,
+                                topMargin=1.5*cm, bottomMargin=1.5*cm)
+        styles = getSampleStyleSheet()
+        PRIMARY = colors.HexColor("#1B3A6B")
+        GREEN   = colors.HexColor("#065F46")
+        RED     = colors.HexColor("#991B1B")
+        GREEN_BG = colors.HexColor("#D1FAE5")
+        RED_BG   = colors.HexColor("#FEE2E2")
+        YELLOW_BG= colors.HexColor("#FEF9C3")
+
+        story = []
+
+        # Título
+        title_style = ParagraphStyle("title", parent=styles["Heading1"],
+                                     textColor=PRIMARY, fontSize=16, spaceAfter=4)
+        sub_style   = ParagraphStyle("sub", parent=styles["Normal"],
+                                     textColor=colors.grey, fontSize=9, spaceAfter=2)
+        story.append(Paragraph(f"Reporte de Afiliados — {cliente_label}", title_style))
+        story.append(Paragraph(f"Período: {periodo_label}  |  Generado: {fecha_gen}", sub_style))
+        story.append(Spacer(1, 0.3*cm))
+
+        # Resumen
+        resumen_data = [
+            ["Total afiliados", "Con factura", "Sin factura", "Total pagado", "Total pendiente"],
+            [str(total_afil), str(len(con_factura)), str(len(sin_factura)),
+             f"${total_pagado:,.0f}", f"${total_pendiente:,.0f}"],
+        ]
+        res_table = Table(resumen_data, colWidths=[4*cm]*5)
+        res_table.setStyle(TableStyle([
+            ("BACKGROUND", (0,0), (-1,0), PRIMARY),
+            ("TEXTCOLOR",  (0,0), (-1,0), colors.white),
+            ("FONTNAME",   (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",   (0,0), (-1,-1), 9),
+            ("ALIGN",      (0,0), (-1,-1), "CENTER"),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white]),
+            ("GRID",       (0,0), (-1,-1), 0.5, colors.grey),
+            ("TOPPADDING", (0,0), (-1,-1), 6),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 6),
+        ]))
+        story.append(res_table)
+        story.append(Spacer(1, 0.5*cm))
+
+        # Tabla principal
+        col_hdr = ["Nombre", "Documento", "Empresa", "EPS", "AFP", "ARL",
+                   "Período", "Estado Factura", "Valor ($)", "Banco", "Fecha Pago"]
+        col_w   = [5.5*cm, 3*cm, 4*cm, 2.5*cm, 2.5*cm, 2.5*cm,
+                   3*cm, 3*cm, 3*cm, 2.5*cm, 2.5*cm]
+
+        table_data = [col_hdr]
+        row_colors = []
+        for i, r in enumerate(reporte, 1):
+            table_data.append([
+                r["nombre"][:35], r["doc"], r["empresa"][:20] or "",
+                r["eps"][:10], r["afp"][:10], r["arl"][:10],
+                r["periodo"], r["estado_factura"],
+                f"${r['valor']:,.0f}", r["banco"][:12], r["fecha_pago"],
+            ])
+            if r["sin_factura"]:
+                row_colors.append(("BACKGROUND", (0,i), (-1,i), YELLOW_BG))
+            elif r["estado_factura"] == "Pagada":
+                row_colors.append(("BACKGROUND", (0,i), (-1,i), GREEN_BG))
+            else:
+                row_colors.append(("BACKGROUND", (0,i), (-1,i), RED_BG))
+
+        base_style = [
+            ("BACKGROUND",  (0,0), (-1,0), PRIMARY),
+            ("TEXTCOLOR",   (0,0), (-1,0), colors.white),
+            ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",    (0,0), (-1,-1), 7.5),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white]),
+            ("GRID",        (0,0), (-1,-1), 0.4, colors.HexColor("#CCCCCC")),
+            ("TOPPADDING",  (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING",(0,0), (-1,-1), 4),
+            ("ALIGN",       (8,1), (8,-1), "RIGHT"),
+        ] + row_colors
+
+        main_table = Table(table_data, colWidths=col_w, repeatRows=1)
+        main_table.setStyle(TableStyle(base_style))
+        story.append(main_table)
+
+        doc.build(story)
+        buf.seek(0)
+        fname = f"reporte-afiliados-{mes or 'todos'}-{anio or 'todos'}.pdf"
+        return StreamingResponse(buf, media_type="application/pdf",
+                                 headers={"Content-Disposition": f'attachment; filename="{fname}"'})
+
+    raise HTTPException(400, "Formato inválido. Use 'excel' o 'pdf'")

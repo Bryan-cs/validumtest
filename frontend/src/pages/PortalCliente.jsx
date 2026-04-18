@@ -617,6 +617,84 @@ function TabHistorial() {
   );
 }
 
+// ─── TAB REPORTES ─────────────────────────────────────────────────────────────
+function TabReportes() {
+  const [mes, setMes] = useState(MESES[new Date().getMonth()]);
+  const [anio, setAnio] = useState(String(anioActual));
+  const [descargando, setDescargando] = useState('');
+
+  const descargar = async (formato) => {
+    setDescargando(formato);
+    try {
+      const params = new URLSearchParams({ mes, anio, formato });
+      const res = await api.get(`/portal/reportes?${params}`, { responseType: 'blob' });
+      const ext  = formato === 'excel' ? 'xlsx' : 'pdf';
+      const mime = formato === 'excel'
+        ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        : 'application/pdf';
+      const url = URL.createObjectURL(new Blob([res.data], { type: mime }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `reporte-afiliados-${mes}-${anio}.${ext}`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch { toast.error('Error al generar reporte'); }
+    finally { setDescargando(''); }
+  };
+
+  const filtStyle = { padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:6, fontSize:12, outline:'none', color:C.text, background:C.surface };
+
+  return (
+    <div>
+      <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:20, marginBottom:20 }}>
+        <h4 style={{ margin:'0 0 12px', color:C.primary, fontSize:14 }}>Descargar reporte de afiliados por período</h4>
+        <p style={{ margin:'0 0 16px', fontSize:13, color:C.text2, lineHeight:1.5 }}>
+          El reporte incluye todos sus afiliados con estado de pago, valor y fecha para el período seleccionado.
+          Afiliados sin factura en ese período aparecen destacados.
+        </p>
+        <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
+          <div>
+            <label style={lbl}>Mes</label>
+            <select style={filtStyle} value={mes} onChange={e => setMes(e.target.value)}>
+              {MESES.map(m => <option key={m} value={m}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Año</label>
+            <select style={filtStyle} value={anio} onChange={e => setAnio(e.target.value)}>
+              {ANIOS.map(a => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <Btn variant="success" onClick={() => descargar('excel')} disabled={!!descargando}>
+              {descargando === 'excel' ? 'Generando...' : '⬇ Excel'}
+            </Btn>
+            <Btn variant="accent" onClick={() => descargar('pdf')} disabled={!!descargando}>
+              {descargando === 'pdf' ? 'Generando...' : '⬇ PDF'}
+            </Btn>
+          </div>
+        </div>
+      </div>
+
+      {/* Leyenda */}
+      <div style={{ display:'flex', gap:16, flexWrap:'wrap', fontSize:12, color:C.text2 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ width:14, height:14, borderRadius:3, background:'#D1FAE5', display:'inline-block' }} />
+          Pagada
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ width:14, height:14, borderRadius:3, background:'#FEE2E2', display:'inline-block' }} />
+          Pendiente
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <span style={{ width:14, height:14, borderRadius:3, background:'#FEF9C3', display:'inline-block' }} />
+          Sin factura en el período
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── TAB PLANILLAS PAGADAS ───────────────────────────────────────────────────
 function TabPlanillas() {
   const [mesFiltro, setMesFiltro] = useState('');
@@ -1019,7 +1097,7 @@ export default function PortalCliente() {
     <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
-        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas'],['avisos','📩 Novedades']].map(([id, label]) => (
+        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas'],['reportes','📊 Reportes'],['avisos','📩 Novedades']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
             padding:'9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
             borderBottom: tab===id?`2px solid ${C.primary}`:'none',
@@ -1146,6 +1224,8 @@ export default function PortalCliente() {
       {tab === 'historial' && <TabHistorial />}
 
       {tab === 'planillas' && <TabPlanillas />}
+
+      {tab === 'reportes' && <TabReportes />}
 
       {tab === 'avisos' && <TabAvisos />}
 
