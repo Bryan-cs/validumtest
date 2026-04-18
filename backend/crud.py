@@ -1127,6 +1127,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
                 "nombre":    a.nombre,
                 "empresa":   a.empresa,
                 "doc":       a.doc,
+                "tipo_doc":  a.tipo_doc or "",
                 "dia_cobro": dia_afil,
                 "mes":       mes_nombre,
                 "anio":      anio_str,
