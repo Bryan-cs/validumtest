@@ -738,23 +738,30 @@ def portal_reporte(
         )
     afiliados = query.order_by(models.Afiliado.nombre).limit(2000).all()
 
-    # ── Facturas del período para cada afiliado ───────────────────────────────
+    # ── Facturas del período — batch query (evita N+1) ───────────────────────
     PAGADOS = ("pagado", "planilla_pagada")
+    docs_afil = [a.doc for a in afiliados]
+    fq_batch = db.query(models.Factura).filter(
+        models.Factura.doc.in_(docs_afil),
+        models.Factura.afiliado_eliminado == False,
+    )
+    if mes:
+        fq_batch = fq_batch.filter(models.Factura.mes == mes)
+    if anio:
+        fq_batch = fq_batch.filter(models.Factura.anio == anio)
+    # Agrupar por doc → { doc: [Factura, ...] }
+    facturas_by_doc: dict = {}
+    for f in fq_batch.order_by(models.Factura.id.desc()).all():
+        facturas_by_doc.setdefault(f.doc, []).append(f)
 
     reporte = []
     for a in afiliados:
-        fq = db.query(models.Factura).filter_by(doc=a.doc, afiliado_eliminado=False)
-        if mes:
-            fq = fq.filter(models.Factura.mes == mes)
-        if anio:
-            fq = fq.filter(models.Factura.anio == anio)
-        facturas = fq.order_by(models.Factura.id.desc()).all()
-
         try:
             srvs = json.loads(a.servicios or "[]")
         except Exception:
             srvs = []
 
+        facturas = facturas_by_doc.get(a.doc, [])
         if facturas:
             for f in facturas:
                 reporte.append({
