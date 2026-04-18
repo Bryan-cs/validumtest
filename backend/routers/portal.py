@@ -937,20 +937,30 @@ def portal_reporte(
         story.append(res_table)
         story.append(Spacer(1, 0.5*cm))
 
-        # Tabla principal
+        # Tabla principal — landscape A4 disponible ~26.7cm
+        # Columnas: 4.5+2.4+3.2+1.9+1.9+1.9+2.3+2.3+2.6+1.9+1.8 = 26.7cm
         col_hdr = ["Nombre", "Documento", "Empresa", "EPS", "AFP", "ARL",
                    "Período", "Estado Factura", "Valor ($)", "Banco", "Fecha Pago"]
-        col_w   = [5.5*cm, 3*cm, 4*cm, 2.5*cm, 2.5*cm, 2.5*cm,
-                   3*cm, 3*cm, 3*cm, 2.5*cm, 2.5*cm]
+        col_w   = [4.5*cm, 2.4*cm, 3.2*cm, 1.9*cm, 1.9*cm, 1.9*cm,
+                   2.3*cm, 2.3*cm, 2.6*cm, 1.9*cm, 1.8*cm]
+
+        cell_style = ParagraphStyle("cell", fontSize=7, leading=9, wordWrap="CJK")
 
         table_data = [col_hdr]
         row_colors = []
         for i, r in enumerate(reporte, 1):
             table_data.append([
-                r["nombre"][:35], r["doc"], r["empresa"][:20] or "",
-                r["eps"][:10], r["afp"][:10], r["arl"][:10],
-                r["periodo"], r["estado_factura"],
-                f"${r['valor']:,.0f}", r["banco"][:12], r["fecha_pago"],
+                Paragraph(r["nombre"], cell_style),
+                r["doc"],
+                Paragraph(r["empresa"] or "", cell_style),
+                r["eps"] or "—",
+                r["afp"] or "—",
+                r["arl"] or "—",
+                r["periodo"],
+                r["estado_factura"],
+                f"${r['valor']:,.0f}",
+                r["banco"] or "—",
+                r["fecha_pago"] or "—",
             ])
             if r["sin_factura"]:
                 row_colors.append(("BACKGROUND", (0,i), (-1,i), YELLOW_BG))
@@ -960,19 +970,21 @@ def portal_reporte(
                 row_colors.append(("BACKGROUND", (0,i), (-1,i), RED_BG))
 
         base_style = [
-            ("BACKGROUND",  (0,0), (-1,0), PRIMARY),
-            ("TEXTCOLOR",   (0,0), (-1,0), colors.white),
-            ("FONTNAME",    (0,0), (-1,0), "Helvetica-Bold"),
-            ("FONTSIZE",    (0,0), (-1,-1), 7.5),
-            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white]),
-            ("GRID",        (0,0), (-1,-1), 0.4, colors.HexColor("#CCCCCC")),
-            ("TOPPADDING",  (0,0), (-1,-1), 4),
-            ("BOTTOMPADDING",(0,0), (-1,-1), 4),
-            ("ALIGN",       (8,1), (8,-1), "RIGHT"),
+            ("BACKGROUND",   (0,0), (-1,0), PRIMARY),
+            ("TEXTCOLOR",    (0,0), (-1,0), colors.white),
+            ("FONTNAME",     (0,0), (-1,0), "Helvetica-Bold"),
+            ("FONTSIZE",     (0,0), (-1,-1), 7),
+            ("ROWBACKGROUNDS",(0,1), (-1,-1), [colors.white]),
+            ("GRID",         (0,0), (-1,-1), 0.3, colors.HexColor("#CCCCCC")),
+            ("TOPPADDING",   (0,0), (-1,-1), 3),
+            ("BOTTOMPADDING",(0,0), (-1,-1), 3),
+            ("LEFTPADDING",  (0,0), (-1,-1), 3),
+            ("RIGHTPADDING", (0,0), (-1,-1), 3),
+            ("ALIGN",        (8,1), (8,-1), "RIGHT"),
+            ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
         ] + row_colors
 
         main_table = Table(table_data, colWidths=col_w, repeatRows=1)
-        main_table.setStyle(TableStyle(base_style))
         story.append(main_table)
 
         doc.build(story)
