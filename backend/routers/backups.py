@@ -69,6 +69,7 @@ def backup_db_to_r2():
         # Limpiezas post-backup
         _cleanup_old_backups(s3, _R2_BUCKET, _log)
         _cleanup_old_activity(_log)
+        _cleanup_expired_tokens(_log)
         _cleanup_old_planillas(s3, _R2_BUCKET, _log)
     except Exception as e:
         _log.error(f"Backup: error general: {e}")
@@ -102,6 +103,23 @@ def _cleanup_old_activity(_log):
             db.close()
     except Exception as e:
         _log.warning(f"Backup: error limpiando actividad antigua: {e}")
+
+
+def _cleanup_expired_tokens(_log):
+    """Elimina refresh tokens expirados de token_blacklist."""
+    try:
+        db = SessionLocal()
+        try:
+            result = db.execute(text("DELETE FROM token_blacklist WHERE expires_at < NOW()"))
+            if result.rowcount > 0:
+                db.commit()
+                _log.info(f"Backup: limpiados {result.rowcount} tokens expirados de token_blacklist")
+            else:
+                db.rollback()
+        finally:
+            db.close()
+    except Exception as e:
+        _log.warning(f"Backup: error limpiando token_blacklist: {e}")
 
 
 def _cleanup_old_planillas(s3, bucket, _log):
