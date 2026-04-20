@@ -22,7 +22,6 @@ const Tareas         = lazy(() => import('./pages/Tareas'));
 const Actividad      = lazy(() => import('./pages/Actividad'));
 const PortalCliente       = lazy(() => import('./pages/PortalCliente'));
 const NovedadesClientes   = lazy(() => import('./pages/NovedadesClientes'));
-const Backups             = lazy(() => import('./pages/Backups'));
 const PlanillasSS         = lazy(() => import('./pages/PlanillasSS'));
 
 const qc = new QueryClient({
@@ -89,7 +88,6 @@ export default function App() {
             <Route path="calculadora" element={<PrivateRoute adminOnly><Calculadora /></PrivateRoute>} />
             <Route path="actividad"        element={<PrivateRoute adminOnly><Actividad /></PrivateRoute>} />
             <Route path="novedades-clientes" element={<PrivateRoute adminOnly><NovedadesClientes /></PrivateRoute>} />
-            <Route path="backups"            element={<PrivateRoute adminOnly><Backups /></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

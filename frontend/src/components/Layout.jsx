@@ -55,7 +55,6 @@ const navGroups = (rol) => [
         { to: '/listas',             label: '📋 Listas' },
         { to: '/calculadora',        label: '🧮 Calculadora' },
         { to: '/novedades-clientes', label: '📬 Novedades clientes' },
-        { to: '/backups',            label: '💾 Backups' },
       ],
     },
     {

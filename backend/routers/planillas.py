@@ -55,11 +55,16 @@ async def crear_planilla(
     db: Session = Depends(get_db),
     token=Depends(require_admin),
 ):
+    import asyncio
     from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE
     s3 = _get_s3()
-    subidos = []
+    safe_cliente = re.sub(r'[^\w\-]', '_', cliente_ref or 'sin_cliente')
+    safe_mes     = re.sub(r'[^\w\-]', '_', mes or 'sin_mes')
+    safe_anio    = re.sub(r'[^\w\-]', '_', anio or 'sin_anio')
+
+    # ── 1. Leer y validar todos los archivos primero ──────────────────────────
+    validos  = []  # lista de dicts listos para subir
     omitidos = []
-    docs_pendientes = []  # acumular hasta confirmar que hay archivos válidos
 
     for file in files:
         nombre = file.filename or "archivo"
@@ -71,36 +76,63 @@ async def crear_planilla(
         if len(content) > MAX_SIZE:
             omitidos.append({"nombre": nombre, "motivo": f"Excede {MAX_SIZE // (1024*1024)} MB"})
             continue
-        safe_name = re.sub(r'[^\w.\-]', '_', nombre)
-        safe_cliente = re.sub(r'[^\w\-]', '_', cliente_ref or 'sin_cliente')
+        safe_name   = re.sub(r'[^\w.\-]', '_', nombre)
         unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
-        try:
-            if s3:
-                key = f"planillas/{safe_cliente}/{unique_name}"
-                s3.put_object(Bucket=_R2_BUCKET, Key=key, Body=content,
-                              ContentType=file.content_type or "application/octet-stream")
-                ruta = key
-            else:
-                os.makedirs(f"uploads/planillas/{safe_cliente}", exist_ok=True)
-                ruta = f"uploads/planillas/{safe_cliente}/{unique_name}"
-                with open(ruta, "wb") as f:
-                    f.write(content)
-        except Exception as e:
-            omitidos.append({"nombre": nombre, "motivo": f"Error al guardar: {e}"})
-            continue
-        docs_pendientes.append({"nombre": nombre, "ext": ext, "ruta": ruta, "tamano": len(content)})
-        subidos.append(nombre)
+        if s3:
+            # Estructura: planillas/{cliente}/{anio}/{mes}/{archivo}
+            ruta = f"planillas/{safe_cliente}/{safe_anio}/{safe_mes}/{unique_name}"
+        else:
+            ruta = f"uploads/planillas/{safe_cliente}/{safe_anio}/{safe_mes}/{unique_name}"
+        validos.append({
+            "nombre": nombre, "ext": ext, "ruta": ruta,
+            "tamano": len(content), "content": content,
+            "content_type": file.content_type or "application/octet-stream",
+        })
 
-    if not subidos:
+    if not validos:
         raise HTTPException(400, f"Ningún archivo fue aceptado. Omitidos: {[o['motivo'] for o in omitidos]}")
 
-    # Solo crear registro si hay al menos un archivo válido
+    # ── 2. Subir todos a R2 en paralelo ───────────────────────────────────────
+    async def _subir(d):
+        try:
+            if s3:
+                await asyncio.to_thread(
+                    s3.put_object,
+                    Bucket=_R2_BUCKET, Key=d["ruta"],
+                    Body=d["content"], ContentType=d["content_type"],
+                )
+            else:
+                dir_path = os.path.dirname(d["ruta"])
+                await asyncio.to_thread(os.makedirs, dir_path, exist_ok=True)
+                def _write():
+                    with open(d["ruta"], "wb") as fh:
+                        fh.write(d["content"])
+                await asyncio.to_thread(_write)
+            return d, None
+        except Exception as e:
+            return d, str(e)
+
+    resultados = await asyncio.gather(*[_subir(d) for d in validos])
+
+    subidos       = []
+    docs_pendientes = []
+    for d, err in resultados:
+        if err:
+            omitidos.append({"nombre": d["nombre"], "motivo": f"Error al guardar: {err}"})
+        else:
+            subidos.append(d["nombre"])
+            docs_pendientes.append(d)
+
+    if not subidos:
+        raise HTTPException(500, f"Todos los archivos fallaron al subirse: {[o['motivo'] for o in omitidos]}")
+
+    # ── 3. Guardar en DB solo si hay archivos subidos ─────────────────────────
     planilla = models.PlanillaPago(
         cliente_ref=cliente_ref, mes=mes, anio=anio,
         observaciones=observaciones, subido_por=token.get("sub", ""),
     )
     db.add(planilla)
-    db.flush()  # obtener planilla.id sin commit aún
+    db.flush()
 
     for d in docs_pendientes:
         db.add(models.Documento(

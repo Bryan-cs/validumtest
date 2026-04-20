@@ -42,118 +42,14 @@ from slowapi.errors import RateLimitExceeded
 limiter = Limiter(key_func=get_remote_address)
 
 
-def _limpiar_notificaciones_diario():
-    """Elimina todas las notificaciones del día anterior al iniciar un nuevo día."""
-    from database import SessionLocal
-    from logger import logger as _log
-    db = SessionLocal()
-    try:
-        hoy = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        count = db.query(models.Notificacion).filter(models.Notificacion.creado < hoy).delete()
-        db.commit()
-        if count: _log.info(f"Limpieza: {count} notificaciones antiguas eliminadas")
-    except Exception as e:
-        db.rollback()
-        _log.error(f"Error limpieza notificaciones: {e}")
-    finally:
-        db.close()
-
-
-def _limpiar_actividad_antigua():
-    """Elimina registros de actividad con más de 90 días."""
-    from database import SessionLocal
-    from datetime import timedelta
-    from logger import logger as _log
-    db = SessionLocal()
-    try:
-        limite = datetime.now(timezone.utc) - timedelta(days=90)
-        count = db.query(models.Actividad).filter(models.Actividad.fecha < limite).delete()
-        db.commit()
-        if count: _log.info(f"Limpieza: {count} registros de actividad antiguos eliminados")
-    except Exception as e:
-        db.rollback()
-        _log.error(f"Error limpieza actividad: {e}")
-    finally:
-        db.close()
-
-
-def _limpiar_novedades_antiguas():
-    """Elimina novedades/solicitudes de portal con más de 30 días y sus documentos."""
-    from database import SessionLocal
-    from datetime import timedelta
-    from logger import logger as _log
-    db = SessionLocal()
-    try:
-        limite = datetime.now(timezone.utc) - timedelta(days=30)
-        total = 0
-        for Model, ctx in [
-            (models.NovedadPago, ['novedad_pago', 'resp_pago']),
-            (models.SolicitudRetiro, ['novedad_retiro', 'resp_retiro']),
-            (models.SolicitudNovedad, ['novedad_afil', 'resp_afil']),
-        ]:
-            viejos = db.query(Model).filter(Model.creado < limite).all()
-            for item in viejos:
-                from routers.documentos import _delete_file
-                docs = db.query(models.Documento).filter(
-                    models.Documento.contexto.in_(ctx),
-                    models.Documento.contexto_id == item.id,
-                ).all()
-                for d in docs:
-                    _delete_file(d.ruta)
-                    db.delete(d)
-                db.delete(item)
-                total += 1
-        db.commit()
-        if total: _log.info(f"Limpieza: {total} novedades/solicitudes antiguas eliminadas (+docs)")
-    except Exception as e:
-        db.rollback()
-        _log.error(f"Error limpieza novedades: {e}")
-    finally:
-        db.close()
-
-
-def _limpiar_token_blacklist():
-    """Elimina tokens expirados de la blacklist."""
-    from database import SessionLocal
-    from logger import logger as _log
-    db = SessionLocal()
-    try:
-        ahora = datetime.now(timezone.utc)
-        count = db.query(models.TokenBlacklist).filter(models.TokenBlacklist.expires_at < ahora).delete()
-        db.commit()
-        if count: _log.info(f"Limpieza: {count} tokens expirados removidos de blacklist")
-    except Exception as e:
-        db.rollback()
-        _log.error(f"Error limpieza token_blacklist: {e}")
-    finally:
-        db.close()
-
-
-def _backup_db_to_r2():
-    """Wrapper para compatibilidad con scheduler."""
-    from routers.backups import backup_db_to_r2
-    backup_db_to_r2()
-
-
-def _limpiar_tareas_mensuales():
-    """Elimina tareas finalizadas con más de 30 días para liberar espacio."""
-    from database import SessionLocal
-    from datetime import timedelta
-    from logger import logger as _log
-    db = SessionLocal()
-    try:
-        limite = datetime.now(timezone.utc) - timedelta(days=30)
-        count = db.query(models.Tarea).filter(
-            models.Tarea.estado == "finalizada",
-            models.Tarea.finalizado_en < limite,
-        ).delete()
-        db.commit()
-        if count: _log.info(f"Limpieza: {count} tareas finalizadas antiguas eliminadas")
-    except Exception as e:
-        db.rollback()
-        _log.error(f"Error limpieza tareas: {e}")
-    finally:
-        db.close()
+from scheduler_jobs import (
+    limpiar_token_blacklist       as _limpiar_token_blacklist,
+    limpiar_notificaciones_diario as _limpiar_notificaciones_diario,
+    limpiar_actividad_antigua     as _limpiar_actividad_antigua,
+    limpiar_tareas_mensuales      as _limpiar_tareas_mensuales,
+    limpiar_novedades_antiguas    as _limpiar_novedades_antiguas,
+    limpiar_planillas_antiguas    as _limpiar_planillas_antiguas,
+)
 
 
 _start_time = None
@@ -176,7 +72,7 @@ async def lifespan(app: FastAPI):
         pass
     # Tareas programadas de limpieza — solo iniciar si ENABLE_SCHEDULER=true
     # En Railway configurar esa variable en el servicio principal únicamente
-    _should_schedule = os.getenv("ENABLE_SCHEDULER", "true").lower() == "true"
+    _should_schedule = os.getenv("ENABLE_SCHEDULER", "false").lower() == "true"
     if _should_schedule:
         try:
             from apscheduler.schedulers.background import BackgroundScheduler
@@ -184,12 +80,9 @@ async def lifespan(app: FastAPI):
             _scheduler.add_job(_limpiar_token_blacklist, "cron", hour=1, minute=0)
             _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
             _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
-            _scheduler.add_job(_limpiar_tareas_mensuales, "cron", day=1, hour=4, minute=0)
+            _scheduler.add_job(_limpiar_tareas_mensuales,   "cron", day=1, hour=4, minute=0)
             _scheduler.add_job(_limpiar_novedades_antiguas, "cron", day=1, hour=5, minute=0)
-            # Backups DB → R2: 5 PM, 12 PM, 9 PM hora Colombia (UTC-5 = 22, 17, 2 UTC)
-            _scheduler.add_job(_backup_db_to_r2, "cron", hour=22, minute=0, id="backup_5pm")
-            _scheduler.add_job(_backup_db_to_r2, "cron", hour=17, minute=0, id="backup_12pm")
-            _scheduler.add_job(_backup_db_to_r2, "cron", hour=2, minute=0, id="backup_9pm")
+            _scheduler.add_job(_limpiar_planillas_antiguas, "cron", day=1, hour=6, minute=0)
             _scheduler.start()
         except Exception as e:
             from logger import logger as _log
@@ -255,7 +148,6 @@ from routers import reportes as reportes_router
 from routers import tareas as tareas_router
 from routers import portal as portal_router
 from routers.documentos import router as documentos_router
-from routers import backups as backups_router
 from routers import planillas as planillas_router
 from routers import seguimiento_arl as seguimiento_arl_router
 
@@ -266,7 +158,6 @@ app.include_router(reportes_router.router)
 app.include_router(tareas_router.router)
 app.include_router(portal_router.router)
 app.include_router(documentos_router)
-app.include_router(backups_router.router)
 app.include_router(planillas_router.router)
 app.include_router(seguimiento_arl_router.router)
 
