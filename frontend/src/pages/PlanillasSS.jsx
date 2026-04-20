@@ -244,15 +244,20 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
 
         <div style={{ marginBottom: 16 }}>
           <label style={lbl}>Archivos de planilla *</label>
-          <div style={{
-            border: `2px dashed ${C.border}`, borderRadius: 8, padding: 14, textAlign: 'center',
-            background: C.surface2, cursor: 'pointer',
-          }} onClick={() => fileRef.current?.click()}>
-            <input ref={fileRef} type="file" multiple accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
+          <label htmlFor="planilla-file-input" style={{
+            display: 'block', border: `2px dashed ${C.border}`, borderRadius: 8, padding: 14,
+            textAlign: 'center', background: C.surface2, cursor: 'pointer',
+          }}>
+            <input id="planilla-file-input" ref={fileRef} type="file" multiple
+              accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
               style={{ display: 'none' }}
-              onChange={e => { setArchivos(prev => [...prev, ...Array.from(e.target.files)]); e.target.value = ''; }} />
+              onChange={e => {
+                const nuevos = Array.from(e.target.files || []);
+                if (nuevos.length) setArchivos(prev => [...prev, ...nuevos]);
+                e.target.value = '';
+              }} />
             <div style={{ fontSize: 13, color: C.text2 }}>📂 Click para seleccionar archivos</div>
-          </div>
+          </label>
           {archivos.length > 0 && (
             <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
               {archivos.map((f, i) => (
@@ -260,9 +265,9 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
                   display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.text,
                   background: C.surface2, padding: '4px 8px', borderRadius: 6,
                 }}>
-                  <span style={{ flex: 1 }}>{f.name} ({(f.size / 1024).toFixed(0)} KB)</span>
+                  <span style={{ flex: 1 }}>📄 {f.name} ({(f.size / 1024).toFixed(0)} KB)</span>
                   <span style={{ cursor: 'pointer', color: C.red, fontWeight: 700 }}
-                    onClick={() => setArchivos(prev => prev.filter((_, j) => j !== i))}>×</span>
+                    onClick={e => { e.preventDefault(); setArchivos(prev => prev.filter((_, j) => j !== i)); }}>×</span>
                 </div>
               ))}
             </div>
