@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
 import { C, PageHeader, Card, Btn, ConfirmModal } from '../components/UI';
+import useAuthStore from '../hooks/useAuth';
 
 const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -14,6 +15,7 @@ const sel = { padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius
 
 export default function PlanillasSS() {
   const qc = useQueryClient();
+  const rol = useAuthStore(s => s.user?.rol);
   const [filtroCliente, setFiltroCliente] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroCliente ?? ''; } catch { return ''; } });
   const [filtroMes, setFiltroMes] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroMes ?? ''; } catch { return ''; } });
   const [filtroAnio, setFiltroAnio] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroAnio ?? ''; } catch { return ''; } });
@@ -123,7 +125,7 @@ export default function PlanillasSS() {
                     </span>
                   </div>
                 </div>
-                <Btn variant="danger" size="sm" onClick={() => setConfirmDel(p.id)}>Eliminar</Btn>
+                {rol === 'admin' && <Btn variant="danger" size="sm" onClick={() => setConfirmDel(p.id)}>Eliminar</Btn>}
               </div>
               {p.observaciones && (
                 <div style={{ fontSize: 12, color: C.text2, marginBottom: 8 }}>{p.observaciones}</div>

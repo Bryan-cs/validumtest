@@ -53,7 +53,7 @@ async def crear_planilla(
     observaciones: str = Form(""),
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    token=Depends(require_admin),
+    token=Depends(require_admin_or_empleado),
 ):
     import asyncio
     from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE
