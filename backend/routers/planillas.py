@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from database import get_db
-from routers.deps import require_admin
+from routers.deps import require_admin, require_admin_or_empleado
 import models, crud
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
@@ -15,7 +15,7 @@ router = APIRouter(prefix="/planillas", tags=["planillas"])
 @router.get("")
 def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
                      skip: int = 0, limit: int = 300,
-                     db: Session = Depends(get_db), token=Depends(require_admin)):
+                     db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     q = db.query(models.PlanillaPago).order_by(models.PlanillaPago.id.desc())
     if cliente: q = q.filter(models.PlanillaPago.cliente_ref == cliente)
     if mes:     q = q.filter(models.PlanillaPago.mes == mes)

@@ -106,3 +106,9 @@ def require_admin(token=Depends(verify_token)):
     if token.get("rol") != "admin":
         raise HTTPException(status_code=403, detail="Requiere rol administrador")
     return token
+
+
+def require_admin_or_empleado(token=Depends(verify_token)):
+    if token.get("rol") not in ("admin", "empleado"):
+        raise HTTPException(status_code=403, detail="Requiere rol administrador o empleado")
+    return token
