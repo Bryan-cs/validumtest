@@ -34,7 +34,6 @@ const navGroups = (rol) => [
       { to: '/afiliados',   label: '👥 Afiliados' },
       { to: '/retiros',     label: '↪️ Retiros' },
       { to: '/tareas',      label: '✅ Tareas' },
-      ...(rol === 'admin' ? [{ to: '/empleados', label: '👔 Empleados' }] : []),
     ],
   },
   {
@@ -52,6 +51,7 @@ const navGroups = (rol) => [
       label: 'CONFIGURACIÓN',
       items: [
         { to: '/usuarios',           label: '⚙️ Usuarios' },
+        { to: '/empleados',          label: '👔 Empleados' },
         { to: '/listas',             label: '📋 Listas' },
         { to: '/calculadora',        label: '🧮 Calculadora' },
         { to: '/novedades-clientes', label: '📬 Novedades clientes' },

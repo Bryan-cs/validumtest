@@ -108,7 +108,6 @@ const TABS = [
   { key: 'pendiente',  label: 'Pendientes'  },
   { key: 'en_proceso', label: 'En proceso'  },
   { key: 'completada', label: 'Completadas' },
-  { key: 'finalizada', label: 'Finalizadas' },
 ];
 
 export default function Tareas() {
@@ -116,7 +115,7 @@ export default function Tareas() {
   const qc = useQueryClient();
   const isAdmin = user?.rol === 'admin';
 
-  const [tab, setTab]               = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_tareas_filtros'))?.tab ?? 'pendiente'; } catch { return 'pendiente'; } });
+  const [tab, setTab]               = useState(() => { try { const t = JSON.parse(localStorage.getItem('bbc_tareas_filtros'))?.tab ?? 'pendiente'; return t === 'finalizada' ? 'pendiente' : t; } catch { return 'pendiente'; } });
   const [modalNueva, setModalNueva] = useState(false);
   const [form, setForm]             = useState({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
   const [expandida, setExpandida]   = useState(null);
@@ -359,7 +358,6 @@ export default function Tareas() {
           { key:'pendiente',  label:'Pendiente',  color:'#92400E', bg:'#FEF3C7', dot:'#D97706' },
           { key:'en_proceso', label:'En proceso', color:C.blue,    bg:C.blueBg,  dot:C.blue   },
           { key:'completada', label:'Completada', color:C.green,   bg:C.greenBg, dot:C.green  },
-          { key:'finalizada', label:'Finalizada', color:C.text2,   bg:C.surface2,dot:C.text2  },
         ];
         return (
           <div style={{ marginBottom:16, background:C.surface, borderRadius:10, padding:'12px 16px', border:`1px solid ${C.border}` }}>
