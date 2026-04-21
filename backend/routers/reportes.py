@@ -1,6 +1,6 @@
-"""Router de reportes Excel."""
+"""Router de reportes Excel y archivos PILA."""
 import io
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
@@ -9,6 +9,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import crud
 import models
 from .deps import verify_token
+from services.pila import generar_pila
 
 router = APIRouter(prefix="/reportes", tags=["reportes"])
 
@@ -33,6 +34,65 @@ def _xlsx_response(wb: openpyxl.Workbook, filename: str):
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/pila")
+def reporte_pila(
+    empresa: str = Query(..., description="Nombre de la empresa aportante"),
+    nit: str = Query(..., description="NIT sin dígito verificación"),
+    razon_social: str = Query("", description="Razón social (si difiere del nombre empresa)"),
+    dv: str = Query("0", description="Dígito verificación del NIT"),
+    mes: int = Query(..., ge=1, le=12, description="Mes del período (1-12)"),
+    anio: int = Query(..., ge=2020, le=2099, description="Año del período"),
+    arl: str = Query("POSITIVA", description="Nombre del ARL del aportante"),
+    db: Session = Depends(get_db),
+    token=Depends(verify_token),
+):
+    """
+    Genera archivo PILA (Planilla Integrada de Liquidación de Aportes).
+    Retorna archivo .txt de ancho fijo para importar en el sistema PILA.
+    NOTA: Borrador — validar antes de envío oficial.
+    """
+    # Obtener afiliados activos de la empresa
+    result = crud.get_afiliados(
+        db, empresa=empresa, estado="ACTIVO", skip=0, limit=0
+    )
+    afiliados_data = result.get("items", [])
+
+    # Cargar objetos ORM completos para acceder a todos los campos
+    docs = [a.get("doc") for a in afiliados_data if a.get("doc")]
+    afiliados = (
+        db.query(models.Afiliado)
+        .filter(models.Afiliado.doc.in_(docs), models.Afiliado.activo == True)
+        .order_by(models.Afiliado.nombre)
+        .all()
+        if docs
+        else []
+    )
+
+    # IBC global
+    cfg = db.query(models.Config).first()
+    ibc_global = int(cfg.ibc_global) if cfg and cfg.ibc_global else 1_423_500
+
+    rs = razon_social.strip() or empresa
+
+    contenido = generar_pila(
+        afiliados=afiliados,
+        ibc_global=ibc_global,
+        nit=nit,
+        razon_social=rs,
+        digito_verificacion=dv,
+        mes=mes,
+        anio=anio,
+        arl_nombre=arl,
+    )
+
+    nombre_archivo = f"PILA_{empresa.upper().replace(' ', '_')}_{anio}{mes:02d}.txt"
+    return StreamingResponse(
+        io.BytesIO(contenido.encode("latin-1", errors="replace")),
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
     )
 
 

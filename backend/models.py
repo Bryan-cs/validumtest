@@ -48,6 +48,7 @@ class Afiliado(Base):
     email           = Column(String(100))
     dir             = Column(String(200))
     ciudad          = Column(String(100))
+    municipio_code  = Column(String(5), nullable=True)   # DIVIPOLA 5 dígitos para PILA
     obs             = Column(Text)
     novedades       = Column(Text)
     detalle         = Column(Text)
