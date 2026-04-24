@@ -2,8 +2,8 @@
 
 ## Resumen ejecutivo
 
-Auditoría completa de Auth & Seguridad. **24 checkpoints verificados, 0 fallos, 2 observaciones menores.**
-Todos los fixes críticos de sesiones previas están presentes en el código actual.
+Auditoría completa de Auth & Seguridad + Cache Invalidación. **37 checkpoints verificados, 3 fallos ALTO, 1 observación MEDIO.**
+Todos los fixes críticos de sesiones previas (session 7, 15, 17) están presentes. Tres mutaciones omiten `cache_invalidar("dashboard_clientes:")`: `restaurar_eliminado`, `create_retiro`, `delete_retiro`.
 
 ---
 
@@ -15,13 +15,28 @@ _Ninguno_
 
 ### ALTO
 
-_Ninguno_
+**[Cache] main.py:302-304 — `restaurar_eliminado` no invalida `dashboard_clientes:`**
+`restaurar_eliminado` llama `cache_invalidar("cobro:")`, `cache_invalidar("afiliados:")` y `cache_invalidar("dashboard:")` pero omite `cache_invalidar("dashboard_clientes:")`. `get_resumen_clientes()` lee `Afiliado.activo=True` para calcular `n_afiliados` por cliente. Al restaurar un afiliado, ese conteo queda desactualizado en Reportes Financieros hasta TTL (5 min).
+Fix: agregar `crud.cache_invalidar("dashboard_clientes:")` en `main.py:304`, después de `cache_invalidar("dashboard:")`, antes de `db.commit()`.
+
+**[Cache] crud.py:502 — `create_retiro` no invalida `dashboard_clientes:`**
+`create_retiro` llama solo `cache_invalidar("cobro:"); cache_invalidar("dashboard:")`. Aplicar un retiro pone `afiliado.activo=False`, lo que altera `n_afiliados` en `get_resumen_clientes()`. Reportes Financieros no se actualiza hasta TTL.
+Fix: agregar `cache_invalidar("dashboard_clientes:")` en la línea 502 de `crud.py`.
+
+**[Cache] crud.py:539 — `delete_retiro` no invalida `dashboard_clientes:`**
+`delete_retiro` llama solo `cache_invalidar("cobro:"); cache_invalidar("dashboard:")`. Eliminar un retiro mueve al afiliado a `Eliminado` (`activo=False`), afectando `n_afiliados`. Misma consecuencia que `create_retiro`.
+Fix: agregar `cache_invalidar("dashboard_clientes:")` en la línea 539 de `crud.py`.
 
 ### MEDIO
 
-_Ninguno_
+_Ninguno_ (el hallazgo de circuit breaker fue reclasificado: el comportamiento es el esperado según el checkpoint. Ver nota en sección BAJO.)
 
 ### BAJO
+
+**[Cache] crud.py:1200-1219 — `cache_invalidar` con circuit breaker OPEN tiene ventana de stale data**
+Clasificado MEDIO (no ALTO): cuando el CB está OPEN, `cache_invalidar` no borra claves en Redis (Redis inalcanzable), pero tampoco escribe al dict en memoria en producción (`_use_mem_cache()` es False). El efecto real es que al reabrir el CB (half-open, 30s después), un request puede leer una clave Redis obsoleta antes de que expire su TTL. Sin embargo, según el checkpoint del enunciado ("Redis configurado pero circuit breaker OPEN → does NOT fall back to in-memory dict"), este comportamiento es el **esperado y correcto**. El sistema NO hace fallback al dict. ✓
+
+---
 
 **[Auth] backend/routers/auth.py:38-40** — `_blacklist_jti()` silencia todas las excepciones con `except Exception: return False`. Un fallo de DB al blacklistear un refresh token podría pasar desapercibido (el rollback es correcto, pero no hay log del error). — Recomendado: agregar `logger.error(...)` antes del `return False` para visibilidad.
 
@@ -30,6 +45,26 @@ _Ninguno_
 ---
 
 ### OK (verificado sin issues)
+
+**[Cache]** `create_afiliado` invalida `afiliados:`, `dashboard:`, `dashboard_clientes:`, `cobro:` — `crud.py:253` ✓
+
+**[Cache]** `update_afiliado` invalida `afiliados:`, `dashboard:`, `dashboard_clientes:`, `cobro:` — `crud.py:276` ✓
+
+**[Cache]** `delete_afiliado` invalida `afiliados:`, `dashboard:`, `dashboard_clientes:`, `cobro:` — `crud.py:302` ✓
+
+**[Cache]** `create_factura` invalida `cobro:`, `dashboard:`, `dashboard_clientes:` — `crud.py:397` ✓
+
+**[Cache]** `update_factura` invalida `cobro:`, `dashboard:`, `dashboard_clientes:` — `crud.py:428` ✓
+
+**[Cache]** `delete_factura` invalida `cobro:`, `dashboard:`, `dashboard_clientes:` ANTES de `db.commit()` — `crud.py:481` ✓
+
+**[Cache]** `pagar_factura` invalida `cobro:`, `dashboard:`, `dashboard_clientes:` — `crud.py:451` ✓
+
+**[Cache]** `marcar_planilla_pagada` invalida `cobro:`, `dashboard:`, `dashboard_clientes:` — `crud.py:464` ✓
+
+**[Cache]** Redis circuit breaker OPEN → NO hace fallback al dict en memoria en producción (`_use_mem_cache()` retorna False cuando `_redis_client is not None`) — `crud.py:1146-1151` ✓
+
+---
 
 **[Auth]** JWT rotation y blacklist — `/auth/refresh` blacklistea el OLD jti ANTES de emitir nuevos tokens (`auth.py:169-171`); respuesta incluye both `access_token` + `refresh_token` (`auth.py:180`); `_blacklist_jti()` usa `INSERT ... ON CONFLICT DO NOTHING` atómico y race-safe (`auth.py:30-34`); `/auth/logout` invalida el refresh_token recibido (`auth.py:191-193`). ✓
 
@@ -95,3 +130,16 @@ _Ninguno_
 | 22 | BruteForce | 5 intentos → bloqueo 5 min | ✅ PASS | auth.py:45-46,85 |
 | 23 | BruteForce | Login exitoso limpia intentos expirados | ✅ PASS | auth.py:106-113 |
 | 24 | BruteForce | verify-password no usa /auth/login | ✅ PASS | auth.py:205-218 |
+| 25 | Cache | create_afiliado invalida afiliados: + dashboard: + dashboard_clientes: | ✅ PASS | crud.py:253 |
+| 26 | Cache | update_afiliado invalida afiliados: + dashboard: + dashboard_clientes: | ✅ PASS | crud.py:276 |
+| 27 | Cache | delete_afiliado invalida afiliados: + dashboard: + dashboard_clientes: | ✅ PASS | crud.py:302 |
+| 28 | Cache | restaurar_eliminado invalida dashboard_clientes: | ❌ ALTO | main.py:302-304 — falta |
+| 29 | Cache | create_factura invalida dashboard: + dashboard_clientes: | ✅ PASS | crud.py:397 |
+| 30 | Cache | update_factura invalida dashboard: + dashboard_clientes: | ✅ PASS | crud.py:428 |
+| 31 | Cache | delete_factura invalida ANTES de db.commit() | ✅ PASS | crud.py:481 |
+| 32 | Cache | delete_factura invalida dashboard: + dashboard_clientes: | ✅ PASS | crud.py:481 |
+| 33 | Cache | pagar_factura invalida dashboard: + dashboard_clientes: + cobro: | ✅ PASS | crud.py:451 |
+| 34 | Cache | marcar_planilla_pagada invalida dashboard: + dashboard_clientes: | ✅ PASS | crud.py:464 |
+| 35 | Cache | create_retiro invalida dashboard_clientes: | ❌ ALTO | crud.py:502 — falta |
+| 36 | Cache | delete_retiro invalida dashboard_clientes: | ❌ ALTO | crud.py:539 — falta |
+| 37 | Cache | Redis CB OPEN → no fallback a dict en memoria | ✅ PASS | crud.py:1146-1151 |
