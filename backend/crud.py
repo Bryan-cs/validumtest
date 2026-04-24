@@ -824,14 +824,16 @@ def get_dashboard(db, anio="", mes=""):
     if anio: period_conds.append(models.Factura.anio == anio)
     if mes:  period_conds.append(models.Factura.mes == mes)
     period_ok  = and_(*period_conds) if period_conds else sa_true()
-    paid_ok    = models.Factura.estado.in_(["pagado", "planilla_pagada"])
-    pending_ok = models.Factura.estado == "pendiente"
+    paid_ok        = models.Factura.estado.in_(["pagado", "planilla_pagada"])
+    pending_ok     = models.Factura.estado == "pendiente"
+    planilla_ok    = models.Factura.estado == "planilla_pagada"
 
     facts = db.query(
         func.sum(case((period_ok, 1), else_=0)).label("n"),
-        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.ingresos), else_=0)), 0).label("ingresos"),
-        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.costo_adm), else_=0)), 0).label("costos_pagadas"),
-        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.utilidad), else_=0)), 0).label("utilidad"),
+        func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.ingresos), else_=0)), 0).label("ingresos"),
+        func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.utilidad), else_=0)), 0).label("utilidad"),
+        # total_impuestos: costos SS de facturas con planilla_pagada en el período
+        func.coalesce(func.sum(case((and_(planilla_ok, period_ok),   models.Factura.costos),   else_=0)), 0).label("total_impuestos"),
         # pendiente: saldo real (ingresos − abonos acumulados) para facturas pendientes del período
         func.coalesce(func.sum(case(
             (and_(pending_ok, period_ok), models.Factura.ingresos - func.coalesce(models.Factura.monto_pagado, 0)),
@@ -924,8 +926,7 @@ def get_dashboard(db, anio="", mes=""):
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "pendiente_cobro_total": float(pend_total), "meses_factor": meses_factor,
         "ingresos_por_banco": ingresos_por_banco,
-        # cargo_adm_total: suma real de costos de planillas pagadas (incluye cargo/mora real de cada factura)
-        "cargo_adm_total": float(facts.costos_pagadas),
+        "total_impuestos_planillas": float(facts.total_impuestos),
     }
     _cache_set(cache_key, result, ttl=TTL_DASHBOARD)
     return result
