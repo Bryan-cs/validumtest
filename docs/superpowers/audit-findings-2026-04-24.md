@@ -729,3 +729,85 @@ def delete_usuario(id, db, token=Depends(require_admin)):  # solo admins llegan 
 
 Guard 2 (conteo DB activo) cumple el checkpoint critico: verifica estado real en BD,
 no solo nombre hardcodeado. Guard 1 es redundante e inconsistente con el patron.
+
+---
+
+---
+
+## Task 7 — Scheduler Jobs Audit (2026-04-24)
+
+### Resumen
+
+Todos los checkpoints de scheduler pasaron. No se encontraron issues CRÍTICO ni ALTO.
+Un hallazgo BAJO: el docstring de `limpiar_actividad_antigua` dice "90 días" pero la lógica usa 7 días (reducido en sesión 10; docstring no actualizado).
+
+**[Scheduler]** run_daily, run_monthly, jobs, no APScheduler en web — verificados ✓
+
+---
+
+### CRÍTICO
+
+_Ninguno_
+
+---
+
+### ALTO
+
+_Ninguno_
+
+---
+
+### MEDIO
+
+_Ninguno_
+
+---
+
+### BAJO
+
+**[Scheduler] scheduler_jobs.py:29 — Docstring dice "90 días" pero lógica usa `timedelta(days=7)`**
+
+`limpiar_actividad_antigua()` tiene el docstring: "Elimina registros de actividad con más de **90 días**" (línea 29). La lógica real en línea 35 usa `timedelta(days=7)`. El valor fue reducido de 90d a 7d en sesión 10 pero el docstring no fue actualizado. Sin impacto funcional.
+
+Fix: actualizar docstring a "Elimina registros de actividad con más de 7 días."
+
+---
+
+### Checkpoints detallados
+
+#### run_daily.py
+
+| Checkpoint | Estado | Ref |
+|---|---|---|
+| Calls limpiar_notificaciones_diario | PASS | run_daily.py:23 |
+| Calls limpiar_token_blacklist | PASS | run_daily.py:24 |
+| Calls limpiar_actividad_antigua (7d, no 90d) | PASS | run_daily.py:25 — lógica usa timedelta(days=7) |
+| Calls limpiar_login_attempts (sesión 15) | PASS | run_daily.py:26 |
+| Crea su propia sesión DB | PASS | Cada función usa SessionLocal() propio |
+| Maneja excepciones sin crashear | PASS | try/except/finally en cada función; errores logueados |
+
+#### run_monthly.py
+
+| Checkpoint | Estado | Ref |
+|---|---|---|
+| Calls limpiar_tareas_mensuales | PASS | run_monthly.py:22 |
+| Calls limpiar_novedades_antiguas | PASS | run_monthly.py:23 |
+| Calls limpiar_planillas_antiguas (R2 + DB) | PASS | run_monthly.py:24 |
+| Crea su propia sesión DB | PASS | Cada función usa SessionLocal() propio |
+
+#### scheduler_jobs.py
+
+| Checkpoint | Estado | Ref |
+|---|---|---|
+| limpiar_login_attempts: borra WHERE last_attempt < (now − 24h) | PASS | scheduler_jobs.py:131 — solo registros OLD |
+| limpiar_planillas_antiguas: limpia R2 y DB | PASS | scheduler_jobs.py:177-189 — s3.delete_object + DELETE SQL |
+| Todas las funciones sin dependencias de web context | PASS | Imports diferidos dentro de funciones; sin Request de FastAPI |
+| Sin imports APScheduler a nivel de módulo | PASS | No hay import APScheduler en scheduler_jobs.py |
+
+#### main.py — sin scheduling duplicado
+
+| Checkpoint | Estado | Ref |
+|---|---|---|
+| ENABLE_SCHEDULER default = "false" | PASS | main.py:76 — `os.getenv("ENABLE_SCHEDULER", "false")` |
+| APScheduler solo inicia si ENABLE_SCHEDULER == "true" | PASS | main.py:77 — guard `if _should_schedule:` |
+| Lifespan no inicia scheduler incondicionalmente | PASS | main.py:59-92 — bloque scheduler es condicional |
