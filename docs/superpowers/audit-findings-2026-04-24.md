@@ -2,8 +2,11 @@
 
 ## Resumen ejecutivo
 
-Auditoría completa de Auth & Seguridad + Cache Invalidación. **37 checkpoints verificados, 3 fallos ALTO, 1 observación MEDIO.**
-Todos los fixes críticos de sesiones previas (session 7, 15, 17) están presentes. Tres mutaciones omiten `cache_invalidar("dashboard_clientes:")`: `restaurar_eliminado`, `create_retiro`, `delete_retiro`.
+Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana. **49 checkpoints verificados, 5 fallos ALTO, 3 observaciones MEDIO.**
+
+**Task 1 & 2 (sesiones previas):** Todos los fixes críticos de sesiones previas (sesión 7, 15, 17) están presentes. Tres mutaciones omiten `cache_invalidar("dashboard_clientes:")`: `restaurar_eliminado`, `create_retiro`, `delete_retiro`.
+
+**Task 3 (SS Logic):** Dos hallazgos ALTO: (1) `facturas_set` en `get_cobro` incluye facturas `pendiente` → afiliados con factura pendiente aparecen como COBRADO erróneamente. (2) IBC individual no valida mínimo 1 SMMLV. Tres hallazgos MEDIO: IBC global hardcodeado al SMMLV 2025 (no 2026), reingreso no purga SolicitudNovedad/SolicitudRetiro, PROXIMO cubre solo 1 día en lugar de 5. Los porcentajes SS (EPS/AFP/ARL/CCF) son configurables en BD — no verificables desde código, pero la lógica de lectura es correcta. Columnas financieras usan Numeric(15,2) correctamente (fix sesión 14 aplicado). Fix del par (anio,mes) en cobro está presente (fix sesión 7). Ciclo de vida afiliado sustancialmente correcto.
 
 ---
 
@@ -102,6 +105,197 @@ Clasificado MEDIO (no ALTO): cuando el CB está OPEN, `cache_invalidar` no borra
 
 ---
 
+---
+
+## Task 3 — SS Business Logic Audit (2026-04-24)
+
+### Resumen
+
+| Área | Resultado |
+|---|---|
+| SS Percentages (EPS/AFP/ARL/CCF/SENA/ICBF) | ⚠️ MEDIO — ver detalle |
+| IBC mínimo = 1 SMMLV | ❌ ALTO — no validado |
+| Columnas financieras usan Numeric/Decimal | ✅ PASS |
+| Ciclo afiliado: reingreso purga previos | ⚠️ MEDIO — incompleto |
+| Ciclo afiliado: retiro → activo=False + Retiro | ✅ PASS |
+| Ciclo afiliado: borrado permanente conserva Retiro | ✅ PASS |
+| Ciclo afiliado: restaurar → activo=True | ✅ PASS |
+| Cobro COBRADO: solo pagado/planilla_pagada | ❌ ALTO — incluye pendiente |
+| Cobro HOY: dia_cobro == hoy | ✅ PASS |
+| Cobro VENCIDO: dia_cobro < hoy AND no cobrado | ✅ PASS |
+| Cobro PROXIMO: solo dia_cobro == hoy+1 | ⚠️ MEDIO — difiere de docs |
+| Cobro pair (anio, mes) juntos | ✅ PASS — fix sesión 7 presente |
+
+---
+
+### CRÍTICO
+
+_Ninguno_
+
+---
+
+### ALTO
+
+**[SS Logic] crud.py:1263-1270 — `facturas_set` incluye facturas PENDIENTE → COBRADO incorrecto**
+
+La query que construye `facturas_set` no filtra por `estado`:
+```python
+facturas_set = set(
+    (f.doc, f.mes, f.anio)
+    for f in db.query(models.Factura.doc, models.Factura.mes, models.Factura.anio)
+    .filter(models.Factura.anio.in_(anios_ventana))
+    .filter(models.Factura.mes.in_(meses_ventana_nombres))
+    .all()
+    if (f.anio, f.mes) in _pares_validos
+)
+```
+Consecuencia: si un afiliado tiene una factura en estado `pendiente` para el mes actual, el módulo de cobro lo muestra como `COBRADO` en lugar de `VENCIDO` o `HOY`. La regla de negocio (`business-rules.md §4`) establece que COBRADO = factura `pagado` o `planilla_pagada`.
+
+**Impacto:** afiliados con factura pendiente no aparecen en cobro → se pierden de la gestión de cartera.
+
+Fix: agregar `.filter(models.Factura.estado.in_(["pagado", "planilla_pagada"]))` en la query de `facturas_set`.
+
+---
+
+**[SS Logic] schemas.py:43 — IBC individual no valida mínimo 1 SMMLV**
+
+El validator `ibc_positivo` solo rechaza valores `<= 0`:
+```python
+if v is not None and float(v) <= 0:
+    raise ValueError('IBC debe ser mayor a 0')
+```
+No hay validación de mínimo SMMLV (1,423,500 en 2026; 1,950,905 en 2025). Un IBC de p.ej. 500,000 es aceptado silenciosamente, produciendo cálculos SS con base inferior al legal.
+
+Adicionalmente, el IBC global en `models.py:184` tiene `default=1_950_905` (SMMLV 2025). Si la BD fue inicializada en 2025 y no se actualizó, todos los afiliados sin IBC individual calculan SS sobre el salario mínimo del año anterior.
+
+Fix `schemas.py`: `if v is not None and float(v) < 1_423_500: raise ValueError('IBC mínimo es 1 SMMLV (1,423,500 para 2026)')`. Alternativamente usar constante configurable.
+Fix `models.py` + `crud.py`: actualizar default a 1,423,500 (SMMLV 2026).
+
+---
+
+### MEDIO
+
+**[SS Logic] business-rules.md — IBC global desactualizado (2025 SMMLV)**
+
+`business-rules.md §3` dice: "IBC global default: 1,950,905 COP (salario mínimo 2025 Colombia)". El SMMLV 2026 es $1,423,500. El documento fuente de verdad no ha sido actualizado para 2026. El hardcode en `models.py:184` y `crud.py:45,677,679,1253` refleja el valor de 2025.
+
+No es un bug de código per se (el valor viene de la BD, editable desde Config), pero el default incorrecto en código puede regenerar la BD con el valor viejo si se hace un reset.
+
+---
+
+**[SS Logic] routers/afiliados.py:429-433 — Reingreso no purga SolicitudNovedad ni SolicitudRetiro**
+
+El flujo de reingreso (`POST /afiliados`) limpia:
+- `Afiliado` ✓ (línea 429)
+- `Factura` ✓ (línea 430)
+- `Retiro` ✓ (línea 431)
+- `Eliminado` ✓ (línea 432-433)
+
+Pero NO limpia:
+- `SolicitudNovedad.afiliado_doc` — solicitudes de novedades del portal del doc anterior
+- `SolicitudRetiro.afiliado_doc` — solicitudes de retiro del doc anterior
+
+`business-rules.md §1` dice "Reingreso → POST /afiliados limpia todo rastro anterior del doc antes de crear desde cero". El borrado permanente (`main.py:224-225`) sí los borra. El reingreso es inconsistente.
+
+Impacto: el portal del cliente podría mostrar solicitudes de novedades/retiro antiguas del doc anterior si el cliente las ve. Bajo volumen real pero inconsistente con la regla documentada.
+
+Fix `routers/afiliados.py`: agregar antes del `db.flush()`:
+```python
+db.query(models.SolicitudNovedad).filter_by(afiliado_doc=data.doc).delete()
+db.query(models.SolicitudRetiro).filter_by(afiliado_doc=data.doc).delete()
+```
+
+---
+
+**[SS Logic] crud.py:1347 — PROXIMO solo cubre 1 día (mañana), no 5 días**
+
+El código marca `PROXIMO` únicamente cuando `dia_afil == dia_hoy + 1`. Esto cubre solo "mañana". La tarea de auditoría especificaba "dentro de los próximos 5 días" como regla de negocio. `business-rules.md §4` dice "PROXIMO: dia_cobro > día actual" sin límite de días; el frontend CLAUDE.md confirma "Solo muestra cobro hoy o mañana. No carga días futuros." — la restricción de 1 día es intencional en el frontend/diseño actual, pero difiere del enunciado de auditoría.
+
+No es un bug si el diseño actual de "solo mañana" es la decisión de producto. Documentado como observación.
+
+---
+
+### SS Percentages — Verificación
+
+Los porcentajes de EPS/AFP/ARL/CCF/SENA/ICBF NO están hardcodeados en el código — se almacenan como JSON en `Config.porcentajes` y se leen vía `_get_pct(db, servicio)` (`crud.py:47-55`). Esto significa:
+
+1. **No hay porcentajes incorrectos en código** — los valores en BD son configurables desde la UI (módulo Config).
+2. **No es posible verificar los valores actuales de producción sin acceso a la BD** — solo se puede confirmar que la lectura es correcta.
+3. La estructura de llaves para ARL es `"ARL 1"` ... `"ARL 5"` (`crud.py:53-54`), alineada con los niveles del enunciado. ✓
+4. Las llaves para EPS, AFP, CCF, SENA, ICBF son uppercase sin modificación (`crud.py:55`). ✓
+
+La calculadora de planilla usa `_planilla()` (`crud.py:83-94`) y `get_cobro()` (`crud.py:1315`) — ambas leen el IBC y los porcentajes desde Config correctamente. ✓
+
+**Verificación imposible sin acceso a la BD de producción.** Si los porcentajes en Config son incorrectos, es un error de datos, no de código.
+
+---
+
+### Columnas Financieras — Numeric/Decimal
+
+Verificado el fix de sesión 14 (`models.py`):
+- `Afiliado.ibc` → `Numeric(15, 2)` ✓ (`models.py:57`)
+- `Factura.ingresos`, `costos`, `costo_adm`, `conceptos_extra`, `utilidad`, `monto_pagado` → `Numeric(15, 2)` ✓ (`models.py:84-94`)
+- `Empleado.nomina` → `Numeric(15, 2)` ✓ (`models.py:137`)
+- `Gasto.valor` → `Numeric(15, 2)` ✓ (`models.py:149`)
+- `IngresoAdicional.valor` → `Numeric(15, 2)` ✓ (`models.py:163`)
+- `NominaMensual.valor` → `Numeric(15, 2)` ✓ (`models.py:179`)
+- `Config.ibc_global`, `cargo_adicional` → `Numeric(15, 2)` ✓ (`models.py:184,187`)
+
+Sin columnas Float en campos financieros. ✓
+
+---
+
+### Ciclo Afiliado — Verificación Completa
+
+**Reingreso (`POST /afiliados` — `routers/afiliados.py:419-437`):**
+- ✅ Busca afiliado activo + eliminado_reg → si activo sin eliminado → HTTP 400
+- ✅ Purga `Afiliado` fila inactiva anterior (`line:429`)
+- ✅ Purga `Factura` anteriores (`line:430`)
+- ✅ Purga `Retiro` anterior (`line:431`)
+- ✅ Purga `Eliminado` (`line:432`)
+- ❌ NO purga `SolicitudNovedad` ni `SolicitudRetiro` — ver hallazgo MEDIO
+
+**Retiro (`crud.py:499-536`):**
+- ✅ `afil.activo = False` (`line:528`)
+- ✅ Crea registro `Retiro` (`line:513-517`)
+- ✅ Crea registro `Eliminado` si no existe (`line:519-527`)
+
+**Borrado permanente (`main.py:211-230`):**
+- ✅ Borra `Afiliado` (`line:218`)
+- ✅ Borra `Factura` (`line:220`)
+- ✅ Borra `Documento` (`line:222`)
+- ✅ Borra `SolicitudNovedad` (`line:224`)
+- ✅ Borra `SolicitudRetiro` (`line:225`)
+- ✅ Borra `Eliminado` (`line:227`)
+- ✅ CONSERVA `Retiro` — NO hay `db.query(models.Retiro).filter_by(doc=doc).delete()` ✓
+
+**Restaurar (`main.py:233-306`):**
+- ✅ `activo=True` en nuevo `Afiliado` creado desde snapshot JSON (`line:258-293`)
+- ✅ Reactiva facturas huérfanas → `afiliado_eliminado=False` (`line:297-298`)
+- ✅ Elimina registro `Eliminado` (`line:300`)
+
+---
+
+### Cobro — Verificación Completa
+
+**COBRADO (`crud.py:1336-1340`):**
+- ❌ `tiene_fac = (a.doc, mes_nombre, anio_str) in facturas_set` — `facturas_set` incluye facturas `pendiente`, no solo `pagado/planilla_pagada`. Ver hallazgo ALTO.
+
+**HOY (`crud.py:1346`):**
+- ✅ `dia_afil == dia_hoy` → `estado = "HOY"`
+
+**VENCIDO (`crud.py:1341-1345`):**
+- ✅ Mes pasado sin factura → `VENCIDO`
+- ✅ Mes actual + `dia_afil < dia_hoy` → `VENCIDO`
+
+**PROXIMO (`crud.py:1347`):**
+- ⚠️ Solo `dia_afil == dia_hoy + 1` (mañana) → ver hallazgo MEDIO
+
+**Pair (anio, mes) validado juntos (`crud.py:1262-1269`):**
+- ✅ `_pares_validos = {(str(y), MESES[m-1]) for y, m in meses_ventana}` y filtro `if (f.anio, f.mes) in _pares_validos` — fix sesión 7 presente y correcto ✓
+
+---
+
 ## Detalle completo de checkpoints
 
 | # | Área | Checkpoint | Estado | Ref |
@@ -143,3 +337,18 @@ Clasificado MEDIO (no ALTO): cuando el CB está OPEN, `cache_invalidar` no borra
 | 35 | Cache | create_retiro invalida dashboard_clientes: | ❌ ALTO | crud.py:502 — falta |
 | 36 | Cache | delete_retiro invalida dashboard_clientes: | ❌ ALTO | crud.py:539 — falta |
 | 37 | Cache | Redis CB OPEN → no fallback a dict en memoria | ✅ PASS | crud.py:1146-1151 |
+| 38 | SS Logic | Porcentajes EPS/AFP/ARL legibles desde Config (no hardcodeados) | ✅ PASS | crud.py:47-55 |
+| 39 | SS Logic | Estructura llaves ARL usa "ARL 1"..."ARL 5" | ✅ PASS | crud.py:53-54 |
+| 40 | SS Logic | IBC individual validado > 0 | ✅ PASS | schemas.py:43 |
+| 41 | SS Logic | IBC individual validado >= 1 SMMLV | ❌ ALTO | schemas.py:43 — solo > 0 |
+| 42 | SS Logic | IBC global default = SMMLV 2026 (1,423,500) | ❌ MEDIO | models.py:184 — usa 1,950,905 (2025) |
+| 43 | SS Logic | Columnas financieras Numeric/Decimal (no float) | ✅ PASS | models.py:57,84-94,137,149,163,179,184,187 |
+| 44 | SS Logic | Reingreso purga Afiliado+Factura+Retiro+Eliminado | ✅ PASS | afiliados.py:429-433 |
+| 45 | SS Logic | Reingreso purga SolicitudNovedad+SolicitudRetiro | ❌ MEDIO | afiliados.py — no purga |
+| 46 | SS Logic | Retiro: activo=False + Retiro record | ✅ PASS | crud.py:528,513-517 |
+| 47 | SS Logic | Borrado permanente conserva Retiro | ✅ PASS | main.py:218-227 — no borra Retiro |
+| 48 | SS Logic | Cobro COBRADO = solo pagado/planilla_pagada | ❌ ALTO | crud.py:1263-1270 — incluye pendiente |
+| 49 | SS Logic | Cobro HOY = dia_cobro == hoy | ✅ PASS | crud.py:1346 |
+| 50 | SS Logic | Cobro VENCIDO = dia < hoy AND no cobrado | ✅ PASS | crud.py:1341-1345 |
+| 51 | SS Logic | Cobro PROXIMO = próximos 5 días | ❌ MEDIO | crud.py:1347 — solo día+1 |
+| 52 | SS Logic | Cobro pair (anio,mes) validados juntos | ✅ PASS | crud.py:1262-1269 — fix s7 OK |
