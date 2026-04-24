@@ -302,6 +302,7 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(re
     crud.cache_invalidar("cobro:")
     crud.cache_invalidar("afiliados:")
     crud.cache_invalidar("dashboard:")
+    crud.cache_invalidar("dashboard_clientes:")
     db.commit()
     return {"ok": True, "nombre": e.nombre}
 
@@ -516,6 +517,18 @@ def update_config(data: schemas.ConfigUpdate,
 def dashboard(anio: str = "", mes: str = "",
               db: Session = Depends(get_db), token=Depends(verify_token)):
     return crud.get_dashboard(db, anio=anio, mes=mes)
+
+
+@app.get("/dashboard/clientes")
+def dashboard_clientes(anio: str = "", mes: str = "",
+                       db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.get_resumen_clientes(db, anio=anio, mes=mes)
+
+
+@app.get("/dashboard/cliente/{cliente}")
+def dashboard_cliente(cliente: str, anio: str = "", mes: str = "",
+                      db: Session = Depends(get_db), token=Depends(require_admin)):
+    return crud.get_dashboard_cliente(db, cliente=cliente, anio=anio, mes=mes)
 
 
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
