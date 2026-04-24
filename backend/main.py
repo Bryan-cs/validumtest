@@ -269,7 +269,6 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(re
         a.cargo = datos.get("cargo", "")
         a.tel = datos.get("tel", "")
         a.email = datos.get("email", "")
-        a.obs = datos.get("obs", "")
         a.novedades = datos.get("novedades", "")
         a.ibc = datos.get("ibc")
         a.fecha_ingreso = datos.get("fecha_ingreso", "")
@@ -286,7 +285,7 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(re
             subtipo=datos.get("subtipo","0"),
             cliente_txt=datos.get("cliente_txt",""),
             cargo=datos.get("cargo",""), tel=datos.get("tel",""),
-            email=datos.get("email",""), obs=datos.get("obs",""),
+            email=datos.get("email",""),
             novedades=datos.get("novedades",""),
             ibc=datos.get("ibc"), fecha_ingreso=datos.get("fecha_ingreso",""),
             fecha_afiliacion=datos.get("fecha_afiliacion",""),

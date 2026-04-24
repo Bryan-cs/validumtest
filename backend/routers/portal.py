@@ -103,7 +103,7 @@ def portal_resumen(doc: str, db: Session = Depends(get_db), token=Depends(_requi
             "eps": afil.eps, "afp": afil.afp, "ccf": afil.ccf, "arl": afil.arl,
             "estado": afil.estado, "estado_srv": afil.estado_srv,
             "servicios": srvs, "tel": afil.tel, "email": afil.email,
-            "dir": afil.dir, "obs": afil.obs, "ibc": afil.ibc,
+            "dir": afil.dir, "ibc": afil.ibc,
             "fecha_ingreso": afil.fecha_ingreso, "fecha_afiliacion": afil.fecha_afiliacion,
         },
         "facturas": [{

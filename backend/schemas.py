@@ -32,7 +32,6 @@ class AfiliadoCreate(BaseModel):
     email: str = ""
     dir: str = ""
     ciudad: str = ""
-    obs: str = ""
     novedades: str = ""
     detalle: str = ""
     ibc: Optional[float] = None
@@ -48,7 +47,7 @@ class AfiliadoCreate(BaseModel):
     registrado_por: str = ""
 
     @field_validator('empresa', 'cargo', 'cliente_txt', 'eps', 'arl', 'ccf', 'afp',
-                     'subtipo', 'tel', 'email', 'dir', 'obs', 'novedades', 'detalle',
+                     'subtipo', 'tel', 'email', 'dir', 'novedades', 'detalle',
                      'fecha_ingreso', 'fecha_afiliacion', 'registrado_por', mode='before')
     @classmethod
     def none_to_str(cls, v):

@@ -123,7 +123,7 @@ def reporte_afiliados(
     ws = wb.active
     ws.title = "Afiliados"
     cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente", "Cargo", "EPS", "ARL", "AFP", "CCF",
-            "Subtipo", "Estado", "Estado Servicio", "Servicios", "IBC", "Tel", "Email", "Fecha Ingreso", "Fecha Afiliación", "Obs"]
+            "Subtipo", "Estado", "Estado Servicio", "Servicios", "IBC", "Tel", "Email", "Fecha Ingreso", "Fecha Afiliación"]
     _hdr_style(ws, cols)
     for i, a in enumerate(items, 1):
         srvs = a.get("servicios") or []
@@ -132,7 +132,7 @@ def reporte_afiliados(
                    a.get("cargo"), a.get("eps"), a.get("arl"), a.get("afp"), a.get("ccf"),
                    a.get("subtipo"), a.get("estado"), a.get("estado_srv"), srvs_str,
                    a.get("ibc"), a.get("tel"), a.get("email"),
-                   a.get("fecha_ingreso"), a.get("fecha_afiliacion"), a.get("obs")])
+                   a.get("fecha_ingreso"), a.get("fecha_afiliacion")])
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
     return _xlsx_response(wb, "afiliados.xlsx")
