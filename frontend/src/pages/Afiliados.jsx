@@ -1274,7 +1274,8 @@ export default function Afiliados() {
         title={modal==='nuevo'?'➕ Nuevo afiliado':`✏️ Editar — ${form.nombre||''}`}>
         <Seccion title="Datos personales" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
-          <InputUp label="Nombre completo *" value={form.nombre||''} onChange={v=>sf('nombre',v)} />
+          <InputUp label="Nombre completo *" value={form.nombre||''}
+            onChange={v=>sf('nombre', v.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, ''))} />
           <div style={{ marginBottom:14 }}>
             <label style={lbl}>Tipo y N° Documento *</label>
             <div style={{ display:'flex', gap:8 }}>
@@ -1286,13 +1287,16 @@ export default function Afiliados() {
                 <option value="PA">PA</option>
                 <option value="NIT">NIT</option>
               </select>
-              <input value={form.doc||''} onChange={e=>sf('doc',e.target.value.toUpperCase())}
-                placeholder="NÚMERO DE DOCUMENTO"
-                style={{ ...inp2, flex:1, textTransform:'uppercase' }} />
+              <input value={form.doc||''} onChange={e=>sf('doc',e.target.value.replace(/[^0-9]/g,''))}
+                placeholder="SOLO NÚMEROS"
+                inputMode="numeric"
+                style={{ ...inp2, flex:1 }} />
             </div>
           </div>
-          <InputUp label="Cargo"             value={form.cargo||''} onChange={v=>sf('cargo',v)} />
-          <InputUp label="Teléfono"          value={form.tel||''} onChange={v=>sf('tel',v)} type="tel" />
+          <InputUp label="Cargo"    value={form.cargo||''}
+            onChange={v=>sf('cargo', v.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ0-9\s]/g, ''))} />
+          <InputUp label="Teléfono" value={form.tel||''}
+            onChange={v=>sf('tel', v.replace(/[^0-9]/g,''))} type="tel" />
           <InputUp label="Email"             value={form.email||''} onChange={v=>sf('email',v)} style={{ gridColumn:'1/-1' }} />
           <InputUp label="Dirección"         value={form.dir||''} onChange={v=>sf('dir',v)} />
           <InputUp label="Ciudad"            value={form.ciudad||''} onChange={v=>sf('ciudad',v)} />
@@ -1300,8 +1304,21 @@ export default function Afiliados() {
 
         <Seccion title="Empresa y contrato" />
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
-          <Sel label="Razón Social" value={form.empresa||''} onChange={v=>sf('empresa',v)}
-            options={['', ...(listas.empresas||[])].map(e=>({value:e,label:e||'— Seleccionar'}))} />
+          <div style={{ marginBottom:14 }}>
+            <label style={lbl}>Razón Social *</label>
+            <select value={form.empresa||''} onChange={e=>sf('empresa',e.target.value)}
+              style={{ ...inp2, cursor:'pointer',
+                border:`1px solid ${!form.empresa ? C.red : C.border}`,
+                boxShadow: !form.empresa ? `0 0 0 2px ${C.red}22` : 'none' }}>
+              <option value="">— Seleccionar empresa (requerido)</option>
+              {(listas.empresas||[]).map(e=><option key={e} value={e}>{e}</option>)}
+            </select>
+            {!form.empresa && (
+              <span style={{ fontSize:11, color:C.red, marginTop:3, display:'block' }}>
+                Selecciona una empresa para continuar
+              </span>
+            )}
+          </div>
           <Sel label="Subtipo" value={form.subtipo||'0'} onChange={v=>sf('subtipo',v)}
             options={(listas.subtipos||['0','3','4','20','22']).map(s=>({value:s,label:s}))} />
           <Sel label="Cliente (empresa o persona que contrata)" value={form.cliente_txt||''}
@@ -1415,7 +1432,9 @@ export default function Afiliados() {
         <div style={{ display:'flex',justifyContent:'flex-end',gap:10,marginTop:8,
           borderTop:`1px solid ${C.border}`,paddingTop:14 }}>
           <Btn variant="secondary" onClick={()=>setModal(null)}>Cancelar</Btn>
-          <Btn onClick={()=>guardar.mutate()} disabled={guardar.isPending}>
+          <Btn onClick={()=>guardar.mutate()}
+            disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim()}
+            title={!form.empresa?'Selecciona una empresa':!form.nombre?.trim()?'Ingresa el nombre':!form.doc?.trim()?'Ingresa el documento':''}>
             {guardar.isPending?'Guardando...':'💾 Guardar afiliado'}
           </Btn>
         </div>
