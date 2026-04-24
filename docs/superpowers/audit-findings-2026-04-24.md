@@ -296,6 +296,119 @@ Sin columnas Float en campos financieros. ✓
 
 ---
 
+---
+
+## Task 4 — Integridad Contable (2026-04-24)
+
+### Resumen
+
+**[Contabilidad]** utilidad server-side, estados, dashboard, Excel — mayormente verificados. Un hallazgo MEDIO en schemas (FacturaCreate permite estados pagado/planilla_pagada al crear), una observación BAJO en fórmula de utilidad (incluye `-costo_adm` no documentado).
+
+| Área | Resultado |
+|---|---|
+| create_factura: utilidad server-side | ✅ PASS — crud.py:409 |
+| create_factura: frontend utilidad ignorado | ✅ PASS — crud.py:409 sobreescribe |
+| update_factura: utilidad server-side | ✅ PASS — crud.py:445 |
+| update_factura: bloquea mes/anio si pagado/planilla_pagada | ✅ PASS — crud.py:433-438 |
+| FacturaCreate: solo 'pendiente' permitido | ❌ MEDIO — schemas.py:93 |
+| FacturaUpdate: tres estados permitidos | ✅ PASS — schemas.py:121-125 |
+| planilla_pagada en enum (fix s7) | ✅ PASS — schemas.py:93,121 |
+| Dashboard ingresos: solo pagado/planilla_pagada | ✅ PASS — crud.py:820 |
+| pend_total: sin filtro de período (all-time) | ✅ PASS — crud.py:828-831 |
+| ingresos_adicionales: sumado una vez | ✅ PASS — crud.py:844-862 |
+| get_dashboard: query única con CASE (fix s4) | ✅ PASS — crud.py:818-832 |
+| Excel TOTAL PAGADAS: solo pagado/planilla_pagada | ✅ PASS — reportes.py:223 |
+| Excel TOTAL INGRESOS = pagadas + adicionales | ✅ PASS — reportes.py:262 |
+| Excel TOTAL PENDIENTE: facturas pendientes | ✅ PASS — reportes.py:271-274 |
+| Excel "Tipo Doc" antes de "Documento" | ✅ PASS — reportes.py:216 col 4 |
+| Excel "Fecha pago" presente | ✅ PASS — reportes.py:218 col 18 |
+| portal_resumen usa f.ingresos (no f.costos) | ✅ PASS — portal.py:114-115 |
+
+---
+
+### CRÍTICO
+
+_Ninguno_
+
+---
+
+### MEDIO
+
+**[Contabilidad] schemas.py:93 — `FacturaCreate` permite estados `pagado` y `planilla_pagada` al crear**
+
+El validador en `FacturaCreate`:
+```python
+if v is not None and v not in ('pendiente', 'pagado', 'planilla_pagada'):
+    raise ValueError(...)
+return v or 'pendiente'
+```
+Acepta `pagado` o `planilla_pagada` al crear una factura nueva, saltándose el flujo `pendiente → pagado → planilla_pagada`. Un usuario autenticado podría crear una factura directamente en estado `pagado` sin pasar por el endpoint `/facturas/{id}/pagar` (que registra `banco` y `pagado_en`). Esto podría dejar facturas "pagadas" sin banco ni fecha de pago.
+
+El checkpoint de la auditoría era que `FacturaCreate` solo debe permitir `pendiente` (estado inicial). El enum actual es demasiado permisivo para creación.
+
+Fix `schemas.py:93`: cambiar a:
+```python
+if v is not None and v not in ('pendiente',):
+    raise ValueError('Estado inicial debe ser "pendiente"')
+return 'pendiente'
+```
+
+---
+
+### BAJO
+
+**[Contabilidad] crud.py:409,445 — Fórmula de utilidad incluye `-costo_adm` no documentado**
+
+La fórmula actual en código:
+```python
+utilidad = (ingresos or 0) - (costos or 0) - (costo_adm or 0) + (conceptos_extra or 0)
+```
+El Changelog sesión 13 documenta: `utilidad recalculada server-side como ingresos - costos + conceptos_extra`. El campo `costo_adm` también se descuenta pero no aparece en la documentación pública de la fórmula.
+
+Sin embargo, el Changelog sesión 13 también dice: "costo_adm como campo de tracking eliminado del POST/PUT de facturas (se enviaba 0 para facturas antiguas)". Si `costo_adm` siempre es 0 en práctica, la fórmula es funcionalmente equivalente a la documentada.
+
+**No es un bug funcional** si `costo_adm` nunca se escribe con valor > 0. Es una discrepancia entre la documentación y el código que podría confundir en el futuro.
+
+Recomendación: actualizar el comment en crud.py:408,444 para reflejar la fórmula real, o eliminar `costo_adm` de la fórmula si nunca se usa.
+
+---
+
+### OK (verificado)
+
+**[Contabilidad]** `create_factura` calcula `utilidad` server-side como `ingresos - costos - costo_adm + conceptos_extra` — valor del frontend ignorado — `crud.py:408-409` ✓
+
+**[Contabilidad]** `update_factura` recalcula `utilidad` server-side en línea 445, después de aplicar todos los campos del request — cualquier `utilidad` enviado por frontend se sobreescribe ✓
+
+**[Contabilidad]** `update_factura` bloquea `mes`/`anio` si `f.estado in {"pagado", "planilla_pagada"}` → HTTP 400 — `crud.py:433-438` ✓
+
+**[Contabilidad]** `FacturaUpdate` permite `'pendiente', 'pagado', 'planilla_pagada'` — `schemas.py:121-125` ✓
+
+**[Contabilidad]** `planilla_pagada` presente en enum de `FacturaCreate` y `FacturaUpdate` (fix sesión 7) — `schemas.py:93,121` ✓
+
+**[Contabilidad]** `get_dashboard` usa UNA sola query con CASE expressions para facturas (fix Sentry sesión 4) — `crud.py:818-832` ✓
+
+**[Contabilidad]** `ingresos` en dashboard = `SUM(CASE WHEN estado IN (pagado, planilla_pagada) AND period_ok THEN ingresos)` — solo facturas pagadas del período — `crud.py:820` ✓
+
+**[Contabilidad]** `pend_total` = `SUM(CASE WHEN pendiente AND afiliado_eliminado=False THEN ingresos)` — sin filtro de período, incluye histórico completo — `crud.py:828-831` ✓
+
+**[Contabilidad]** `ingresos_adicionales` sumado una sola vez con `filter_by(mes=, anio=)` — no duplicado — `crud.py:844-862` ✓
+
+**[Contabilidad]** Excel `ESTADOS_PAGADO = {"pagado", "planilla_pagada"}` — `TOTAL PAGADAS` solo cuenta esas — `reportes.py:223` ✓
+
+**[Contabilidad]** Excel `TOTAL INGRESOS = tot_ing_pag + ing_adic_total` — `reportes.py:262` ✓
+
+**[Contabilidad]** Excel `TOTAL PENDIENTE` — fila separada con `tot_ing_pend` — `reportes.py:271-274` ✓
+
+**[Contabilidad]** Excel columnas: `cols = [..., "Tipo Doc", "Documento", ...]` — Tipo Doc en posición 4, Documento en posición 5 — `reportes.py:216` ✓
+
+**[Contabilidad]** Excel columna `"Fecha pago"` presente en posición 18 — `reportes.py:218` ✓
+
+**[Contabilidad]** `portal_resumen` usa `f.ingresos` en `total_pendiente` y `total_pagado` (fix sesión 6) — `portal.py:114-115` ✓
+
+**[Contabilidad]** `get_dashboard_meses` — función no existe en `crud.py`. El Changelog la menciona como fix de sesión 7 (`total_ingresos ahora filtra solo facturas pagadas`) pero fue absorbida o renombrada. No aplica como checkpoint independiente.
+
+---
+
 ## Detalle completo de checkpoints
 
 | # | Área | Checkpoint | Estado | Ref |
