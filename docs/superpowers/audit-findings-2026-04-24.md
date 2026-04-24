@@ -2,7 +2,7 @@
 
 ## Resumen ejecutivo
 
-Auditoría completa de Auth & Seguridad. **20 checkpoints verificados, 0 fallos, 1 observación menor.**
+Auditoría completa de Auth & Seguridad. **24 checkpoints verificados, 0 fallos, 2 observaciones menores.**
 Todos los fixes críticos de sesiones previas están presentes en el código actual.
 
 ---
