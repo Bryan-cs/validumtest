@@ -1002,3 +1002,197 @@ Fix: actualizar docstring a "Elimina registros de actividad con más de 7 días.
 | ENABLE_SCHEDULER default = "false" | PASS | main.py:76 — `os.getenv("ENABLE_SCHEDULER", "false")` |
 | APScheduler solo inicia si ENABLE_SCHEDULER == "true" | PASS | main.py:77 — guard `if _should_schedule:` |
 | Lifespan no inicia scheduler incondicionalmente | PASS | main.py:59-92 — bloque scheduler es condicional |
+
+---
+
+---
+
+## Task 9 — Módulo Finanzas (2026-04-24)
+
+### Resumen ejecutivo
+
+Auditoría del módulo Finanzas construido en sesión 17. **Todos los checkpoints principales PASAN.** No se encontraron issues CRÍTICO ni ALTO nuevos en este módulo. Los tres bugs de cache ya documentados en Task 2 (restaurar_eliminado, create_retiro, delete_retiro) siguen pendientes de fix (Task 11).
+
+| Checkpoint | Resultado |
+|---|---|
+| FastAPI route order: /dashboard/clientes ANTES de /dashboard/cliente/{cliente} | ✅ PASS |
+| cache_invalidar("dashboard_clientes:") en mutaciones — Task 2 | ⚠️ 3 fallos ya documentados en Task 2 |
+| listaClientes derivado de clientes data (.map(c => c.cliente)) | ✅ PASS |
+| /finanzas adminOnly guard — Task 6 | ✅ PASS (ya verificado) |
+| ModalCliente staleTime: 0 | ✅ PASS |
+| Backend /dashboard/cliente/{cliente} sin Redis cache | ✅ PASS |
+| Todas las queries Finanzas.jsx tienen staleTime: 0 | ✅ PASS |
+| refetchInterval = 300000 (300s = 5 min) | ✅ PASS |
+| PeriodSelector ◀ ▶ correctamente ajusta anio/mes | ✅ PASS |
+| BancoChart click: resalta segmento, atenúa otros, no crash | ✅ PASS |
+| ModalCliente: abre en row click, cierra en click exterior | ✅ PASS |
+| Botón refresh manual llama refetchDash + refetchClientes | ✅ PASS |
+
+---
+
+### CRÍTICO
+
+_Ninguno_
+
+---
+
+### ALTO
+
+_Ninguno_
+
+---
+
+### MEDIO
+
+_Ninguno_
+
+---
+
+### Checkpoints detallados
+
+#### FastAPI route order (main.py:521-530)
+
+```python
+@app.get("/dashboard/clientes")       # línea 521
+def dashboard_clientes(...)
+
+@app.get("/dashboard/cliente/{cliente}")  # línea 527
+def dashboard_cliente(...)
+```
+
+`/dashboard/clientes` declarado en línea 521, `/dashboard/cliente/{cliente}` en línea 527. Orden correcto: la ruta literal `clientes` está ANTES del parámetro `{cliente}`. FastAPI resolverá `GET /dashboard/clientes` a la función correcta sin que "clientes" sea capturado como parámetro. ✓
+
+---
+
+#### cache_invalidar("dashboard_clientes:") — estado
+
+Confirmado desde Task 2 (ya en este documento):
+- `restaurar_eliminado` (main.py:302-304) — ❌ FALTA (hallazgo ALTO #28)
+- `create_retiro` (crud.py:502) — ❌ FALTA (hallazgo ALTO #35)
+- `delete_retiro` (crud.py:539) — ❌ FALTA (hallazgo ALTO #36)
+
+`get_dashboard_cliente` (crud.py:983-1081) — NO usa `_cache_set` / `_cache_get`. Sin Redis cache. Datos siempre frescos desde DB. ✓
+
+`get_resumen_clientes` (crud.py:926-980) — usa `_cache_set(cache_key, result, ttl=TTL_DASHBOARD)` con prefijo `dashboard_clientes:{anio}:{mes}`. Los tres bugs de invalidación ya documentados en Task 2.
+
+---
+
+#### listaClientes source (Finanzas.jsx:421)
+
+```js
+const listaClientes = clientes.map(c => c.cliente).sort((a, b) => a.localeCompare(b));
+```
+
+`clientes` proviene de `useQuery(['finanzas-clientes'])` → `GET /dashboard/clientes` → `get_resumen_clientes()` que lee `Factura.cliente` (no `Afiliado.cliente_txt`). El campo `c.cliente` en el resultado es el string exacto almacenado en `Factura.cliente`.
+
+El filtro de tabla usa `c.cliente === clienteFiltro` — misma comparación estricta de string. Consistente internamente. ✓
+
+Nota: `GET /clientes` (main.py:621-629) retorna `Afiliado.cliente_txt` — cadena potencialmente diferente a `Factura.cliente`. La implementación en Finanzas.jsx NO usa ese endpoint. Usa exclusivamente datos de `GET /dashboard/clientes`. ✓
+
+---
+
+#### staleTime: 0 y refetchInterval (Finanzas.jsx)
+
+Query `['dashboard', anio, mes]` (línea 391-396):
+- `staleTime: 0` ✓
+- `refetchInterval: 300_000` (300 000 ms = 5 min) ✓
+
+Query `['finanzas-clientes', anio, mes]` (línea 398-403):
+- `staleTime: 0` ✓
+- `refetchInterval: 300_000` ✓
+
+Query `['finanzas-cliente', cliente, anio, mes]` en ModalCliente (línea 253-258):
+- `staleTime: 0` ✓
+- Sin `refetchInterval` — apropiado para un modal bajo demanda ✓
+
+No se encontró `refetchInterval: 120_000` (el mismatch de sesión 17 reportado como corregido). ✓
+
+---
+
+#### PeriodSelector ◀ ▶ (Finanzas.jsx:91-124)
+
+Lógica `prev()` (línea 93-97):
+- Si `mes === 'Todos'` → no-op ✓
+- Si `idx === 1` (Enero) → `setAnio(a => String(+a - 1))` + `setMes('Diciembre')` ✓
+- Sino → `setMes(MESES[idx - 1])` ✓
+
+Lógica `next()` (línea 98-102):
+- Si `mes === 'Todos'` → no-op ✓
+- Si `idx === 12` (Diciembre) → `setAnio(a => String(+a + 1))` + `setMes('Enero')` ✓
+- Sino → `setMes(MESES[idx + 1])` ✓
+
+Botón "↺ Hoy" (línea 119): `setAnio(anioActual); setMes(mesActual)` ✓
+
+Wraparound año correcto en ambas direcciones. ✓
+
+---
+
+#### BancoChart click interaction (Finanzas.jsx:127-219)
+
+Estado `activeIdx` controla resaltado:
+- `onClick` en `<Pie>` (línea 141): `setActiveIdx(activeIdx === idx ? null : idx)` — toggle on/off ✓
+- `opacity` de cada `<Cell>` (línea 147): `activeIdx === null || activeIdx === i ? 1 : 0.25` — atenúa no-seleccionados ✓
+- `stroke` de `<Cell>` activo (línea 148-149): `strokeWidth: 2.5` border blanco ✓
+- Centro del donut muestra banco + monto + % cuando `selected !== null` (línea 158-170) ✓
+- Lista lateral también clickeable con mismo toggle (línea 188) ✓
+- No hay código de acceso a índices fuera de rango — `activeIdx % PIE_COLORS.length` seguro. ✓
+
+---
+
+#### ModalCliente: apertura/cierre (Finanzas.jsx:238-378)
+
+Apertura: `setClienteSel(c.cliente)` en `onClick` de cada fila de tabla (línea 630). `ModalCliente` renderiza cuando `clienteSel !== null` (línea 668). ✓
+
+Cierre en click exterior (línea 272):
+```js
+onClick={e => { if (!ref.current?.contains(e.target)) onClose(); }}
+```
+`ref` apuntado al `div` del modal (línea 273). Click fuera del modal = `onClose()` = `setClienteSel(null)`. ✓
+
+Cierre con Escape (líneas 243-247): listener `keydown` en `useEffect`, limpieza en cleanup. ✓
+
+Botón X (línea 283): `onClick={onClose}` ✓
+
+---
+
+#### Botón refresh manual (Finanzas.jsx:405, 443)
+
+```js
+const refetchAll = () => { refetchDash(); refetchClientes(); };
+```
+
+Botón (línea 443):
+```js
+<Button ... onClick={refetchAll} disabled={isLoading} ...>
+  <RefreshCw className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+```
+
+Llama ambos `refetch()` de TanStack Query (invalidación inmediata independiente de staleTime). Ícono animado mientras carga. `isLoading = loadDash || loadClientes` (línea 407). ✓
+
+ModalCliente no tiene botón refresh explícito — apropiado: `staleTime: 0` garantiza que cualquier re-mount del modal obtiene datos frescos. ✓
+
+---
+
+### **[Finanzas]** routes, staleTime, refetchInterval, listaClientes — verificados ✓
+
+---
+
+### Checkpoints Task 9
+
+| # | Área | Checkpoint | Estado | Ref |
+|---|---|---|---|---|
+| 102 | Finanzas/Routes | /dashboard/clientes ANTES de /dashboard/cliente/{cliente} | ✅ PASS | main.py:521,527 |
+| 103 | Finanzas/Cache | get_dashboard_cliente sin Redis cache | ✅ PASS | crud.py:983 — no _cache_set |
+| 104 | Finanzas/Cache | cache_invalidar dashboard_clientes: en mutaciones | ❌ ALTO x3 | Ver Task 2: #28, #35, #36 |
+| 105 | Finanzas/Frontend | listaClientes de clientes.map(c => c.cliente) | ✅ PASS | Finanzas.jsx:421 |
+| 106 | Finanzas/Frontend | listaClientes NO de /clientes endpoint | ✅ PASS | Finanzas.jsx:398-403 |
+| 107 | Finanzas/Frontend | /finanzas adminOnly guard en App.jsx | ✅ PASS | App.jsx:86 (Task 6 #74) |
+| 108 | Finanzas/Frontend | ModalCliente staleTime: 0 | ✅ PASS | Finanzas.jsx:257 |
+| 109 | Finanzas/Frontend | Query dashboard staleTime: 0 | ✅ PASS | Finanzas.jsx:395 |
+| 110 | Finanzas/Frontend | Query finanzas-clientes staleTime: 0 | ✅ PASS | Finanzas.jsx:402 |
+| 111 | Finanzas/Frontend | refetchInterval = 300000 (no 120000) | ✅ PASS | Finanzas.jsx:394,401 |
+| 112 | Finanzas/Frontend | PeriodSelector wraparound año correcto | ✅ PASS | Finanzas.jsx:93-102 |
+| 113 | Finanzas/Frontend | BancoChart click resalta / atenúa | ✅ PASS | Finanzas.jsx:141-149 |
+| 114 | Finanzas/Frontend | ModalCliente abre en row click | ✅ PASS | Finanzas.jsx:630 |
+| 115 | Finanzas/Frontend | ModalCliente cierra en click exterior | ✅ PASS | Finanzas.jsx:272 |
+| 116 | Finanzas/Frontend | Botón refresh llama refetchDash + refetchClientes | ✅ PASS | Finanzas.jsx:405,443 |
