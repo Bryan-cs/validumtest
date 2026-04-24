@@ -22,7 +22,6 @@ export default function PlanillasSS() {
 
   useEffect(() => { try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente, filtroMes, filtroAnio })); } catch {} }, [filtroCliente, filtroMes, filtroAnio]);
   const [showModal, setShowModal] = useState(false);
-  const [showPilaModal, setShowPilaModal] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
 
   const { data: planillas = [], isLoading } = useQuery({
@@ -73,16 +72,7 @@ export default function PlanillasSS() {
       <PageHeader
         title="Planillas de Seguridad Social"
         subtitle="Adjunta y gestiona las planillas de pago SS por cliente"
-        action={
-          <div style={{ display: 'flex', gap: 8 }}>
-            {rol === 'admin' && (
-              <Btn variant="secondary" onClick={() => setShowPilaModal(true)}>
-                Generar PILA
-              </Btn>
-            )}
-            <Btn onClick={() => setShowModal(true)}>+ Subir planilla</Btn>
-          </div>
-        }
+        action={<Btn onClick={() => setShowModal(true)}>+ Subir planilla</Btn>}
       />
 
       {/* Filtros */}
@@ -165,8 +155,6 @@ export default function PlanillasSS() {
 
       {showModal && <ModalSubirPlanilla clientes={clientes} onClose={() => setShowModal(false)}
         onSuccess={() => { qc.invalidateQueries({ queryKey: ['planillas'] }); setShowModal(false); }} />}
-
-      {showPilaModal && <ModalGenerarPila onClose={() => setShowPilaModal(false)} />}
 
       <ConfirmModal
         open={!!confirmDel}

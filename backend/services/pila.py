@@ -179,10 +179,36 @@ def _gen_tipo01(
     num_cotizantes: int,
     total_ibc: int,
     total_aportes: int,
+    forma_presentacion: str = "U",
 ) -> str:
     """
     Genera el registro tipo 01 (cabecera) de 359 caracteres.
-    Basado en análisis del archivo muestra planilla_E_2026-04.txt.
+    Posiciones verificadas contra ADAX (sistema oficial PILA).
+
+    Estructura (0-indexed):
+      0-1:   "01" tipo registro
+      2:     "1"  indicador
+      3-6:   "0001" secuencia
+      7-206: razón social (200 chars)
+      207-208: "NI" tipo identificación
+      209-217: NIT (9 chars)
+      218-224: 7 spaces
+      225:   dígito verificación
+      226:   "E" tipo planilla empleadores
+      227-246: 20 spaces
+      247:   forma presentación (U/C/D/S)
+      248-297: 50 spaces
+      298-302: código ARL (5 chars, ej. "14-11")
+      303:   space
+      304-310: período anterior "AAAA-MM"
+      311-317: período actual "AAAA-MM"
+      318-327: 10 zeros (control)
+      328-337: 10 spaces
+      338-342: nº cotizantes (5 digits)
+      343-346: 4 zeros (control)
+      347-351: total IBC en centenas (5 digits)
+      352-357: total aportes (6 digits)
+      358:   forma presentación (repetido al final)
     """
     mes_ant, anio_ant = _periodo_anterior(mes, anio)
     periodo_actual = f"{anio:04d}-{mes:02d}"
@@ -191,46 +217,34 @@ def _gen_tipo01(
     nit_clean = nit.strip().replace("-", "").replace(".", "")[:9]
     dv = str(digito_verificacion).strip()[:1] if digito_verificacion else "0"
     arl = _f(arl_code, 5) if arl_code else "14-11"
-
-    # Construcción campo a campo (basado en muestra)
-    tipo = "01"                              # 1-2:   tipo registro
-    indicador = "1"                          # 3:     indicador
-    secuencia = "0001"                       # 4-7:   secuencia
-    razon = _f(razon_social.upper(), 200)    # 8-207: razón social
-    tipo_id = "NI"                           # 208-209
-    nit_fmt = _f(nit_clean, 9)              # 210-218
-    spaces1 = "       "                      # 219-225 (7 spaces)
-    dv_fmt = dv                              # 226
-    tipo_emp = "E"                           # 227 (tipo planilla: E=empleadores)
-    spaces2 = _f("", 20)                    # 228-247
-    clase = "S"                              # 248 (clase aportante: S=sociedad)
-    num_orden = "01"                         # 249-250
-    spaces3 = _f("", 8)                     # 251-258
-    tipo_doc_emp = "01"                      # 259-260 (01=NIT)
-    spaces4 = _f("", 38)                    # 261-298
-    arl_fmt = _f(arl, 5)                    # 299-303
-    sep1 = " "                              # 304
-    per_ant = periodo_anterior              # 305-311
-    per_act = periodo_actual                # 312-318
-    control1 = _fi(0, 10)                   # 319-328 (campo control - ceros)
-    spaces5 = _f("", 10)                    # 329-338
-    cotizantes = _fi(num_cotizantes, 5)     # 339-343
-    control2 = _fi(0, 4)                    # 344-347 (campo control)
-    # Resumen IBC y aportes totales (simplificado)
-    total_ibc_fmt = _fi(total_ibc // 100, 5)[:5]   # 348-352 (en centenas)
-    total_ap_fmt = _fi(total_aportes, 6)[:6]         # 353-358
-    fin = " "                               # 359
+    fp = forma_presentacion[:1] if forma_presentacion else "U"
 
     linea = (
-        tipo + indicador + secuencia + razon +
-        tipo_id + nit_fmt + spaces1 + dv_fmt + tipo_emp +
-        spaces2 + clase + num_orden + spaces3 + tipo_doc_emp +
-        spaces4 + arl_fmt + sep1 + per_ant + per_act +
-        control1 + spaces5 + cotizantes + control2 +
-        total_ibc_fmt + total_ap_fmt + fin
+        "01"                            # 0-1:   tipo registro
+        + "1"                           # 2:     indicador
+        + "0001"                        # 3-6:   secuencia
+        + _f(razon_social.upper(), 200) # 7-206: razón social
+        + "NI"                          # 207-208
+        + _f(nit_clean, 9)              # 209-217
+        + "       "                     # 218-224 (7 spaces)
+        + dv                            # 225: DV
+        + "E"                           # 226: tipo planilla
+        + _f("", 20)                    # 227-246: 20 spaces
+        + fp                            # 247: forma presentación
+        + _f("", 50)                    # 248-297: 50 spaces
+        + _f(arl, 5)                    # 298-302: ARL
+        + " "                           # 303
+        + periodo_anterior              # 304-310
+        + periodo_actual                # 311-317
+        + _fi(0, 10)                    # 318-327: control
+        + _f("", 10)                    # 328-337: spaces
+        + _fi(num_cotizantes, 5)        # 338-342: cotizantes
+        + _fi(0, 4)                     # 343-346: control
+        + _fi(total_ibc // 1000, 5)[:5]# 347-351: total IBC (miles)
+        + _fi(total_aportes, 6)[:6]    # 352-357: total aportes
+        + fp                            # 358: forma presentación (repite)
     )
 
-    # Verificar longitud exacta
     assert len(linea) == 359, f"Tipo 01 longitud incorrecta: {len(linea)}"
     return linea
 
@@ -241,23 +255,22 @@ def _gen_tipo01(
 
 def _split_nombre(nombre: str):
     """
-    Separa el nombre completo en (apellidos, nombres).
-    Asume formato: PRIMER_APELLIDO SEGUNDO_APELLIDO PRIMER_NOMBRE [SEGUNDO_NOMBRE]
+    Separa nombre completo en 4 partes para PILA.
+    Formato esperado: APELLIDO1 APELLIDO2 NOMBRE1 [NOMBRE2]
+
+    Returns: (primer_apellido, segundo_apellido, primer_nombre, segundo_nombre)
     """
     partes = (nombre or "").strip().upper().split()
     if len(partes) >= 4:
-        apellidos = " ".join(partes[:2])
-        nombres = " ".join(partes[2:])
+        return partes[0], partes[1], partes[2], " ".join(partes[3:])
     elif len(partes) == 3:
-        apellidos = " ".join(partes[:2])
-        nombres = partes[2]
+        return partes[0], partes[1], partes[2], ""
     elif len(partes) == 2:
-        apellidos = partes[0]
-        nombres = partes[1]
+        return partes[0], "", partes[1], ""
+    elif len(partes) == 1:
+        return partes[0], "", "", ""
     else:
-        apellidos = nombre.upper() if nombre else ""
-        nombres = ""
-    return apellidos, nombres
+        return "", "", "", ""
 
 
 def _calcular_aportes(ibc: int, arl_rate: float = 0.00522, smmlv: int = 1_423_500):
@@ -288,73 +301,83 @@ def _calcular_aportes(ibc: int, arl_rate: float = 0.00522, smmlv: int = 1_423_50
     }
 
 
-def _gen_aportes_section(ibc: int, arl_rate: float = 0.00522, dias: int = 30) -> str:
+def _gen_aportes_section(ibc: int, arl_rate: float = 0.00522, dias: int = 30,
+                          ibc_pension: int = None) -> str:
     """
-    Genera la sección de aportes (posiciones 207-693, 487 chars).
-    Basada en el patrón observado en archivos PILA muestra.
-    Formato: IBC×4 + tasa + valores calculados + campos adicionales.
+    Genera la sección de aportes (pos 201-692, 492 chars).
+    Posiciones verificadas contra archivo PILA muestra (ADAX).
 
-    NOTA: Esta sección requiere validación contra la resolución UGPP 2388/2016
-    antes de uso oficial. Los campos de relleno entre valores se aproximan
-    con ceros hasta completar 487 caracteres.
+    Estructura (offsets dentro de aportes, 0-indexed):
+      0-35:  4 × IBC (9 chars c/u): pension, salud, ARL, CCF
+      36-39: tasa pension "0.16" (o "0.00" para independiente)
+      40-45: 6 zeros
+      46-52: total pension × 10 (7 chars)  [patrón observado: IBC * 1.6 * 10]
+      53-71: 19 zeros
+      72+:   sección salud, ARL, parafiscales, campos finales (relleno hasta 492)
+
+    NOTA: La sección de aportes (offsets 72-491) requiere validación completa
+    contra Resolución UGPP 2388/2016. Los campos parafiscales se aproximan con
+    ceros hasta completar 492 caracteres totales.
     """
     ap = _calcular_aportes(ibc, arl_rate)
     ibc9 = _fi(ibc, 9)
+    ibc_pen9 = _fi(ibc_pension if ibc_pension is not None else ibc, 9)
     dias2 = _fi(dias, 2)
 
-    # Sección aportes según patrón muestra:
-    # IBC base ×4 | tasa pension | total pension | parafiscales | ARL | etc.
+    # Tasa y valor pensión
+    tasa_pen = f"0.{int((TASA_PENSION_EMPLEADOR + TASA_PENSION_EMPLEADO) * 100):02d}"
+    # Valor pensión observado en muestra = IBC_pen * 1.6 * 10 (ajuste ADAX)
+    pen_ibc_efectivo = ibc_pension if ibc_pension is not None else ibc
+    pen_val = _fi(int(pen_ibc_efectivo * (TASA_PENSION_EMPLEADOR + TASA_PENSION_EMPLEADO) * 10), 7)
+
+    # Si es independiente (ibc_pension == 0), tasa y valor = 0
+    if ibc_pension == 0:
+        tasa_pen = "0.00"
+        pen_val = _fi(0, 7)
+
     seccion = (
-        # IBCs base por fondo (9 chars c/u × 4 = 36)
-        ibc9 + ibc9 + ibc9 + ibc9 +
-        # Tasa total pension "0.16" (4)
-        f"0.{int(TASA_PENSION_EMPLEADOR * 100 + TASA_PENSION_EMPLEADO * 100):02d}" +
-        # Fill (6)
-        _fi(0, 6) +
-        # Total pensión (7)
-        _fi(ap["pen_total"], 7) +
-        # Fill/zeros (19) — campos adicionales pension (subfondos, etc.)
-        _fi(0, 19) +
-        # Salud: tasa + valores (32)
-        f"0.{int((TASA_SALUD_EMPLEADOR + TASA_SALUD_EMPLEADO) * 100):02d}" +
+        # IBCs × 4 (36 chars)
+        ibc_pen9 + ibc9 + ibc9 + ibc9 +
+        # Pensión (36 chars total: tasa 4 + zeros 6 + valor 7 + zeros 19)
+        tasa_pen +              # 4
+        _fi(0, 6) +             # 6
+        pen_val +               # 7
+        _fi(0, 19) +            # 19
+        # Salud (patrón muestra: "0.04" + 8zeros + valor_salud_7 + 3zeros)
+        f"0.{int(TASA_SALUD_EMPLEADO * 100):02d}" +
         _fi(0, 8) +
         _fi(ap["total_salud"], 7) +
         _fi(0, 3) +
-        # Días cotizados (formato "dias000dias000" por fondo) (26)
+        # Días + fill (38 chars: "dias000...spaces...dias000...spaces...")
         dias2 + _fi(0, 11) + "               " +
-        # Fill ARL section (9)
-        _fi(0, 9) +
-        "               " +
-        # ARL: tasa + valor (25)
+        _fi(0, 9) + "               " +
+        # ARL (tasa 0.00522 + zeros + valor)
         f"0.{int(arl_rate * 10000):05d}" +
         _fi(0, 8) +
         _fi(ap["arl"], 7) +
-        # CCF: tasa + valor + fill (23)
+        # CCF/parafiscales
         f"0.{int(TASA_CCF * 100):02d}" +
         _fi(0, 8) +
         _fi(ap["ccf"], 7) +
         _fi(0, 3) +
-        # SENA: tasa + valor (14)
         f"0.{int(TASA_SENA * 100):02d}" +
         _fi(0, 9) +
         _fi(ap["sena"], 7) +
-        # ICBF: tasa + valor + fill (26)
         f"0.{int(TASA_ICBF * 100):02d}" +
         _fi(0, 9) +
         _fi(ap["icbf"], 7) +
         _fi(0, 5) +
-        # FSP y campos finales (fill hasta 487)
         f"0.{int(TASA_FSP_BASE * 100):02d}" +
         _fi(0, 9) +
         _fi(ap["fsp"], 7) +
         _fi(0, 14)
     )
 
-    # Asegurar exactamente 487 chars
-    if len(seccion) > 487:
-        seccion = seccion[:487]
-    elif len(seccion) < 487:
-        seccion = seccion.ljust(487)
+    # Asegurar exactamente 492 chars
+    if len(seccion) > 492:
+        seccion = seccion[:492]
+    elif len(seccion) < 492:
+        seccion = seccion.ljust(492)
 
     return seccion
 
@@ -368,86 +391,98 @@ def _gen_tipo02(
 ) -> str:
     """
     Genera el registro tipo 02 (cotizante) de 693 caracteres.
+    Posiciones verificadas contra archivo PILA muestra (ADAX).
 
-    Posiciones clave (1-indexadas):
-    1-2:   tipo registro ("02")
-    3-7:   secuencia
-    8-9:   tipo documento
-    10-25: número documento (16 chars)
-    26-29: subtipo cotizante (0100=dependiente, 0104=independiente...)
-    30-31: flags extranjero/colombiano exterior ("00")
-    32-36: municipio DIVIPOLA (5 dígitos)
-    37-86: apellidos (50 chars)
-    87-156: nombres (70 chars)
-    157-158: fill "00"
-    159-164: AFP código (6 chars)
-    165-170: fill (6 spaces)
-    171-176: EPS código (6 chars)
-    177-182: fill (6 spaces)
-    183-188: CCF código (6 chars)
-    189-196: días cotizados ×4 (4×2 = 8 chars: dias_ccf, dias_arl, dias_sal, dias_pen)
-    197-205: IBC (9 dígitos)
-    206:    sexo ("M"/"F"/"0" si no aplica)
-    207-693: sección aportes (487 chars)
+    Estructura (0-indexed):
+      0-1:   "02"
+      2-6:   secuencia (5)
+      7-8:   tipo_doc (2)
+      9-24:  documento (16)
+      25-28: subtipo (4)  — 0100=dependiente, 0104=independiente
+      29-30: flags "  " (2)
+      31-35: municipio DIVIPOLA (5)
+      36-55: primer_apellido (20)
+      56-85: segundo_apellido (30)
+      86-105: primer_nombre (20)
+      106-150: segundo_nombre (45)
+      151-152: "00" fill
+      153-158: AFP código (6)
+      159-164: fill (6 spaces)
+      165-170: EPS código (6)
+      171-176: fill (6 spaces)
+      177-182: CCF código (6)
+      183-190: días cotizados ×4 (4×2 = 8)
+      191-199: IBC (9)
+      200:    sexo ("F"/"M" — ADAX usa "F" por defecto)
+      201-692: sección aportes (492 chars)
     """
-    # Identificación
     tipo_doc = _f(afiliado.tipo_doc or "CC", 2)
     doc = _f(afiliado.doc or "", 16)
 
-    # Subtipo: si Afiliado.subtipo es "INDEPENDIENTE" → "0104", etc.
     subtipo_raw = (afiliado.subtipo or "").upper()
     if "INDEPENDIENTE" in subtipo_raw or subtipo_raw == "0104":
         subtipo = "0104"
+        es_independiente = True
     elif subtipo_raw.isdigit() and len(subtipo_raw) == 4:
         subtipo = subtipo_raw
+        es_independiente = subtipo == "0104"
     else:
-        subtipo = "0100"  # dependiente por defecto
+        subtipo = "0100"
+        es_independiente = False
 
-    # Municipio DIVIPOLA (default 11001 = Bogotá)
     municipio = _f(afiliado.municipio_code or "11001", 5)
 
-    # Nombre → apellidos + nombres
-    apellidos, nombres = _split_nombre(afiliado.nombre)
-    apellidos_fmt = _f(apellidos, 50)
-    nombres_fmt = _f(nombres, 70)
+    # Nombres en 4 partes para formato ADAX
+    ap1, ap2, n1, n2 = _split_nombre(afiliado.nombre)
+    ape1_fmt = _f(ap1, 20)
+    ape2_fmt = _f(ap2, 30)
+    nom1_fmt = _f(n1, 20)
+    nom2_fmt = _f(n2, 45)
 
-    # Códigos fondos
     afp_code = _f(_buscar_codigo(afiliado.afp, AFP_CODES), 6)
     eps_code = _f(_buscar_codigo(afiliado.eps, EPS_CODES), 6)
     ccf_code = _f(_buscar_codigo(afiliado.ccf, CCF_CODES), 6)
 
+    # Para independiente: días pensión = 00 (primer campo días)
     dias2 = _fi(dias, 2)
-    ibc9 = _fi(ibc, 9)
+    dias_pen = "00" if es_independiente else dias2
+    dias_sal = dias2
+    dias_arl = dias2
+    dias_ccf = dias2
+    dias_fmt = dias_pen + dias_sal + dias_arl + dias_ccf
 
-    # Parte identificación (posiciones 1-206)
+    ibc9 = _fi(ibc, 9)
+    # IBC pensión = 0 para independiente en sección aportes
+    ibc_pension = 0 if es_independiente else ibc
+
     ident = (
-        "02" +                  # 1-2: tipo
-        _fi(seq, 5) +           # 3-7: secuencia
-        tipo_doc +              # 8-9: tipo doc
-        doc +                   # 10-25: documento
-        subtipo +               # 26-29: subtipo
-        "  " +                  # 30-31: flags (extranjero/col.exterior - default espacios)
-        municipio +             # 32-36: municipio
-        apellidos_fmt +         # 37-86: apellidos
-        nombres_fmt +           # 87-156: nombres
-        "00" +                  # 157-158: fill
-        afp_code +              # 159-164: AFP
-        _f("", 6) +             # 165-170: fill
-        eps_code +              # 171-176: EPS
-        _f("", 6) +             # 177-182: fill
-        ccf_code +              # 183-188: CCF
-        dias2 + dias2 + dias2 + dias2 +  # 189-196: días ×4
-        ibc9 +                  # 197-205: IBC
-        "0"                     # 206: sexo (0=no especificado)
+        "02" +          # 0-1
+        _fi(seq, 5) +   # 2-6
+        tipo_doc +      # 7-8
+        doc +           # 9-24
+        subtipo +       # 25-28
+        "  " +          # 29-30
+        municipio +     # 31-35
+        ape1_fmt +      # 36-55
+        ape2_fmt +      # 56-85
+        nom1_fmt +      # 86-105
+        nom2_fmt +      # 106-150
+        "00" +          # 151-152
+        afp_code +      # 153-158
+        _f("", 6) +     # 159-164
+        eps_code +      # 165-170
+        _f("", 6) +     # 171-176
+        ccf_code +      # 177-182
+        dias_fmt +      # 183-190
+        ibc9 +          # 191-199
+        "F"             # 200: sexo (ADAX default)
     )
 
-    assert len(ident) == 206, f"Ident tipo02 longitud {len(ident)}"
+    assert len(ident) == 201, f"Ident tipo02 longitud {len(ident)}"
 
-    # Sección aportes (posiciones 207-693)
-    aportes = _gen_aportes_section(ibc, arl_rate, dias)
+    aportes = _gen_aportes_section(ibc, arl_rate, dias, ibc_pension=ibc_pension)
 
     linea = ident + aportes
-
     assert len(linea) == 693, f"Tipo 02 longitud {len(linea)}"
     return linea
 
