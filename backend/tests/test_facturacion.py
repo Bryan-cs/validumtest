@@ -186,9 +186,9 @@ def test_config_lectura(client, admin_token):
     assert "porcentajes" in cfg
 
 
-# ─── HEALTH CHECK CON REDIS INFO ────────────────────────────────────────────
+# ─── HEALTH CHECK ────────────────────────────────────────────────────────────
 
 def test_health_incluye_db(client):
     r = client.get("/health")
     assert r.status_code == 200
-    assert r.json()["db"] == "ok"
+    assert r.json()["status"] == "ok"

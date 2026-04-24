@@ -470,7 +470,7 @@ export default function Tareas() {
                   )}
                   <div style={{ flex: 1 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{ fontWeight: 600, fontSize: 14, color: C.text }}>{t.titulo}</span>
+                      <span style={{ fontWeight: 700, fontSize: 14, color: C.primary }}>{t.titulo}</span>
                       <EstadoBadge estado={t.estado} />
                       {t.privada && (
                         <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 10, padding: '2px 10px', background: C.amberBg, color: C.amber }}>🔒 Privada</span>
@@ -479,7 +479,7 @@ export default function Tareas() {
                         <span style={{ fontSize: 11, fontWeight: 600, borderRadius: 10, padding: '2px 10px', background: C.redBg, color: C.red }}>¡Vencida!</span>
                       )}
                     </div>
-                    {t.descripcion && <p style={{ margin: '5px 0 0', fontSize: 13, color: C.text2 }}>{t.descripcion}</p>}
+                    {t.descripcion && <p style={{ margin: '5px 0 0', fontSize: 13, color: C.text, fontWeight: 600 }}>{t.descripcion}</p>}
                     <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                       {/* Chip asignado */}
                       <span style={{ fontSize:11, fontWeight:600, borderRadius:20, padding:'2px 10px',
@@ -713,7 +713,8 @@ export default function Tareas() {
                 disabled={!form.titulo.trim() || (!form.privada && !form.asignado_a && isAdmin) || crear.isPending}
                 onClick={() => {
                   const payload = { ...form };
-                  if (payload.privada && !isAdmin) payload.asignado_a = user?.username || '';
+                  // Empleados siempre se autoasignan — no pueden asignar a otros
+                  if (!isAdmin) payload.asignado_a = user?.username || '';
                   crear.mutate(payload);
                 }}>
                 {crear.isPending ? 'Creando...' : 'Crear tarea'}

@@ -14,11 +14,24 @@ if DATABASE_URL.startswith("postgres://"):
 
 _is_sqlite = "sqlite" in DATABASE_URL
 
+# Pool por proceso distribuido según número de workers.
+# Target: ≤ 15 conexiones totales (Railway PostgreSQL: 25 max, margen para Railway Cron + admin).
+# 1 worker → pool=5 + overflow=10 = 15.  2 workers → pool=2 + overflow=5 = 7/worker = 14.
+_workers = int(os.getenv("WEB_CONCURRENCY", "1"))
+_max_per_worker = max(5, 15 // max(1, _workers))
+_pool_size      = max(2, _max_per_worker // 3)
+_max_overflow   = _max_per_worker - _pool_size
+
 engine = create_engine(
     DATABASE_URL,
     connect_args={"check_same_thread": False} if _is_sqlite else {},
     pool_pre_ping=True,
-    **({} if _is_sqlite else {"pool_size": 15, "max_overflow": 10, "pool_timeout": 30, "pool_recycle": 1800}),
+    **({} if _is_sqlite else {
+        "pool_size":    _pool_size,
+        "max_overflow": _max_overflow,
+        "pool_timeout": 30,
+        "pool_recycle": 1800,
+    }),
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
@@ -69,6 +82,7 @@ def _ensure_columns():
     _check("config", "plantilla_whatsapp", "ALTER TABLE config ADD COLUMN plantilla_whatsapp TEXT")
     _check("config", "cargo_adicional", "ALTER TABLE config ADD COLUMN cargo_adicional FLOAT")
     _check("facturas", "afiliado_eliminado", "ALTER TABLE facturas ADD COLUMN afiliado_eliminado BOOLEAN DEFAULT 0")
+    _check("facturas", "monto_pagado", "ALTER TABLE facturas ADD COLUMN monto_pagado NUMERIC(15,2) DEFAULT 0")
     _check("gastos", "mes",  "ALTER TABLE gastos ADD COLUMN mes INTEGER")
     _check("gastos", "anio", "ALTER TABLE gastos ADD COLUMN anio INTEGER")
     _check("config", "mes_inicio_cobro",  "ALTER TABLE config ADD COLUMN mes_inicio_cobro INTEGER")
@@ -126,6 +140,8 @@ def _ensure_indexes():
         ("ix_planilla_cliente_mes", "planillas_pago", "cliente_ref, mes, anio"),
         ("ix_gastos_mes_anio",        "gastos",         "mes, anio"),
         ("ix_nomina_mensual_emp_mes", "nomina_mensual",  "empleado_id, mes, anio"),
+        # Dashboard: filtra (estado, anio, mes) — evita Seq Scan en facturas
+        ("ix_factura_estado_periodo", "facturas",        "estado, anio, mes"),
     ]
     with engine.begin() as conn:
         for idx_name, table, cols in indexes:
@@ -133,6 +149,24 @@ def _ensure_indexes():
                 conn.execute(text(f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{table}" ({cols})'))
             except Exception:
                 pass  # índice ya existe o DB no soporta IF NOT EXISTS
+        # Índices parciales (solo PostgreSQL soporta WHERE en índice)
+        if engine.dialect.name == "postgresql":
+            partial_indexes = [
+                ("ix_afiliado_cobro_cobertura",
+                 "afiliados", "activo, estado_srv, empresa, cliente_txt", "activo = TRUE"),
+                ("ix_factura_pendiente",
+                 "facturas", "anio, mes, cliente", "estado = 'pendiente'"),
+                ("ix_actividad_fecha_desc",
+                 "actividad", "fecha DESC", None),
+            ]
+            for idx_name, table, cols, where in partial_indexes:
+                where_clause = f" WHERE {where}" if where else ""
+                try:
+                    conn.execute(text(
+                        f'CREATE INDEX IF NOT EXISTS "{idx_name}" ON "{table}" ({cols}){where_clause}'
+                    ))
+                except Exception:
+                    pass
 
 
 def _seed(db):

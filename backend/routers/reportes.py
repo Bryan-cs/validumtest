@@ -1,6 +1,6 @@
-"""Router de reportes Excel."""
+"""Router de reportes Excel y archivos PILA."""
 import io
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
@@ -9,6 +9,7 @@ from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import crud
 import models
 from .deps import verify_token
+# from services.pila import generar_pila  # TODO: PILA — pendiente fixes, no subir a prod
 
 router = APIRouter(prefix="/reportes", tags=["reportes"])
 
@@ -34,6 +35,58 @@ def _xlsx_response(wb: openpyxl.Workbook, filename: str):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+# TODO: PILA — pendiente fixes, no subir a prod
+# @router.get("/pila")
+# def reporte_pila(
+#     nit: str = Query(..., description="NIT del aportante sin dígito verificación"),
+#     razon_social: str = Query(..., description="Razón social del aportante"),
+#     mes: int = Query(..., ge=1, le=12, description="Mes del período (1-12)"),
+#     anio: int = Query(..., ge=2020, le=2099, description="Año del período"),
+#     doc: str = Query("", description="Documento del afiliado (un empleado). Si se omite, usa empresa."),
+#     empresa: str = Query("", description="Nombre empresa para filtrar (varios empleados). Ignorado si doc está presente."),
+#     dv: str = Query("0", description="Dígito verificación del NIT"),
+#     arl: str = Query("POSITIVA", description="Nombre del ARL del aportante"),
+#     db: Session = Depends(get_db),
+#     token=Depends(verify_token),
+# ):
+#     from fastapi import HTTPException
+#     if doc:
+#         afiliado = db.query(models.Afiliado).filter(models.Afiliado.doc == doc).first()
+#         if not afiliado:
+#             raise HTTPException(status_code=404, detail=f"Afiliado con doc '{doc}' no encontrado")
+#         afiliados = [afiliado]
+#     elif empresa:
+#         result = crud.get_afiliados(db, empresa=empresa, estado="ACTIVO", skip=0, limit=0)
+#         afiliados_data = result.get("items", [])
+#         docs = [a.get("doc") for a in afiliados_data if a.get("doc")]
+#         afiliados = (
+#             db.query(models.Afiliado)
+#             .filter(models.Afiliado.doc.in_(docs), models.Afiliado.activo == True)
+#             .order_by(models.Afiliado.nombre)
+#             .all()
+#             if docs else []
+#         )
+#     else:
+#         raise HTTPException(status_code=422, detail="Proporciona 'doc' o 'empresa'")
+#     cfg = db.query(models.Config).first()
+#     ibc_global = int(cfg.ibc_global) if cfg and cfg.ibc_global else 1_423_500
+#     contenido = generar_pila(
+#         afiliados=afiliados, ibc_global=ibc_global, nit=nit,
+#         razon_social=razon_social.strip(), digito_verificacion=dv,
+#         mes=mes, anio=anio, arl_nombre=arl,
+#     )
+#     if doc and afiliados:
+#         slug = afiliados[0].nombre.replace(" ", "_").upper()[:20]
+#     else:
+#         slug = empresa.upper().replace(" ", "_")[:20]
+#     nombre_archivo = f"PILA_{slug}_{anio}{mes:02d}.txt"
+#     return StreamingResponse(
+#         io.BytesIO(contenido.encode("latin-1", errors="replace")),
+#         media_type="text/plain",
+#         headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
+#     )
 
 
 @router.get("/cobro")
@@ -95,29 +148,34 @@ def reporte_retiros(
     # Batch lookup tipo_doc desde afiliados (retiro no guarda tipo_doc)
     docs_ret = list({r.get("doc") for r in items if r.get("doc")})
     tipo_doc_map = {}
+    cliente_map  = {}
     if docs_ret:
-        afils = db.query(models.Afiliado.doc, models.Afiliado.tipo_doc)\
+        afils = db.query(models.Afiliado.doc, models.Afiliado.tipo_doc, models.Afiliado.cliente_txt)\
                   .filter(models.Afiliado.doc.in_(docs_ret)).all()
         tipo_doc_map = {a.doc: (a.tipo_doc or "") for a in afils}
+        cliente_map  = {a.doc: (a.cliente_txt or "") for a in afils}
         # también buscar en eliminados por si el afiliado ya no existe
-        from models import Eliminado
-        eliminados_docs = [d for d in docs_ret if d not in tipo_doc_map]
+        import json as _j
+        eliminados_docs = [d for d in docs_ret if d not in tipo_doc_map or d not in cliente_map]
         if eliminados_docs:
             for e in db.query(models.Eliminado).filter(models.Eliminado.doc.in_(eliminados_docs)).all():
-                import json as _j
                 try:
                     datos = _j.loads(e.datos_completos or "{}")
-                    tipo_doc_map[e.doc] = datos.get("tipo_doc", "")
+                    if e.doc not in tipo_doc_map:
+                        tipo_doc_map[e.doc] = datos.get("tipo_doc", "")
+                    if e.doc not in cliente_map:
+                        cliente_map[e.doc]  = datos.get("cliente_txt", "")
                 except Exception:
                     pass
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Retiros"
-    cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Fecha", "Motivo", "Mes", "Año", "Observaciones", "Registrado por"]
+    cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente", "Fecha", "Motivo", "Mes", "Año", "Observaciones", "Registrado por"]
     _hdr_style(ws, cols)
     for i, r in enumerate(items, 1):
         ws.append([i, r.get("nombre"), tipo_doc_map.get(r.get("doc"), ""), r.get("doc"),
-                   r.get("empresa"), r.get("fecha"), r.get("motivo"),
+                   r.get("empresa"), cliente_map.get(r.get("doc"), ""),
+                   r.get("fecha"), r.get("motivo"),
                    r.get("mes"), r.get("anio"), r.get("obs"), r.get("registrado_por")])
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
@@ -142,40 +200,78 @@ def reporte_financiero(
                   .filter(models.Afiliado.doc.in_(docs)).all()
         afil_map = {a.doc: (a.empresa or "", a.subtipo or "", a.tipo_doc or "") for a in afils}
 
+    # Ingresos adicionales del período para cuadrar con dashboard
+    from sqlalchemy import func as _func
+    MESES_NUM = ["Enero","Febrero","Marzo","Abril","Mayo","Junio","Julio","Agosto",
+                 "Septiembre","Octubre","Noviembre","Diciembre"]
+    _ia_q = db.query(_func.coalesce(_func.sum(models.IngresoAdicional.valor), 0))
+    if anio: _ia_q = _ia_q.filter(models.IngresoAdicional.anio == int(anio))
+    if mes and mes in MESES_NUM:
+        _ia_q = _ia_q.filter(models.IngresoAdicional.mes == MESES_NUM.index(mes) + 1)
+    ing_adic_total = float(_ia_q.scalar() or 0)
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Facturación"
     cols = ["#", "Código", "Afiliado", "Tipo Doc", "Documento", "Empresa", "Subtipo", "Servicios",
-            "Cliente", "Mes", "Año", "Período (días)", "Ingresos", "Planilla", "Costo Adm.",
+            "Cliente", "Mes", "Año", "Período (días)", "Ingresos", "Planilla SS",
             "Utilidad", "Banco", "Estado", "Fecha pago"]
     _hdr_style(ws, cols)
-    tot_ing = tot_plan = tot_util = 0
+    tot_ing_pag = tot_plan_pag = tot_util_pag = 0
+    tot_ing_pend = tot_plan_pend = tot_util_pend = 0
     docs_con_factura = set()
+    ESTADOS_PAGADO = {"pagado", "planilla_pagada"}
     for i, f in enumerate(items, 1):
         emp, sub, tipo_doc = afil_map.get(f.get("doc"), ("", "", ""))
         servicios_txt = ", ".join(s["servicio"] for s in (f.get("servicios_detalle") or []) if s.get("servicio"))
         _fp = f.get("pagado_en") or ""
         if _fp and len(_fp) >= 10:
-            _d = _fp[:10].split("-")  # YYYY-MM-DD → DD/MM/YYYY
+            _d = _fp[:10].split("-")
             fecha_pago = f"{_d[2]}/{_d[1]}/{_d[0]}" if len(_d) == 3 else _fp[:10]
         else:
             fecha_pago = ""
+        ing  = f.get("ingresos", 0) or 0
+        cost = f.get("costos", 0) or 0
+        util = f.get("utilidad", 0) or 0
         ws.append([i, f.get("codigo"), f.get("nombre_afiliado"), tipo_doc, f.get("doc"),
                    emp, sub, servicios_txt,
                    f.get("cliente"), f.get("mes"), f.get("anio"), f.get("periodo"),
-                   f.get("ingresos", 0), f.get("costos", 0), f.get("costo_adm", 0),
-                   f.get("utilidad", 0), f.get("banco"), f.get("estado"), fecha_pago])
-        tot_ing += f.get("ingresos", 0) or 0
-        tot_plan += f.get("costos", 0) or 0
-        tot_util += f.get("utilidad", 0) or 0
+                   ing, cost, util, f.get("banco"), f.get("estado"), fecha_pago])
+        if f.get("estado") in ESTADOS_PAGADO:
+            tot_ing_pag  += ing;  tot_plan_pag  += cost;  tot_util_pag  += util
+        else:
+            tot_ing_pend += ing;  tot_plan_pend += cost;  tot_util_pend += util
         if f.get("doc"):
             docs_con_factura.add(f["doc"])
+
+    # Fila total pagadas (facturas)
     last = ws.max_row + 1
-    ws.cell(last, 1, "TOTAL")
-    ws.cell(last, 1).font = Font(bold=True)
-    ws.cell(last, 13, tot_ing).font = Font(bold=True)
-    ws.cell(last, 14, tot_plan).font = Font(bold=True)
-    ws.cell(last, 16, tot_util).font = Font(bold=True)
+    ws.cell(last, 1, "TOTAL PAGADAS (facturas)").font = Font(bold=True, color="166534")
+    ws.cell(last, 13, tot_ing_pag).font  = Font(bold=True, color="166534")
+    ws.cell(last, 14, tot_plan_pag).font = Font(bold=True, color="166534")
+    ws.cell(last, 15, tot_util_pag).font = Font(bold=True, color="166534")
+    ws.cell(last, 15).comment = None  # Utilidad bruta por factura (ingresos - costos + conceptos_extra)
+
+    # Fila ingresos adicionales
+    last2 = last + 1
+    ws.cell(last2, 1, "Ingresos adicionales").font = Font(italic=True, color="1E40AF")
+    ws.cell(last2, 13, ing_adic_total).font        = Font(italic=True, color="1E40AF")
+
+    # Fila TOTAL INGRESOS = pagadas + adicionales (= dashboard)
+    last3 = last2 + 1
+    total_ingresos = tot_ing_pag + ing_adic_total
+    fill_total = PatternFill("solid", fgColor="1E40AF")
+    for col_idx, val in [(1, "TOTAL INGRESOS (sin descontar nóminas/gastos)"), (13, total_ingresos)]:
+        c = ws.cell(last3, col_idx, val)
+        c.font = Font(bold=True, color="FFFFFF", size=11)
+        c.fill = fill_total
+
+    # Fila total pendientes
+    last4 = last3 + 1
+    ws.cell(last4, 1, "TOTAL PENDIENTE").font = Font(bold=True, color="B45309")
+    ws.cell(last4, 13, tot_ing_pend).font  = Font(bold=True, color="B45309")
+    ws.cell(last4, 14, tot_plan_pend).font = Font(bold=True, color="B45309")
+    ws.cell(last4, 15, tot_util_pend).font = Font(bold=True, color="B45309")
 
     # ── Sección: Afiliados sin factura en el período ──
     afiliados_activos = db.query(models.Afiliado).filter_by(activo=True).order_by(models.Afiliado.nombre).all()

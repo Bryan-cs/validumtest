@@ -102,7 +102,9 @@ export default function Afiliados() {
   const [textoModal, setTextoModal] = useState(null); // { titulo, nombre, texto }
   const [fechaDesde, setFechaDesde] = useState('');
   const [fechaHasta, setFechaHasta] = useState('');
-  const [buscarElim, setBuscarElim] = useState('');
+  const [buscarElim,    setBuscarElim]    = useState('');
+  const [elimFechaDesde, setElimFechaDesde] = useState('');
+  const [elimFechaHasta, setElimFechaHasta] = useState('');
 
   const [arlFiltroCliente, setArlFiltroCliente] = useState('');
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
@@ -183,11 +185,19 @@ export default function Afiliados() {
   const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data?.items||r.data), enabled: esAdmin });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
-    enabled: tab === 'eliminados' && esAdmin,
+    enabled: (tab === 'eliminados' || tab === 'pagos') && esAdmin,
   });
 
   // Facturas del afiliado seleccionado en tab pagos
-  const afilSelObj = todos.find(a => a.doc === docSeleccionado);
+  // Si el afiliado fue retirado no está en `todos` — buscarlo en eliminados como fallback
+  const afilSelObj = todos.find(a => a.doc === docSeleccionado) || (() => {
+    if (!docSeleccionado) return null;
+    const e = eliminados.find(x => x.doc === docSeleccionado);
+    if (!e) return null;
+    try {
+      return { ...JSON.parse(e.datos_completos || '{}'), _retirado: true };
+    } catch { return null; }
+  })();
   const { data: factAfil=[], isLoading: loadFact } = useQuery({
     queryKey: ['facturas_afil', docSeleccionado],
     queryFn: () => api.get('/facturas', { params: { doc: docSeleccionado, limit: 0 } })
@@ -223,9 +233,16 @@ export default function Afiliados() {
   // Filtrado completamente server-side — `data` ya viene filtrada incluyendo fechas.
   const dataFiltrada = data;
 
-  const sugerenciasPagos = useMemo(() => busquedaPagos.length >= 2
-    ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(busquedaPagos.toLowerCase())).slice(0, 10)
-    : [], [todos, busquedaPagos]);
+  const sugerenciasPagos = useMemo(() => {
+    if (busquedaPagos.length < 2) return [];
+    const q = busquedaPagos.toLowerCase();
+    const activos = todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(q)).slice(0, 8);
+    const retirados = eliminados
+      .filter(e => `${e.nombre} ${e.doc}`.toLowerCase().includes(q))
+      .map(e => ({ ...e, _retirado: true, cliente_txt: (() => { try { return JSON.parse(e.datos_completos||'{}').cliente_txt||''; } catch { return ''; } })() }))
+      .slice(0, 4);
+    return [...activos, ...retirados].slice(0, 10);
+  }, [todos, eliminados, busquedaPagos]);
 
   const columns = useMemo(() => [
     {
@@ -739,14 +756,32 @@ export default function Afiliados() {
             padding:'10px 14px', marginBottom:14, fontSize:12, color:C.amber, fontWeight:500 }}>
             ⚠️ Afiliados eliminados del sistema. Puedes restaurarlos como ACTIVOS con el botón ↩ Restaurar.
           </div>
-          <input
-            placeholder="🔍 Buscar por nombre, documento o empresa..."
-            value={buscarElim}
-            onChange={e => setBuscarElim(e.target.value)}
-            style={{ width:'100%', padding:'10px 14px', border:`1px solid ${C.border}`, borderRadius:8,
-              fontSize:14, outline:'none', boxSizing:'border-box', background:C.surface,
-              color:C.text, marginBottom:10 }}
-          />
+          <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap', alignItems:'center' }}>
+            <input
+              placeholder="🔍 Buscar por nombre, documento o empresa..."
+              value={buscarElim}
+              onChange={e => setBuscarElim(e.target.value)}
+              style={{ flex:'1 1 220px', padding:'10px 14px', border:`1px solid ${C.border}`, borderRadius:8,
+                fontSize:14, outline:'none', boxSizing:'border-box', background:C.surface, color:C.text }}
+            />
+            <div style={{ display:'flex', gap:6, alignItems:'center' }}>
+              <span style={{ fontSize:12, color:C.text2, whiteSpace:'nowrap' }}>Eliminado:</span>
+              <input type="date" value={elimFechaDesde} onChange={e=>setElimFechaDesde(e.target.value)}
+                title="Fecha desde"
+                style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
+                  outline:'none', background:C.surface, color:C.text }} />
+              <span style={{ fontSize:12,color:C.text2 }}>–</span>
+              <input type="date" value={elimFechaHasta} onChange={e=>setElimFechaHasta(e.target.value)}
+                title="Fecha hasta"
+                style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
+                  outline:'none', background:C.surface, color:C.text }} />
+              {(elimFechaDesde || elimFechaHasta) && (
+                <button onClick={() => { setElimFechaDesde(''); setElimFechaHasta(''); }}
+                  style={{ padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:8,
+                    background:C.surface2, cursor:'pointer', fontSize:12, color:C.text2 }}>✕</button>
+              )}
+            </div>
+          </div>
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
@@ -763,11 +798,15 @@ export default function Afiliados() {
                   <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros eliminados</td></tr>
                 )}
                 {eliminados.filter(e => {
-                  if (!buscarElim) return true;
-                  const q = buscarElim.toLowerCase();
-                  return (e.nombre||'').toLowerCase().includes(q) ||
-                         (e.doc||'').toLowerCase().includes(q) ||
-                         (e.empresa||'').toLowerCase().includes(q);
+                  if (buscarElim) {
+                    const q = buscarElim.toLowerCase();
+                    if (!((e.nombre||'').toLowerCase().includes(q) ||
+                          (e.doc||'').toLowerCase().includes(q) ||
+                          (e.empresa||'').toLowerCase().includes(q))) return false;
+                  }
+                  if (elimFechaDesde && (e.fecha_eliminacion||'') < elimFechaDesde) return false;
+                  if (elimFechaHasta && (e.fecha_eliminacion||'') > elimFechaHasta) return false;
+                  return true;
                 }).map(e=>(
                   <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`, background:C.redBg }}>
                     <td style={{ ...tdc,fontWeight:600,color:C.red }}>{e.nombre}</td>
@@ -816,11 +855,13 @@ export default function Afiliados() {
                   border:`1px solid ${C.border}`,borderRadius:8,boxShadow:'0 4px 12px rgba(0,0,0,.1)',
                   zIndex:100,maxHeight:200,overflowY:'auto' }}>
                   {sugerenciasPagos.map(a => (
-                    <div key={a.id} onClick={() => { setDocSeleccionado(a.doc); setBusquedaPagos(a.nombre); }}
-                      style={{ padding:'9px 14px',cursor:'pointer',fontSize:13,borderBottom:`1px solid ${C.border}` }}
-                      onMouseEnter={e=>e.currentTarget.style.background=C.surface2}
-                      onMouseLeave={e=>e.currentTarget.style.background=''}>
+                    <div key={a._retirado ? `elim-${a.id}` : a.id} onClick={() => { setDocSeleccionado(a.doc); setBusquedaPagos(a.nombre); }}
+                      style={{ padding:'9px 14px',cursor:'pointer',fontSize:13,borderBottom:`1px solid ${C.border}`,
+                        background: a._retirado ? C.amberBg : '' }}
+                      onMouseEnter={e=>e.currentTarget.style.background=a._retirado ? '#fde68a' : C.surface2}
+                      onMouseLeave={e=>e.currentTarget.style.background=a._retirado ? C.amberBg : ''}>
                       <strong>{a.nombre}</strong>
+                      {a._retirado && <span style={{ marginLeft:6,fontSize:10,fontWeight:700,background:C.amber,color:'#fff',borderRadius:4,padding:'1px 6px' }}>RETIRADO</span>}
                       <span style={{ marginLeft:8,color:C.text2,fontSize:11 }}>{a.doc} · {a.empresa||''}</span>
                     </div>
                   ))}
@@ -856,9 +897,12 @@ export default function Afiliados() {
           {docSeleccionado && afilSelObj && (
             <>
               {/* Info afiliado */}
-              <div style={{ background:C.blueBg,border:`1px solid ${C.blue}`,borderRadius:8,
+              <div style={{ background: afilSelObj._retirado ? C.amberBg : C.blueBg, border:`1px solid ${afilSelObj._retirado ? C.amber : C.blue}`,borderRadius:8,
                 padding:'10px 16px',marginBottom:14,display:'flex',gap:24,flexWrap:'wrap',fontSize:13 }}>
-                <div><strong style={{ color:C.blue }}>{afilSelObj.nombre}</strong></div>
+                <div style={{ display:'flex',gap:10,alignItems:'center' }}>
+                  <strong style={{ color: afilSelObj._retirado ? C.amber : C.blue }}>{afilSelObj.nombre}</strong>
+                  {afilSelObj._retirado && <span style={{ fontSize:10,fontWeight:700,background:C.amber,color:'#fff',borderRadius:6,padding:'2px 8px' }}>RETIRADO</span>}
+                </div>
                 <div style={{ color:C.text2 }}>Doc: <strong>{afilSelObj.doc}</strong></div>
                 <div style={{ color:C.text2 }}>Empresa: <strong>{afilSelObj.empresa||'—'}</strong></div>
                 <div style={{ color:C.text2 }}>Cliente: <strong>{afilSelObj.cliente_txt||'—'}</strong></div>

@@ -3,6 +3,7 @@ Funciones de tareas programadas — compartidas por main.py (dev) y worker.py (p
 Cada función es independiente: abre su propia sesión DB y la cierra al terminar.
 """
 from datetime import datetime, timezone, timedelta
+from const import MESES as _MESES
 
 
 def limpiar_notificaciones_diario():
@@ -120,6 +121,27 @@ def limpiar_tareas_mensuales():
         db.close()
 
 
+def limpiar_login_attempts():
+    """Elimina intentos de login con más de 24h — evita crecimiento indefinido de la tabla."""
+    from database import SessionLocal
+    from logger import logger as _log
+    import models
+    db = SessionLocal()
+    try:
+        limite = datetime.now(timezone.utc) - timedelta(hours=24)
+        count = db.query(models.LoginAttempt).filter(
+            models.LoginAttempt.last_attempt < limite
+        ).delete()
+        db.commit()
+        if count:
+            _log.info(f"Limpieza: {count} registros de LoginAttempt antiguos eliminados")
+    except Exception as e:
+        db.rollback()
+        _log.error(f"Error limpieza login_attempts: {e}")
+    finally:
+        db.close()
+
+
 def limpiar_planillas_antiguas():
     """Elimina planillas anteriores al mes pasado de DB y R2 (cliente ya las descargó)."""
     from database import SessionLocal
@@ -134,8 +156,6 @@ def limpiar_planillas_antiguas():
             mes_ant_idx, anio_ant = 12, hoy.year - 1
         else:
             mes_ant_idx, anio_ant = hoy.month - 1, hoy.year
-        _MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
         mes_ant = _MESES[mes_ant_idx - 1]
         mes_act = _MESES[hoy.month - 1]
         old_planillas = db.execute(text(

@@ -49,6 +49,7 @@ from scheduler_jobs import (
     limpiar_tareas_mensuales      as _limpiar_tareas_mensuales,
     limpiar_novedades_antiguas    as _limpiar_novedades_antiguas,
     limpiar_planillas_antiguas    as _limpiar_planillas_antiguas,
+    limpiar_login_attempts        as _limpiar_login_attempts,
 )
 
 
@@ -80,6 +81,7 @@ async def lifespan(app: FastAPI):
             _scheduler.add_job(_limpiar_token_blacklist, "cron", hour=1, minute=0)
             _scheduler.add_job(_limpiar_notificaciones_diario, "cron", hour=0, minute=0)
             _scheduler.add_job(_limpiar_actividad_antigua, "cron", hour=3, minute=0)
+            _scheduler.add_job(_limpiar_login_attempts, "cron", hour=2, minute=0)
             _scheduler.add_job(_limpiar_tareas_mensuales,   "cron", day=1, hour=4, minute=0)
             _scheduler.add_job(_limpiar_novedades_antiguas, "cron", day=1, hour=5, minute=0)
             _scheduler.add_job(_limpiar_planillas_antiguas, "cron", day=1, hour=6, minute=0)
@@ -119,13 +121,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
-        try:
-            response = await call_next(request)
-        except Exception as e:
-            from logger import logger as _log
-            from starlette.responses import Response
-            _log.error(f"SecurityHeadersMiddleware: excepción no manejada: {e}")
-            response = Response(status_code=500)
+        response = await call_next(request)
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
@@ -139,6 +135,26 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
+
+
+# ─── REQUEST LOGGING ──────────────────────────────────────────────────────────
+import time as _time
+from logger import logger as _req_logger
+
+class RequestLoggingMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        start = _time.monotonic()
+        response = await call_next(request)
+        ms = int((_time.monotonic() - start) * 1000)
+        # Omitir health check para no saturar los logs
+        if request.url.path != "/health":
+            _req_logger.info(
+                f"{request.method} {request.url.path} "
+                f"→ {response.status_code} ({ms}ms)"
+            )
+        return response
+
+app.add_middleware(RequestLoggingMiddleware)
 
 # ─── INCLUDE ROUTERS ──────────────────────────────────────────────────────────
 from routers import auth as auth_router
@@ -401,6 +417,21 @@ def create_ingreso_adicional(data: schemas.IngresoAdicionalCreate,
     return crud.create_ingreso_adicional(db, data, user=token.get("sub", "sistema"))
 
 
+@app.put("/ingresos-adicionales/{id}")
+def update_ingreso_adicional(id: int, data: schemas.IngresoAdicionalCreate,
+                              db: Session = Depends(get_db), token=Depends(require_admin)):
+    i = db.query(models.IngresoAdicional).filter_by(id=id).first()
+    if not i: raise HTTPException(404, "Ingreso adicional no encontrado")
+    from crud import cache_invalidar
+    cache_invalidar("dashboard:")
+    i.concepto = data.concepto; i.descripcion = data.descripcion
+    i.valor = data.valor; i.mes = data.mes; i.anio = data.anio
+    db.commit(); db.refresh(i)
+    return {"id": i.id, "concepto": i.concepto, "descripcion": i.descripcion,
+            "valor": i.valor, "mes": i.mes, "anio": i.anio, "creado_por": i.creado_por,
+            "creado": i.creado.isoformat() if i.creado else None}
+
+
 @app.delete("/ingresos-adicionales/{id}")
 def delete_ingreso_adicional(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     ok = crud.delete_ingreso_adicional(db, id, user=token.get("sub", "sistema"))
@@ -461,6 +492,10 @@ def delete_usuario(id: int, db: Session = Depends(get_db), token=Depends(require
     if not u: raise HTTPException(404, "Usuario no encontrado")
     if u.username == "admin":
         raise HTTPException(400, "No puedes eliminar el administrador principal")
+    if u.rol == "admin":
+        admins_activos = db.query(models.Usuario).filter_by(rol="admin", activo=True).count()
+        if admins_activos <= 1:
+            raise HTTPException(400, "No puedes eliminar el único admin activo del sistema")
     crud.delete_usuario(db, id, user=token.get("sub","sistema"))
     return {"ok": True}
 
@@ -484,12 +519,6 @@ def dashboard(anio: str = "", mes: str = "",
     return crud.get_dashboard(db, anio=anio, mes=mes)
 
 
-@app.get("/dashboard/meses")
-def dashboard_meses(anio: str = "", db: Session = Depends(get_db), token=Depends(verify_token)):
-    """Retorna los 12 meses del año indicado con ingresos, facturas y pendiente."""
-    return crud.get_dashboard_meses(db, anio=anio)
-
-
 # ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
 @app.get("/cobro")
 def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
@@ -509,7 +538,21 @@ def health_check(db: Session = Depends(get_db)):
         db_ok = True
     except Exception:
         db_ok = False
-    # Check Redis
+    if not db_ok:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=503, content={"status": "degraded"})
+    return {"status": "ok"}
+
+
+@app.get("/health/detail")
+def health_detail(db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Diagnóstico interno — requiere autenticación."""
+    try:
+        from sqlalchemy import text
+        db.execute(text("SELECT 1"))
+        db_ok = True
+    except Exception:
+        db_ok = False
     redis_ok = None
     try:
         from crud import _redis_client
@@ -517,7 +560,6 @@ def health_check(db: Session = Depends(get_db)):
             redis_ok = _redis_client.ping()
     except Exception:
         redis_ok = False
-    # Check R2 storage
     storage_ok = None
     storage_err = None
     try:
@@ -532,18 +574,18 @@ def health_check(db: Session = Depends(get_db)):
     except Exception as e:
         storage_ok = False
         storage_err = str(e)
-    status = "ok" if db_ok else "degraded"
-    code = 200 if db_ok else 503
-    result = {"status": status, "db": "ok" if db_ok else "error"}
+    result = {"status": "ok" if db_ok else "degraded", "db": "ok" if db_ok else "error"}
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"
     result["storage"] = "r2" if storage_ok else "local"
+    if storage_err:
+        result["storage_err"] = storage_err
     if _start_time:
         uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
         result["uptime_seconds"] = int(uptime)
-    if code != 200:
+    if not db_ok:
         from fastapi.responses import JSONResponse
-        return JSONResponse(status_code=code, content=result)
+        return JSONResponse(status_code=503, content=result)
     return result
 
 
