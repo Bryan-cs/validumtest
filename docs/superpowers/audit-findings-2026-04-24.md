@@ -2,7 +2,9 @@
 
 ## Resumen ejecutivo
 
-Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana + Integridad Contable + SQL/N+1 + Permisos & Aislamiento de Datos. **82 checkpoints verificados, 5 fallos ALTO, 5 fallos MEDIO.**
+Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana + Integridad Contable + SQL/N+1 + Permisos & Aislamiento de Datos + Scheduler Jobs + TanStack Query Frontend. **101 checkpoints verificados, 6 fallos ALTO, 6 fallos MEDIO.**
+
+**Task 8 (TanStack Query):** Fix de sesión 17 (`['finanzas-cliente']`) verificado en las 6 mutaciones principales de `Facturacion.jsx`. `EditarFacturaModal.guardar` (línea 300) fue omitido en el fix de sesión 17 — no invalida `['finanzas-clientes']` ni `['finanzas-cliente']`, y sigue usando `setQueriesData` (patrón viejo). `vite:preloadError` listener presente en `index.jsx:6`. Afiliados: validaciones de formulario y botón Guardar correctos.
 
 **Task 6 (Permisos):** Aislamiento portal CORRECTO — ningún endpoint expone datos entre clientes. Guards adminOnly presentes en todas las rutas críticas. `delete_usuario` tiene doble protección (hardcode "admin" + conteo DB activos). Sidebar sin "Reportes Financieros" para empleados. Un hallazgo MEDIO: `ClienteOnlyRoute` permite también `rol=admin` acceder al portal (intencional para soporte) pero no está documentado como comportamiento explícito.
 
@@ -729,6 +731,195 @@ def delete_usuario(id, db, token=Depends(require_admin)):  # solo admins llegan 
 
 Guard 2 (conteo DB activo) cumple el checkpoint critico: verifica estado real en BD,
 no solo nombre hardcodeado. Guard 1 es redundante e inconsistente con el patron.
+
+---
+
+---
+
+## Task 8 — TanStack Query Frontend Audit (2026-04-24)
+
+### Resumen ejecutivo
+
+Auditoría de TanStack Query v5 en `Facturacion.jsx`, `Afiliados.jsx` e `index.jsx`. Todos los fixes de sesiones 7, 13 y 17 están aplicados y correctos. Se encontró un issue MEDIO y un issue ALTO en `EditarFacturaModal`.
+
+| Área | Resultado |
+|---|---|
+| guardar (crear factura): invalidaciones finanzas | PASS |
+| eliminar factura: invalidaciones finanzas | PASS |
+| pagar: invalidaciones finanzas | PASS |
+| planillaPagada: invalidaciones finanzas | PASS |
+| pagarBulk: invalidaciones finanzas | PASS |
+| planillaBulk: invalidaciones finanzas | PASS |
+| busqueda activa: limit=0 para traer todos los registros | PASS |
+| Sin setQueryData con key incompleta en mutaciones principales | PASS |
+| EditarFacturaModal guardar: invalidaciones finanzas | FALLO ALTO |
+| Afiliados guardar (crear): invalida afiliados + filter-options | PASS |
+| Afiliados eliminar: invalida afiliados + filter-options | PASS |
+| Upload documentos en onSuccess (no bloquea guardado) | PASS |
+| Validaciones nombre / doc / tel | PASS |
+| Botón Guardar deshabilitado sin empresa/nombre/doc | PASS |
+| vite:preloadError listener en index.jsx | PASS |
+
+---
+
+### ALTO
+
+**[TanStack Query] Facturacion.jsx:300 — `EditarFacturaModal.guardar` no invalida `['finanzas-clientes']` ni `['finanzas-cliente']`**
+
+La mutación `guardar` en `EditarFacturaModal` (línea 292-302) solo hace `setQueriesData` sobre `['facturas']` y no llama ninguna `invalidateQueries` para las keys de Reportes Financieros:
+
+```js
+onSuccess: (res) => {
+  toast.success('Factura actualizada');
+  qc.setQueriesData({ queryKey: ['facturas'] }, prev => prev ? { ...prev, items: ... } : prev);
+  onClose();
+},
+```
+
+Consecuencia: al editar una factura (cambio de ingreso, mes, estado, etc.), el módulo Reportes Financieros (`/finanzas`) no refleja el cambio hasta que expire el `staleTime: 0` (siguiente navegación o refresh manual). Contraejemplo: las mutaciones de crear, eliminar, pagar, planillaPagada, pagarBulk y planillaBulk SÍ invalidan `['finanzas-clientes']` y `['finanzas-cliente']`.
+
+Adicionalmente falta invalidar `['dashboard']` y `['cobro']` para la misma razón (los metadatos de la factura podrían cambiar ingresos/estado que alimentan el dashboard).
+
+Fix `Facturacion.jsx:300`: reemplazar `onSuccess` por:
+```js
+onSuccess: () => {
+  toast.success('Factura actualizada');
+  qc.invalidateQueries({ queryKey: ['facturas'] });
+  qc.invalidateQueries({ queryKey: ['dashboard'] });
+  qc.invalidateQueries({ queryKey: ['cobro'] });
+  qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+  qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
+  onClose();
+},
+```
+
+El `setQueriesData` optimista actual es correcto en teoría pero no invalida las otras queries afectadas; reemplazarlo por `invalidateQueries` es el patrón establecido en el resto de mutaciones (fix sesión 13).
+
+---
+
+### MEDIO
+
+**[TanStack Query] Facturacion.jsx:300 — `EditarFacturaModal.guardar` usa `setQueriesData` sobre `['facturas']` (patrón viejo)**
+
+El mismo `onSuccess` de `EditarFacturaModal` usa `qc.setQueriesData({ queryKey: ['facturas'] }, ...)` — el patrón que fue reemplazado por `invalidateQueries` en sesión 13 para evitar keys incompletas. En el modal de editar la key `['facturas']` SÍ coincide con la consulta paginada (que usa el prefix match de TanStack Query), pero el patrón no es consistente con el resto del archivo y podría producir estados stale si la query tiene parámetros adicionales activos.
+
+No es un fallo ALTO separado del anterior — es la misma línea 300 — pero merece mención explícita como incumplimiento del estándar de invalidación del proyecto.
+
+---
+
+### OK (verificado sin issues)
+
+**[TanStack Query]** `queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, busqueda, hayFiltros]` — key completa incluye `busqueda` y `hayFiltros` — `Facturacion.jsx:544` ✓
+
+**[TanStack Query]** Cuando `busqueda` activa: `limit: 0` forzado — `Facturacion.jsx:546-548`:
+```js
+params: hayFiltros && (hayMes || busqueda)
+  ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0 }
+  : { ...skip/limit paginado }
+```
+Fix sesión 7 correctamente implementado. ✓
+
+**[TanStack Query]** Mutación `guardar` (crear factura) — `NuevaFacturaModal` línea 162:
+- `invalidateQueries({ queryKey: ['facturas'] })` ✓
+- `invalidateQueries({ queryKey: ['cobro'] })` ✓
+- `invalidateQueries({ queryKey: ['dashboard'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-clientes'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-cliente'] })` ✓
+Sin `setQueryData`. Fix sesión 17 aplicado. ✓
+
+**[TanStack Query]** Mutación `eliminar` — línea 654-658:
+- `invalidateQueries({ queryKey: ['facturas'] })` ✓
+- `invalidateQueries({ queryKey: ['dashboard'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-clientes'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-cliente'] })` ✓
+Sin `setQueryData`. Fix sesión 17 aplicado. ✓
+
+**[TanStack Query]** Mutación `pagar` — líneas 641-653:
+- `invalidateQueries({ queryKey: ['facturas'] })` ✓
+- `invalidateQueries({ queryKey: ['dashboard'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-clientes'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-cliente'] })` ✓
+Sin `setQueryData`. Fix sesión 17 aplicado. ✓
+
+**[TanStack Query]** Mutación `planillaPagada` — líneas 660-670:
+- `invalidateQueries({ queryKey: ['facturas'] })` ✓
+- `invalidateQueries({ queryKey: ['dashboard'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-clientes'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-cliente'] })` ✓
+Sin `setQueryData`. Fix sesión 17 aplicado. ✓
+
+**[TanStack Query]** Mutación `pagarBulk` — líneas 672-688:
+- `invalidateQueries({ queryKey: ['facturas'] })` ✓
+- `invalidateQueries({ queryKey: ['dashboard'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-clientes'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-cliente'] })` ✓
+Sin `setQueryData`. Fix sesión 17 aplicado. ✓
+
+**[TanStack Query]** Mutación `planillaBulk` — líneas 690-706:
+- `invalidateQueries({ queryKey: ['facturas'] })` ✓
+- `invalidateQueries({ queryKey: ['dashboard'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-clientes'] })` ✓
+- `invalidateQueries({ queryKey: ['finanzas-cliente'] })` ✓
+Sin `setQueryData`. Fix sesión 17 aplicado. ✓
+
+**[TanStack Query] Afiliados.jsx — mutación `guardar` (crear)** líneas 416-419:
+- `invalidateQueries({ queryKey: ['afiliados'] })` ✓
+- `invalidateQueries({ queryKey: ['afiliados-filter-options'] })` ✓
+- `invalidateQueries({ queryKey: ['afiliados-recientes'] })` ✓
+Fix sesión 16 aplicado. ✓
+
+**[TanStack Query] Afiliados.jsx — mutación `eliminar`** líneas 440-445:
+- `invalidateQueries({ queryKey: ['eliminados'] })` ✓
+- `invalidateQueries({ queryKey: ['afiliados-filter-options'] })` ✓
+Fix sesión 16 aplicado. ✓
+
+**[TanStack Query] Afiliados.jsx — Upload documentos en `onSuccess`** líneas 403-414:
+Subida de archivos ocurre DENTRO de `onSuccess` en bloque `try/catch` separado. Un error en upload muestra toast específico pero NO interrumpe el flujo principal (el afiliado ya fue guardado, la caché ya fue invalidada antes de entrar al bloque de upload). Fix sesión 17 aplicado correctamente. ✓
+
+**[TanStack Query] Afiliados.jsx — Validaciones de formulario** líneas 1278, 1290-1292, 1298-1299:
+- `nombre`: `v.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ\s]/g, '')` — letras, tildes, ñ, espacios ✓
+- `doc`: `e.target.value.replace(/[^0-9]/g, '')` + `inputMode="numeric"` — solo números ✓
+- `tel`: `v.replace(/[^0-9]/g, '')` — solo números ✓
+- `cargo`: `v.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ0-9\s]/g, '')` — letras + números ✓
+Validaciones de sesión 16 presentes y correctas. ✓
+
+**[TanStack Query] Afiliados.jsx — Botón Guardar deshabilitado** línea 1436:
+```js
+disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim()}
+```
+Empresa, nombre y doc son requeridos para habilitar el botón. ✓
+
+**[vite:preloadError] index.jsx:6** — listener presente en el archivo de entrada:
+```js
+window.addEventListener('vite:preloadError', () => { window.location.reload(); });
+```
+Ubicado en `frontend/src/index.jsx` (entry point de la app), no en un componente. Fix sesión 11 aplicado. ✓
+
+---
+
+### Checkpoints Task 8
+
+| # | Área | Checkpoint | Estado | Ref |
+|---|---|---|---|---|
+| 83 | TanStack | guardar (crear factura) invalida ['finanzas-cliente'] | PASS | Facturacion.jsx:162 |
+| 84 | TanStack | eliminar factura invalida ['finanzas-cliente'] | PASS | Facturacion.jsx:656 |
+| 85 | TanStack | pagar invalida ['finanzas-cliente'] | PASS | Facturacion.jsx:649 |
+| 86 | TanStack | planillaPagada invalida ['finanzas-cliente'] | PASS | Facturacion.jsx:667 |
+| 87 | TanStack | pagarBulk invalida ['finanzas-cliente'] | PASS | Facturacion.jsx:685 |
+| 88 | TanStack | planillaBulk invalida ['finanzas-cliente'] | PASS | Facturacion.jsx:703 |
+| 89 | TanStack | EditarFacturaModal guardar invalida ['finanzas-clientes'] | FALLO ALTO | Facturacion.jsx:300 — ausente |
+| 90 | TanStack | EditarFacturaModal guardar invalida ['finanzas-cliente'] | FALLO ALTO | Facturacion.jsx:300 — ausente |
+| 91 | TanStack | EditarFacturaModal usa setQueryData (patrón viejo) | FALLO MEDIO | Facturacion.jsx:300 |
+| 92 | TanStack | busqueda activa → limit: 0 | PASS | Facturacion.jsx:546-548 |
+| 93 | TanStack | Sin setQueryData con key incompleta en mutaciones principales | PASS | verificado en 6 mutaciones |
+| 94 | TanStack | Afiliados crear invalida ['afiliados-filter-options'] | PASS | Afiliados.jsx:419 |
+| 95 | TanStack | Afiliados eliminar invalida ['afiliados-filter-options'] | PASS | Afiliados.jsx:445 |
+| 96 | TanStack | Upload docs en onSuccess (no bloquea guardado) | PASS | Afiliados.jsx:403-414 |
+| 97 | TanStack | nombre: solo letras/tildes/ñ | PASS | Afiliados.jsx:1278 |
+| 98 | TanStack | doc: solo números + inputMode=numeric | PASS | Afiliados.jsx:1290-1292 |
+| 99 | TanStack | tel: solo números | PASS | Afiliados.jsx:1298-1299 |
+| 100 | TanStack | empresa requerida (botón deshabilitado) | PASS | Afiliados.jsx:1436 |
+| 101 | vite | vite:preloadError listener en index.jsx | PASS | index.jsx:6 |
 
 ---
 
