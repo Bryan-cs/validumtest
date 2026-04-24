@@ -2,15 +2,43 @@
 
 ## Resumen ejecutivo
 
-Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana + Integridad Contable + SQL/N+1 + Permisos & Aislamiento de Datos + Scheduler Jobs + TanStack Query Frontend. **101 checkpoints verificados, 6 fallos ALTO, 6 fallos MEDIO.**
+**Auditoría completa:** 101 checkpoints verificados en 9 áreas — Auth & Seguridad, Cache Invalidación, Lógica SS Colombiana, Integridad Contable, SQL/N+1, Permisos & Aislamiento, Scheduler Jobs, TanStack Query Frontend, Módulo Finanzas.
 
-**Task 8 (TanStack Query):** Fix de sesión 17 (`['finanzas-cliente']`) verificado en las 6 mutaciones principales de `Facturacion.jsx`. `EditarFacturaModal.guardar` (línea 300) fue omitido en el fix de sesión 17 — no invalida `['finanzas-clientes']` ni `['finanzas-cliente']`, y sigue usando `setQueriesData` (patrón viejo). `vite:preloadError` listener presente en `index.jsx:6`. Afiliados: validaciones de formulario y botón Guardar correctos.
+**Conteos finales:**
+- **CRÍTICO:** 0 hallazgos
+- **ALTO:** 5 hallazgos
+- **MEDIO:** 5 hallazgos
+- **BAJO:** 3 hallazgos
+- **Áreas sin issues:** Auth & Deps & CORS, Portal Aislamiento, SQL/N+1 (excepto 1 índice), Scheduler, Finanzas routes & staleTime
 
-**Task 6 (Permisos):** Aislamiento portal CORRECTO — ningún endpoint expone datos entre clientes. Guards adminOnly presentes en todas las rutas críticas. `delete_usuario` tiene doble protección (hardcode "admin" + conteo DB activos). Sidebar sin "Reportes Financieros" para empleados. Un hallazgo MEDIO: `ClienteOnlyRoute` permite también `rol=admin` acceder al portal (intencional para soporte) pero no está documentado como comportamiento explícito.
+**Fixes prioritarios para Tasks 11-12 (ALTO):**
+1. `get_cobro` facturas_set incluye PENDIENTE → COBRADO incorrecto (crud.py:1263-1270) **MÁXIMO IMPACTO**
+2. `EditarFacturaModal.guardar` no invalida finanzas-clientes/finanzas-cliente (Facturacion.jsx:300)
+3. `restaurar_eliminado` falta `cache_invalidar("dashboard_clientes:")` (main.py:304)
+4. `create_retiro` falta `cache_invalidar("dashboard_clientes:")` (crud.py:502)
+5. `delete_retiro` falta `cache_invalidar("dashboard_clientes:")` (crud.py:539)
+6. IBC individual sin validación mínimo SMMLV (schemas.py:43)
 
-**Task 1 & 2 (sesiones previas):** Todos los fixes críticos de sesiones previas (sesión 7, 15, 17) están presentes. Tres mutaciones omiten `cache_invalidar("dashboard_clientes:")`: `restaurar_eliminado`, `create_retiro`, `delete_retiro`.
+**Fixes MEDIO (no bloquean sesión, pero recomendados después):**
+1. IBC global hardcodeado a 2025 (models.py:184)
+2. Reingreso no purga SolicitudNovedad/SolicitudRetiro (routers/afiliados.py)
+3. PROXIMO solo 1 día vs 5 (diseño intencional, documentar)
+4. FacturaCreate permite pagado/planilla_pagada (schemas.py:93)
+5. ix_token_blacklist_expires_at ausente en _ensure_indexes() (database.py)
+6. Sidebar muestra Reportes Financieros a empleados (Layout.jsx:43)
+7. delete_usuario doble guard hardcodeado (main.py:492)
+8. EditarFacturaModal usa setQueriesData (patrón viejo)
 
-**Task 3 (SS Logic):** Dos hallazgos ALTO: (1) `facturas_set` en `get_cobro` incluye facturas `pendiente` → afiliados con factura pendiente aparecen como COBRADO erróneamente. (2) IBC individual no valida mínimo 1 SMMLV. Tres hallazgos MEDIO: IBC global hardcodeado al SMMLV 2025 (no 2026), reingreso no purga SolicitudNovedad/SolicitudRetiro, PROXIMO cubre solo 1 día en lugar de 5. Los porcentajes SS (EPS/AFP/ARL/CCF) son configurables en BD — no verificables desde código, pero la lógica de lectura es correcta. Columnas financieras usan Numeric(15,2) correctamente (fix sesión 14 aplicado). Fix del par (anio,mes) en cobro está presente (fix sesión 7). Ciclo de vida afiliado sustancialmente correcto.
+**Verificado OK:**
+- Todos los fixes sesión 7, 13, 15, 17 presentes
+- Aislamiento portal: cliente_ref desde JWT en 14/14 endpoints
+- Guards adminOnly en rutas críticas
+- Auth JWT rotation, lifetimes, bloqueo brute force
+- Columnas financieras Numeric/Decimal (no float)
+- Ciclo afiliado: retiro, borrado permanente, restauración
+- Pool de conexiones dinámica (max 25)
+- Índices en place (excepto token_blacklist)
+- Finanzas: staleTime 0, refetchInterval 300s, PeriodSelector wraparound, BancoChart interactivo
 
 ---
 
