@@ -10,19 +10,31 @@ def hash_password(plain: str) -> str:
     return bcrypt.hashpw(plain.encode(), bcrypt.gensalt()).decode()
 
 def verify_password(plain: str, hashed: str) -> bool:
-    import secrets
-    # Soporta contraseñas antiguas en texto plano durante migración
-    if not hashed.startswith("$2"):
-        return secrets.compare_digest(plain, hashed)
+    if not hashed or not hashed.startswith("$2"):
+        return False  # contraseñas plaintext ya no son soportadas
     return bcrypt.checkpw(plain.encode(), hashed.encode())
 
-MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-         "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"]
+from const import MESES
 
 # ─── HELPERS ──────────────────────────────────────────────────────────────────
+def _get_rol_usuario(db: Session, username: str) -> str:
+    """Rol cacheado 10 min — evita query extra en cada operación de escritura."""
+    key = f"usuario_rol:{username}"
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+    u = db.query(models.Usuario.rol).filter_by(username=username).first()
+    rol = u.rol if u else "empleado"
+    _cache_set(key, rol, ttl=600)
+    return rol
+
 def _log(db: Session, usuario: str, accion: str, modulo: str, detalle: str = ""):
-    u = db.query(models.Usuario).filter_by(username=usuario).first()
-    if u and u.rol == "admin":
+    try:
+        from logger import logger as _logger
+        _logger.info(f"[AUDIT] {usuario} | {modulo} | {accion} | {detalle}")
+    except Exception:
+        pass
+    if _get_rol_usuario(db, usuario) == "admin":
         return
     db.add(models.Actividad(usuario=usuario, accion=accion, modulo=modulo, detalle=detalle))
 
@@ -30,7 +42,7 @@ def _get_ibc(db: Session, afiliado: models.Afiliado = None) -> float:
     if afiliado and afiliado.ibc and afiliado.ibc > 0:
         return afiliado.ibc
     cfg = db.query(models.Config).first()
-    return cfg.ibc_global if cfg else 1_950_905
+    return float(cfg.ibc_global) if cfg else 1_950_905
 
 def _get_pct(db: Session, servicio: str) -> float:
     cfg = db.query(models.Config).first()
@@ -90,7 +102,7 @@ def _afiliado_to_dict(a: models.Afiliado) -> dict:
         "estado": a.estado, "estado_srv": a.estado_srv,
         "servicios": json.loads(a.servicios or "[]"),
         "tel": a.tel, "email": a.email, "dir": a.dir, "ciudad": a.ciudad or "", "obs": a.obs, "novedades": a.novedades, "detalle": a.detalle or "",
-        "ibc": a.ibc, "fecha_ingreso": a.fecha_ingreso,
+        "ibc": float(a.ibc) if a.ibc is not None else None, "fecha_ingreso": a.fecha_ingreso,
         "fecha_afiliacion": a.fecha_afiliacion,
         "registrado_por": a.registrado_por, "activo": a.activo,
     }
@@ -111,13 +123,15 @@ def _factura_to_dict(f: models.Factura) -> dict:
         "nombre_afiliado": f.nombre_afiliado, "doc": f.doc,
         "cliente": f.cliente, "anio": f.anio, "mes": f.mes,
         "periodo": f.periodo, "estado": f.estado, "banco": f.banco,
-        "ingresos": f.ingresos, "costos": f.costos,
-        "costo_adm": f.costo_adm, "conceptos_extra": f.conceptos_extra,
-        "utilidad": f.utilidad, "novedades": f.novedades,
+        "ingresos": float(f.ingresos or 0), "costos": float(f.costos or 0),
+        "costo_adm": float(f.costo_adm or 0), "conceptos_extra": float(f.conceptos_extra or 0),
+        "utilidad": float(f.utilidad or 0), "novedades": f.novedades,
         "servicios_detalle": srv,
         "conceptos_detalle": conc,
         "afiliado_eliminado": f.afiliado_eliminado,
         "pagado_en": f.pagado_en.isoformat() if f.pagado_en else None,
+        "monto_pagado": float(f.monto_pagado or 0),
+        "saldo_pendiente": max(0.0, float(f.ingresos or 0) - float(f.monto_pagado or 0)),
         "creado_por": f.creado_por,
         "creado": f.creado.isoformat() if f.creado else None,
     }
@@ -145,6 +159,7 @@ def delete_usuario(db, id, user=""):
         _log(db, user, "eliminó un usuario", "Usuarios", u.username)
         from routers.deps import invalidate_user_cache
         invalidate_user_cache(u.username)
+        cache_invalidar(f"usuario_rol:{u.username}")
     db.query(models.Usuario).filter_by(id=id).delete()
     db.commit()
 
@@ -157,20 +172,22 @@ def _split_csv(val: str) -> list:
 def get_afiliados_filter_options(db):
     """Retorna opciones únicas para cada filtro de afiliados (sin cargar datos completos).
     Cacheado para no consultar en cada render.
+    Una sola query con DISTINCT en vez de 6 queries separadas.
     """
     cached = _cache_get("afiliados:filtros")
     if cached is not None:
         return cached
-    from sqlalchemy import distinct, func
     A = models.Afiliado
-    base = db.query(A).filter_by(activo=True)
+    rows = db.query(
+        A.empresa, A.cliente_txt, A.subtipo, A.estado_srv, A.tipo_doc, A.ccf
+    ).filter_by(activo=True).distinct().all()
     result = {
-        "empresas":  sorted(set(r[0] for r in base.with_entities(A.empresa).distinct()  if r[0])),
-        "clientes":  sorted(set(r[0] for r in base.with_entities(A.cliente_txt).distinct() if r[0])),
-        "subtipos":  sorted(set(r[0] for r in base.with_entities(A.subtipo).distinct()  if r[0])),
-        "estados":   sorted(set(r[0] for r in base.with_entities(A.estado_srv).distinct() if r[0])),
-        "tipos_doc": sorted(set(r[0] for r in base.with_entities(A.tipo_doc).distinct()  if r[0])),
-        "ccfs":      sorted(set(r[0] for r in base.with_entities(A.ccf).distinct()       if r[0])),
+        "empresas":  sorted({r.empresa     for r in rows if r.empresa}),
+        "clientes":  sorted({r.cliente_txt for r in rows if r.cliente_txt}),
+        "subtipos":  sorted({r.subtipo     for r in rows if r.subtipo}),
+        "estados":   sorted({r.estado_srv  for r in rows if r.estado_srv}),
+        "tipos_doc": sorted({r.tipo_doc    for r in rows if r.tipo_doc}),
+        "ccfs":      sorted({r.ccf         for r in rows if r.ccf}),
     }
     _cache_set("afiliados:filtros", result, ttl=120)
     return result
@@ -387,7 +404,9 @@ def create_factura(db, data: schemas.FacturaCreate):
             cliente=data.cliente, anio=data.anio or str(datetime.now(COL_TZ).year),
             mes=data.mes, periodo=data.periodo, estado=data.estado, banco=data.banco,
             ingresos=data.ingresos, costos=data.costos, costo_adm=data.costo_adm,
-            conceptos_extra=data.conceptos_extra, utilidad=data.utilidad,
+            conceptos_extra=data.conceptos_extra,
+            # Punto 6: utilidad calculada server-side, no confiamos en el frontend
+            utilidad=(data.ingresos or 0) - (data.costos or 0) + (data.conceptos_extra or 0),
             novedades=data.novedades,
             servicios_detalle=json.dumps(data.servicios_detalle),
             conceptos_detalle=json.dumps(data.conceptos_detalle),
@@ -405,26 +424,53 @@ def create_factura(db, data: schemas.FacturaCreate):
             data.codigo = ""  # forzar regeneración de código
 
 def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
+    from fastapi import HTTPException
     cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     f = db.query(models.Factura).filter_by(id=id).first()
     if not f: return None
+
+    # Punto 5: bloquear cambio de mes/anio en facturas ya pagadas
+    PAGADAS = {"pagado", "planilla_pagada"}
+    if f.estado in PAGADAS:
+        campos = data.model_dump(exclude_none=True)
+        if ("mes" in campos and campos["mes"] != f.mes) or \
+           ("anio" in campos and campos["anio"] != f.anio):
+            raise HTTPException(400, "No se puede cambiar el período de una factura ya pagada")
+
     for k, v in data.model_dump(exclude_none=True).items():
         if k in ("servicios_detalle","conceptos_detalle"): v = json.dumps(v)
         setattr(f, k, v)
+
+    # Punto 6: recalcular utilidad server-side
+    f.utilidad = (f.ingresos or 0) - (f.costos or 0) + (f.conceptos_extra or 0)
+
     _log(db, editor, "editó una factura", "Facturación", f.codigo)
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
-def pagar_factura(db, id, banco="", user=""):
+def pagar_factura(db, id, banco="", user="", monto=None):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:")
     f = db.query(models.Factura).filter_by(id=id).with_for_update().first()
     if not f: return None
     if f.estado in ("pagado", "planilla_pagada"):
         return _factura_to_dict(f)  # idempotente
-    f.estado = "pagado"
-    f.pagado_en = datetime.now(timezone.utc)
+    ingresos = float(f.ingresos or 0)
+    monto_abono = float(monto) if monto is not None else ingresos
+    if monto_abono <= 0:
+        from fastapi import HTTPException
+        raise HTTPException(400, "El monto del abono debe ser mayor a cero")
+    nuevo_acumulado = float(f.monto_pagado or 0) + monto_abono
     if banco:
         f.banco = banco
-    _log(db, user, "marcó factura como pagada", "Facturación", f.codigo)
+    if nuevo_acumulado >= ingresos:
+        # Pago completo — marcar pagada
+        f.estado = "pagado"
+        f.monto_pagado = ingresos
+        f.pagado_en = datetime.now(timezone.utc)
+        _log(db, user, "marcó factura como pagada", "Facturación", f.codigo)
+    else:
+        # Abono parcial — sigue pendiente, acumula monto
+        f.monto_pagado = nuevo_acumulado
+        _log(db, user, f"registró abono ${monto_abono:,.0f} (acumulado ${nuevo_acumulado:,.0f} de ${ingresos:,.0f})", "Facturación", f.codigo)
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
 def marcar_planilla_pagada(db, id, user=""):
@@ -445,8 +491,8 @@ def delete_factura(db, id, user=""):
     codigo = f.codigo
     db.delete(f)
     _log(db, user, "eliminó una factura", "Facturación", codigo)
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # invalidar caché antes del commit
     db.commit()
-    cache_invalidar("cobro:"); cache_invalidar("dashboard:")  # invalidar caché al eliminar factura
 
 # ─── RETIROS ──────────────────────────────────────────────────────────────────
 def get_retiros(db, anio="", mes="", doc="", skip: int = 0, limit: int = 500):
@@ -643,10 +689,10 @@ def get_config(db):
     c = db.query(models.Config).first()
     if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200,"mes_inicio_cobro":None,"anio_inicio_cobro":None}
     result = {
-        "ibc_global": c.ibc_global,
+        "ibc_global": float(c.ibc_global) if c.ibc_global is not None else 1_950_905,
         "porcentajes": json.loads(c.porcentajes or "{}"),
         "plantilla_whatsapp": c.plantilla_whatsapp or "",
-        "cargo_adicional": c.cargo_adicional if c.cargo_adicional is not None else 2200,
+        "cargo_adicional": float(c.cargo_adicional) if c.cargo_adicional is not None else 2200,
         "mes_inicio_cobro": c.mes_inicio_cobro,
         "anio_inicio_cobro": c.anio_inicio_cobro,
     }
@@ -784,12 +830,22 @@ def get_dashboard(db, anio="", mes=""):
     facts = db.query(
         func.sum(case((period_ok, 1), else_=0)).label("n"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.ingresos), else_=0)), 0).label("ingresos"),
+        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.costos),   else_=0)), 0).label("costos_pagadas"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.utilidad), else_=0)), 0).label("utilidad"),
-        func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos), else_=0)), 0).label("pendiente"),
+        # pendiente: saldo real (ingresos − abonos acumulados) para facturas pendientes del período
+        func.coalesce(func.sum(case(
+            (and_(pending_ok, period_ok), models.Factura.ingresos - func.coalesce(models.Factura.monto_pagado, 0)),
+            else_=0
+        )), 0).label("pendiente"),
         func.sum(case((and_(pending_ok, period_ok), 1), else_=0)).label("n_pend"),
-        # pend_total: pendiente histórico completo (sin filtro de período)
-        func.coalesce(func.sum(case((pending_ok, models.Factura.ingresos), else_=0)), 0).label("pend_total"),
+        # pend_total: saldo histórico cobrable — excluye afiliados eliminados
+        func.coalesce(func.sum(case(
+            (and_(pending_ok, models.Factura.afiliado_eliminado == False),
+             models.Factura.ingresos - func.coalesce(models.Factura.monto_pagado, 0)),
+            else_=0
+        )), 0).label("pend_total"),
     ).one()
+
 
     # Nómina y gastos: si hay mes específico → ese mes; si hay solo año → suma todos los meses del año
     _anio_ref = int(anio) if anio else datetime.now(COL_TZ).year
@@ -868,42 +924,18 @@ def get_dashboard(db, anio="", mes=""):
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "pendiente_cobro_total": float(pend_total), "meses_factor": meses_factor,
         "ingresos_por_banco": ingresos_por_banco,
+        # cargo_adm_total: suma real de costos de planillas pagadas (incluye cargo/mora real de cada factura)
+        "cargo_adm_total": float(facts.costos_pagadas),
     }
     _cache_set(cache_key, result, ttl=TTL_DASHBOARD)
     return result
-
-# ─── DASHBOARD MESES ──────────────────────────────────────────────────────────
-def get_dashboard_meses(db, anio=""):
-    """Retorna los 12 meses del año indicado (o año actual) con ingresos, facturas y pendiente."""
-    from sqlalchemy import func, case as sql_case
-    now = datetime.now(COL_TZ)
-    anio_ref = anio if anio else str(now.year)
-    periodos = [(MESES[m], anio_ref) for m in range(12)]
-    rows = db.query(
-        models.Factura.mes, models.Factura.anio,
-        func.coalesce(func.sum(sql_case((models.Factura.estado.in_(["pagado", "planilla_pagada"]), models.Factura.ingresos), else_=0)), 0).label("total_ingresos"),
-        func.count(models.Factura.id).label("total_facturas"),
-        func.coalesce(func.sum(sql_case((models.Factura.estado=="pendiente", models.Factura.ingresos), else_=0)), 0).label("total_pendiente"),
-    ).filter(
-        models.Factura.anio == anio_ref,
-    ).group_by(models.Factura.mes, models.Factura.anio).all()
-    data_map = {r.mes: (r.total_ingresos or 0, r.total_facturas, r.total_pendiente or 0) for r in rows}
-    return [
-        {
-            "mes": mes[:3], "mes_full": mes, "anio": int(anio_ref),
-            "ingresos": float(data_map.get(mes, (0, 0, 0))[0]),
-            "facturas": int(data_map.get(mes, (0, 0, 0))[1]),
-            "pendiente": float(data_map.get(mes, (0, 0, 0))[2]),
-        }
-        for mes, _ in periodos
-    ]
 
 # ─── CACHÉ (Redis en producción, dict en memoria para dev) ───────────────────
 import time as _time
 import os as _os
 
 # TTL diferenciados según frecuencia de cambio
-TTL_COBRO     = 300    # 5 min  — cambia con cada factura/afiliado
+TTL_COBRO     = 600    # 10 min — cambia con cada factura/afiliado; invalidación explícita en mutaciones
 TTL_DASHBOARD = 300    # 5 min  — mismo ritmo que cobro
 TTL_AFILIADOS = 180    # 3 min  — consultas frecuentes durante jornada
 TTL_CONFIG    = 600    # 10 min — cambia solo cuando admin edita configuración
@@ -960,6 +992,14 @@ def _redis_on_failure():
         _cblog.warning(f"Redis circuit breaker abierto — {_CB_COOLDOWN}s de pausa")
 
 
+def _use_mem_cache() -> bool:
+    """True solo cuando Redis no está configurado (desarrollo sin Redis).
+    En producción con Redis configurado, nunca usar dict en memoria — evita
+    inconsistencia entre workers cuando el circuit breaker está abierto.
+    """
+    return _redis_client is None
+
+
 def _cache_get(key: str):
     """Obtiene un valor del caché (Redis o memoria)."""
     if _redis_disponible():
@@ -971,7 +1011,9 @@ def _cache_get(key: str):
         except Exception:
             _redis_on_failure()
         return None
-    # Fallback memoria — usa el TTL guardado por entrada
+    if not _use_mem_cache():
+        return None  # Redis configurado pero caído → cache miss (dato fresco de DB)
+    # Fallback memoria solo en dev (sin Redis)
     with _cache_lock:
         entry = _mem_cache.get(key)
         if entry and (_time.time() - entry["ts"]) < entry["ttl"]:
@@ -988,7 +1030,9 @@ def _cache_set(key: str, data, ttl: int = TTL_COBRO):
         except Exception:
             _redis_on_failure()
         return
-    # Fallback memoria
+    if not _use_mem_cache():
+        return  # Redis configurado pero caído → no guardar en dict
+    # Fallback memoria solo en dev (sin Redis)
     with _cache_lock:
         _mem_cache[key] = {"data": data, "ts": _time.time(), "ttl": ttl}
         if len(_mem_cache) > 500:
@@ -996,7 +1040,6 @@ def _cache_set(key: str, data, ttl: int = TTL_COBRO):
             expired = [k for k, v in list(_mem_cache.items()) if (now - v["ts"]) >= v["ttl"]]
             for k in expired:
                 _mem_cache.pop(k, None)
-            # Si no había expirados, evictar los 100 más antiguos para evitar crecimiento infinito
             if len(_mem_cache) > 500:
                 oldest = sorted(_mem_cache.items(), key=lambda x: x[1]["ts"])[:100]
                 for k, _ in oldest:
@@ -1029,6 +1072,12 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     """Calcula el estado de cobro por afiliado y mes (últimos 6 meses).
     Genera una fila por cada mes pendiente de cada afiliado.
     El caché se invalida automáticamente al crear/editar/eliminar facturas o afiliados.
+
+    Optimizaciones:
+    - Filtros empresa/cliente/doc van al SQL — no al Python
+    - estado_srv usa notin() en vez de ilike(%RETIR%) — permite Index-Only Scan
+    - load_only() carga solo las columnas necesarias — no trae obs/detalle/dir/etc.
+    - Filtros tipo/mes/anio aplicados dentro del loop — no construye rows descartables
     """
     cache_key = f"cobro:{empresa}:{cliente}:{tipo}:{mes}:{anio}:{doc}"
     cached = _cache_get(cache_key)
@@ -1050,7 +1099,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
 
     # Pre-cargar config
     cfg = db.query(models.Config).first()
-    ibc_global = cfg.ibc_global if cfg else 1_950_905
+    ibc_global = float(cfg.ibc_global) if cfg else 1_950_905
     pcts = json.loads(cfg.porcentajes or "{}") if cfg else {}
     # Fecha de corte global: el módulo de cobro ignora meses anteriores a esta fecha
     _corte = (cfg.anio_inicio_cobro, cfg.mes_inicio_cobro) if cfg and cfg.anio_inicio_cobro and cfg.mes_inicio_cobro else None
@@ -1069,14 +1118,38 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
         if (f.anio, f.mes) in _pares_validos  # excluye combinaciones inválidas entre años
     )
 
-    afils = db.query(models.Afiliado).filter(
+    # Filtros SQL — empresa/cliente/doc reducen filas antes de cargar objetos
+    # notin() en estado_srv permite usar ix_afiliado_cobro_cobertura (Index-Only Scan)
+    # load_only() evita traer campos Text pesados (obs, detalle, dir, email, etc.)
+    from sqlalchemy.orm import load_only
+    q = db.query(models.Afiliado).filter(
         models.Afiliado.activo == True,
-        ~models.Afiliado.estado_srv.ilike("%RETIR%"),
-    ).all()
+        models.Afiliado.estado_srv.notin_(["RETIRADO"]),
+        models.Afiliado.cliente_txt != "EMPLEADO",
+    ).options(load_only(
+        models.Afiliado.id,
+        models.Afiliado.nombre,
+        models.Afiliado.doc,
+        models.Afiliado.tipo_doc,
+        models.Afiliado.empresa,
+        models.Afiliado.cliente_txt,
+        models.Afiliado.estado_srv,
+        models.Afiliado.subtipo,
+        models.Afiliado.fecha_afiliacion,
+        models.Afiliado.fecha_ingreso,
+        models.Afiliado.ibc,
+        models.Afiliado.servicios,
+        models.Afiliado.arl,
+        models.Afiliado.novedades,
+    ))
+    if empresa: q = q.filter(models.Afiliado.empresa == empresa)
+    if cliente: q = q.filter(models.Afiliado.cliente_txt == cliente)
+    if doc:     q = q.filter(models.Afiliado.doc == doc)
+
+    afils = q.all()
 
     rows = []
     for a in afils:
-        if (a.cliente_txt or "").upper() == "EMPLEADO": continue
         fa = a.fecha_afiliacion or a.fecha_ingreso or ""
         if not fa or "-" not in fa: continue
         try:
@@ -1086,7 +1159,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
             afil_month= int(partes[1])
         except: continue
 
-        ibc = a.ibc if (a.ibc and a.ibc > 0) else ibc_global
+        ibc = float(a.ibc) if (a.ibc and a.ibc > 0) else ibc_global
         srvs = _servicios_afiliado(a)
         planilla = sum(_ceil100(ibc * pcts.get(s, pcts.get(s.upper(), 0.0))) for s in srvs)
         cliente_afil = a.cliente_txt or ""
@@ -1103,6 +1176,9 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
             if (y, m) < (primer_cobro_y, primer_cobro_m): continue
             # No mostrar meses anteriores a la fecha de corte global del sistema
             if _corte and (y, m) < _corte: continue
+            # Filtros mes/anio dentro del loop — evita construir rows que se descartan
+            if mes  and MESES[m - 1] != mes: continue
+            if anio and str(y) != anio:      continue
 
             mes_nombre = MESES[m - 1]
             anio_str   = str(y)
@@ -1115,11 +1191,14 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
                 estado = "VENCIDO"   # mes pasado sin factura
             else:
                 # Mes actual: usar día de cobro
-                if dia_afil < dia_hoy:    estado = "VENCIDO"
-                elif dia_afil == dia_hoy: estado = "HOY"
+                if dia_afil < dia_hoy:        estado = "VENCIDO"
+                elif dia_afil == dia_hoy:     estado = "HOY"
                 elif dia_afil == dia_hoy + 1: estado = "PROXIMO"
                 else:
                     continue  # aún no se muestra — el día no ha llegado
+
+            # Filtro tipo dentro del loop — no construir el dict para descartarlo
+            if tipo and estado != tipo: continue
 
             rows.append({
                 "id":        f"{a.id}_{m}_{y}",
@@ -1140,16 +1219,6 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
                 "subtipo":   a.subtipo or "",
                 "estado_srv": a.estado_srv or "",
             })
-
-    if doc:     rows = [r for r in rows if r["doc"] == doc]
-    if empresa: rows = [r for r in rows if r["empresa"] == empresa]
-    if cliente: rows = [r for r in rows if r["cliente"] == cliente]
-    if mes:     rows = [r for r in rows if r["mes"] == mes]
-    if anio:    rows = [r for r in rows if r["anio"] == anio]
-    if tipo == "HOY":     rows = [r for r in rows if r["estado"] == "HOY"]
-    elif tipo == "VENCIDO": rows = [r for r in rows if r["estado"] == "VENCIDO"]
-    elif tipo == "PROXIMO": rows = [r for r in rows if r["estado"] == "PROXIMO"]
-    elif tipo == "COBRADO": rows = [r for r in rows if r["estado"] == "COBRADO"]
 
     orden = {"VENCIDO": 0, "HOY": 1, "PROXIMO": 2, "COBRADO": 3}
     rows.sort(key=lambda r: (orden.get(r["estado"], 4), r["nombre"], r["anio"], r["mes"]))

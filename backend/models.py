@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Index
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Index, Numeric, text
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, timezone, timedelta
@@ -28,6 +28,9 @@ class Afiliado(Base):
     __table_args__ = (
         Index('ix_afiliado_activo_estado_srv', 'activo', 'estado_srv'),  # cobro: activo=True + estado_srv
         Index('ix_afiliado_cliente_estado',    'cliente_txt', 'estado'), # filtro cliente+estado
+        # Covering index para get_cobro — soporta empresa/cliente/doc filters con Index-Only Scan
+        Index('ix_afiliado_cobro_cobertura', 'activo', 'estado_srv', 'empresa', 'cliente_txt',
+              postgresql_where=text("activo = TRUE")),
     )
     id              = Column(Integer, primary_key=True, index=True)
     nombre          = Column(String(150), index=True)
@@ -52,7 +55,7 @@ class Afiliado(Base):
     obs             = Column(Text)
     novedades       = Column(Text)
     detalle         = Column(Text)
-    ibc             = Column(Float, nullable=True)   # IBC individual (None = usar global)
+    ibc             = Column(Numeric(15, 2), nullable=True)   # IBC individual (None = usar global)
     fecha_ingreso   = Column(String(10))
     fecha_afiliacion= Column(String(10))
     registrado_por  = Column(String(60))
@@ -79,16 +82,17 @@ class Factura(Base):
     periodo          = Column(String(5))
     estado           = Column(String(20), default="pendiente", index=True)  # índice para filtros
     banco            = Column(String(60), index=True)
-    ingresos         = Column(Float, default=0)
-    costos           = Column(Float, default=0)
-    costo_adm        = Column(Float, default=0)
-    conceptos_extra  = Column(Float, default=0)
-    utilidad         = Column(Float, default=0)
+    ingresos         = Column(Numeric(15, 2), default=0)
+    costos           = Column(Numeric(15, 2), default=0)
+    costo_adm        = Column(Numeric(15, 2), default=0)
+    conceptos_extra  = Column(Numeric(15, 2), default=0)
+    utilidad         = Column(Numeric(15, 2), default=0)
     novedades        = Column(Text)
     servicios_detalle= Column(Text, default="[]")   # JSON
     conceptos_detalle= Column(Text, default="[]")   # JSON
     afiliado_eliminado = Column(Boolean, default=False)
     pagado_en        = Column(DateTime, nullable=True)
+    monto_pagado     = Column(Numeric(15, 2), default=0)   # acumulado de abonos parciales
     creado_por       = Column(String(60))
     creado           = Column(DateTime, default=_utcnow)
     actualizado      = Column(DateTime, default=_utcnow, onupdate=_utcnow)
@@ -131,7 +135,7 @@ class Empleado(Base):
     tel           = Column(String(20))
     email         = Column(String(100))
     usuario       = Column(String(60))     # username asignado
-    nomina        = Column(Float, default=0)
+    nomina        = Column(Numeric(15, 2), default=0)
     activo        = Column(Boolean, default=True)
     fecha_ingreso = Column(String(10))
     creado        = Column(DateTime, default=_utcnow)
@@ -143,7 +147,7 @@ class Gasto(Base):
     )
     id     = Column(Integer, primary_key=True, index=True)
     nombre = Column(String(120))
-    valor  = Column(Float, default=0)
+    valor  = Column(Numeric(15, 2), default=0)
     activo = Column(Boolean, default=True)
     mes    = Column(Integer)
     anio   = Column(Integer)
@@ -157,7 +161,7 @@ class IngresoAdicional(Base):
     id          = Column(Integer, primary_key=True, index=True)
     concepto    = Column(String(60))   # Comisión | Planilla verificable | Otro
     descripcion = Column(String(200), default="")
-    valor       = Column(Float, default=0)
+    valor       = Column(Numeric(15, 2), default=0)
     mes         = Column(Integer)
     anio        = Column(Integer)
     creado_por  = Column(String(60), default="")
@@ -173,15 +177,15 @@ class NominaMensual(Base):
     empleado_id = Column(Integer, index=True)
     mes         = Column(Integer)
     anio        = Column(Integer)
-    valor       = Column(Float, default=0)
+    valor       = Column(Numeric(15, 2), default=0)
 
 class Config(Base):
     __tablename__ = "config"
     id                 = Column(Integer, primary_key=True, default=1)
-    ibc_global         = Column(Float, default=1_950_905)
+    ibc_global         = Column(Numeric(15, 2), default=1_950_905)
     porcentajes        = Column(Text)    # JSON dict
     plantilla_whatsapp = Column(Text)    # Plantilla del mensaje de WhatsApp
-    cargo_adicional    = Column(Float, default=2200)
+    cargo_adicional    = Column(Numeric(15, 2), default=2200)
     mes_inicio_cobro   = Column(Integer)  # Mes a partir del cual el módulo de cobro genera filas
     anio_inicio_cobro  = Column(Integer)  # Año correspondiente
 

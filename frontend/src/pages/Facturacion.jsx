@@ -388,14 +388,14 @@ function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado, cargoAdi
           </div>
         )
       }
-      {setCargoAdicional && (
+      {cargoAdicional !== undefined && (
         <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6,
           background:C.amberBg, border:`1px solid ${C.amber}`, borderRadius:7, padding:'6px 12px' }}>
-          <span style={{ fontSize:12, color:C.amber, fontWeight:600 }}>⚙️ Impuestos / cargo adicional:</span>
+          <span style={{ fontSize:12, color:C.amber, fontWeight:600 }}>⚙️ Mora / 4x1000 / cargo adicional:</span>
           <input type="number" value={cargoAdicional} onChange={e => setCargoAdicional(e.target.value)}
             style={{ width:110, padding:'4px 8px', border:`1px solid ${C.amber}`, borderRadius:6,
               fontSize:13, fontWeight:700, color:C.amber, background:C.surface, outline:'none' }} />
-          <span style={{ fontSize:11, color:C.text2 }}>Se suma al costo total de la planilla</span>
+          <span style={{ fontSize:11, color:C.text2 }}>Se suma al costo de la planilla</span>
         </div>
       )}
     </div>
@@ -434,7 +434,7 @@ function ResumenFinanciero({ ingreso, costoPlanilla, extra, utilidad }) {
       <div style={{ fontSize:13,fontWeight:700,color:C.primary,marginBottom:8 }}>Resumen financiero</div>
       {[
         ['Ingreso cobrado al cliente:', fmt(ingreso), C.text],
-        ['Costo planilla gobierno (marcados):', fmt(costoPlanilla), C.red],
+        ['Costo planilla SS (marcados):', fmt(costoPlanilla), C.red],
         ['Conceptos adicionales:', fmt(extra), C.amber],
         ['Utilidad neta = Ingreso − Planilla + Conceptos:', fmt(utilidad), utilidad>=0?C.green:C.red],
       ].map(([label,value,color]) => (
@@ -443,6 +443,58 @@ function ResumenFinanciero({ ingreso, costoPlanilla, extra, utilidad }) {
           <span style={{ fontSize:14,fontWeight:700,color }}>{value}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+// ─── FORM EDITAR INGRESO ADICIONAL ───────────────────────────────────────────
+const TIPOS_IA = ['Comisión', 'Planilla verificable', 'Otro'];
+function EditIngAdForm({ inicial, MESES_NUM, onGuardar, onCancel, isPending }) {
+  const [form, setForm] = useState({
+    concepto: inicial.concepto || 'Comisión',
+    descripcion: inicial.descripcion || '',
+    valor: inicial.valor || '',
+    mes: inicial.mes,
+    anio: inicial.anio,
+  });
+  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
+      <div>
+        <label style={lbl}>Concepto</label>
+        <select style={sel} value={form.concepto} onChange={e=>set('concepto',e.target.value)}>
+          {TIPOS_IA.map(t=><option key={t}>{t}</option>)}
+        </select>
+      </div>
+      <div>
+        <label style={lbl}>Descripción</label>
+        <input style={sel} value={form.descripcion} onChange={e=>set('descripcion',e.target.value)} />
+      </div>
+      <div>
+        <label style={lbl}>Valor *</label>
+        <input type="number" style={sel} min="0" value={form.valor} onChange={e=>set('valor',e.target.value)} />
+      </div>
+      <div style={{ display:'flex', gap:10 }}>
+        <div style={{ flex:1 }}>
+          <label style={lbl}>Mes *</label>
+          <select style={sel} value={form.mes} onChange={e=>set('mes',parseInt(e.target.value))}>
+            {MESES_NUM.map((m,i)=><option key={m} value={i+1}>{m}</option>)}
+          </select>
+        </div>
+        <div style={{ flex:1 }}>
+          <label style={lbl}>Año *</label>
+          <input type="number" style={sel} value={form.anio} min="2020" max="2099"
+            onChange={e=>set('anio',parseInt(e.target.value))} />
+        </div>
+      </div>
+      <div style={{ display:'flex', gap:10, justifyContent:'flex-end', marginTop:4 }}>
+        <Btn variant="secondary" onClick={onCancel}>Cancelar</Btn>
+        <Btn disabled={!form.valor || parseFloat(form.valor) <= 0 || isPending}
+          onClick={()=>onGuardar({ concepto:form.concepto, descripcion:form.descripcion,
+            valor:parseFloat(form.valor), mes:form.mes, anio:form.anio })}>
+          {isPending ? 'Guardando...' : '💾 Guardar'}
+        </Btn>
+      </div>
     </div>
   );
 }
@@ -461,6 +513,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [seleccionadas, setSeleccionadas] = useState(new Set());
   const [modalBulkPagar, setModalBulkPagar] = useState(false);
   const [bancoBulk, setBancoBulk] = useState('');
+  // const [modalPila, setModalPila] = useState(null); // TODO: PILA — pendiente fixes, no subir a prod
 
   useEffect(() => {
     if (prefillAfiliado) { setPrefill(prefillAfiliado); setModalNueva(true); }
@@ -494,6 +547,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
   // Resetear página cuando cambien los filtros
   useEffect(() => { setPaginaF(1); }, [anioB, mesB, clienteB, estadoB, busqueda]);
+  useEffect(() => { setPaginaIA(1); }, [anioB, mesB]);
 
   const rows      = respF.items || [];
   const totalFact = respF.total || 0;
@@ -522,13 +576,17 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
   const [modalPagar, setModalPagar] = useState(null);
   const [bancoPago, setBancoPago] = useState('');
+  const [montoPago, setMontoPago] = useState('');
 
   // Ingresos adicionales
   const MESES_NUM = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const hoyMes  = new Date().getMonth() + 1;
   const hoyAnio = new Date().getFullYear();
-  const [modalIngAd, setModalIngAd] = useState(false);
-  const [formIngAd, setFormIngAd]   = useState({ concepto:'Comisión', descripcion:'', valor:'', mes: hoyMes, anio: hoyAnio });
+  const [modalIngAd, setModalIngAd]       = useState(false);
+  const [editIngAd,  setEditIngAd]        = useState(null); // objeto a editar
+  const [formIngAd, setFormIngAd]         = useState({ concepto:'Comisión', descripcion:'', valor:'', mes: hoyMes, anio: hoyAnio });
+  const [paginaIA, setPaginaIA]           = useState(1);
+  const POR_PAG_IA = 20;
 
   const iaParams = {};
   if (anioB) iaParams.anio = parseInt(anioB);
@@ -540,6 +598,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   });
 
   const totIngAd = ingAdList.reduce((s, i) => s + (i.valor || 0), 0);
+  const totalPagsIA = Math.ceil(ingAdList.length / POR_PAG_IA);
+  const ingAdPaginado = ingAdList.slice((paginaIA - 1) * POR_PAG_IA, paginaIA * POR_PAG_IA);
 
   const crearIngAd = useMutation({
     mutationFn: data => api.post('/ingresos-adicionales', data),
@@ -549,6 +609,17 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       qc.invalidateQueries({ queryKey: ['dashboard'] });
       setModalIngAd(false);
       setFormIngAd({ concepto:'Comisión', descripcion:'', valor:'', mes: hoyMes, anio: hoyAnio });
+    },
+    onError: e => toast.error(e.response?.data?.detail || 'Error'),
+  });
+
+  const editarIngAd = useMutation({
+    mutationFn: ({ id, data }) => api.put(`/ingresos-adicionales/${id}`, data),
+    onSuccess: () => {
+      toast.success('Ingreso actualizado');
+      qc.invalidateQueries({ queryKey: ['ingresos-adicionales'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      setEditIngAd(null);
     },
     onError: e => toast.error(e.response?.data?.detail || 'Error'),
   });
@@ -564,19 +635,24 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   });
 
   const pagar = useMutation({
-    mutationFn: ({ id, banco }) => api.patch(`/facturas/${id}/pagar`, null, { params: { banco } }),
-    onSuccess: (res) => { toast.success('Factura marcada como pagada'); qc.setQueryData(['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros], prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); setModalPagar(null); setBancoPago(''); },
-    onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar como pagada'),
+    mutationFn: ({ id, banco, monto }) => api.patch(`/facturas/${id}/pagar`, null, { params: { banco, ...(monto != null ? { monto } : {}) } }),
+    onSuccess: (res) => {
+      const estado = res.data?.estado;
+      toast.success(estado === 'pagado' ? 'Factura marcada como pagada' : 'Abono registrado — factura sigue pendiente hasta pago total');
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+      setModalPagar(null); setBancoPago(''); setMontoPago('');
+    },
+    onError: (e) => toast.error(e.response?.data?.detail || 'Error al registrar pago'),
   });
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/facturas/${id}`),
-    onSuccess: (_, id) => { toast.success('Factura eliminada'); qc.setQueryData(['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros], prev => prev ? { ...prev, items: (prev.items || []).filter(f => f.id !== id), total: Math.max(0, (prev.total || 0) - 1) } : prev); },
+    onSuccess: () => { toast.success('Factura eliminada'); qc.invalidateQueries({ queryKey: ['facturas'] }); },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al eliminar factura'),
   });
 
   const planillaPagada = useMutation({
     mutationFn: id => api.patch(`/facturas/${id}/planilla-pagada`),
-    onSuccess: (res) => { toast.success('Planilla marcada como pagada'); qc.setQueryData(['facturas', paginaF, anioB, mesB, clienteB, estadoB, hayFiltros], prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); },
+    onSuccess: () => { toast.success('Planilla marcada como pagada'); qc.invalidateQueries({ queryKey: ['facturas'] }); },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar planilla'),
   });
 
@@ -684,7 +760,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {ingAdList.map(i => (
+                  {ingAdPaginado.map(i => (
                     <tr key={i.id} style={{ borderBottom:`1px solid ${C.border}` }}>
                       <td style={tdc}>
                         <span style={{ fontWeight:600, color:C.primary }}>{i.concepto}</span>
@@ -696,10 +772,14 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       <td style={{ ...tdc, color:C.text2 }}>{i.creado_por || '—'}</td>
                       <td style={{ ...tdc, color:C.text2, fontSize:12 }}>{i.creado ? new Date(i.creado).toLocaleDateString('es-CO') : '—'}</td>
                       <td style={tdc}>
-                        <Btn size="sm" variant="danger" disabled={elimIngAd.isPending}
-                          onClick={()=>{ if(window.confirm('¿Eliminar este ingreso?')) elimIngAd.mutate(i.id); }}>
-                          🗑️
-                        </Btn>
+                        <div style={{ display:'flex', gap:4 }}>
+                          <Btn size="sm" variant="secondary"
+                            onClick={()=>setEditIngAd(i)}>✏️</Btn>
+                          <Btn size="sm" variant="danger" disabled={elimIngAd.isPending}
+                            onClick={()=>{ if(window.confirm('¿Eliminar este ingreso?')) elimIngAd.mutate(i.id); }}>
+                            🗑️
+                          </Btn>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -712,6 +792,18 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   </tr>
                 </tfoot>
               </table>
+            </div>
+          )}
+          {/* Paginación ingresos adicionales */}
+          {totalPagsIA > 1 && (
+            <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:8, marginTop:12 }}>
+              <button onClick={()=>setPaginaIA(p=>Math.max(1,p-1))} disabled={paginaIA===1}
+                style={{ padding:'5px 12px', border:`1px solid ${C.border}`, borderRadius:7, background:C.surface2,
+                  cursor:paginaIA===1?'not-allowed':'pointer', opacity:paginaIA===1?0.5:1, fontSize:12 }}>‹ Anterior</button>
+              <span style={{ fontSize:12, color:C.text2 }}>Pág. {paginaIA} de {totalPagsIA} · {ingAdList.length} registros</span>
+              <button onClick={()=>setPaginaIA(p=>Math.min(totalPagsIA,p+1))} disabled={paginaIA===totalPagsIA}
+                style={{ padding:'5px 12px', border:`1px solid ${C.border}`, borderRadius:7, background:C.surface2,
+                  cursor:paginaIA===totalPagsIA?'not-allowed':'pointer', opacity:paginaIA===totalPagsIA?0.5:1, fontSize:12 }}>Siguiente ›</button>
             </div>
           )}
         </div>
@@ -799,7 +891,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       background: f.estado==='planilla_pagada' ? '#DCFCE7' : f.estado==='pagado' ? C.greenBg : C.amberBg,
                       color: f.estado==='planilla_pagada' ? '#166534' : f.estado==='pagado' ? C.green : C.amber,
                       borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>
-                      {f.estado==='planilla_pagada' ? '📋 Planilla Pagada' : f.estado==='pagado' ? 'Pagada' : 'Pendiente'}
+                      {f.estado==='planilla_pagada' ? '📋 Planilla Pagada' : f.estado==='pagado' ? 'Pagada' :
+                        (f.monto_pagado > 0 ? `Pendiente (abonado ${fmt(f.monto_pagado)})` : 'Pendiente')}
                     </span>
                   </td>
                   <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
@@ -808,7 +901,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   <td style={tdc}>
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
                       <Btn size="sm" variant="secondary" onClick={(e)=>{e.stopPropagation();setModalEditar(f);}}>✏️ Editar</Btn>
-                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
+                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setMontoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
                       {f.estado==='pagado' && <Btn size="sm" variant="secondary" disabled={planillaPagada.isPending} onClick={(e)=>{e.stopPropagation();planillaPagada.mutate(f.id);}}>📋 Planilla Pagada</Btn>}
                       <Btn size="sm" variant="secondary" onClick={(e)=>{
                         e.stopPropagation();
@@ -835,6 +928,9 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       }}>💬 WhatsApp</Btn>
                       <Btn size="sm" variant="secondary"
                         onClick={(e)=>{e.stopPropagation();dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.nombre_afiliado?.replace(/ /g,'_')}_${f.codigo}.pdf`);}}>📄 PDF</Btn>
+                      {/* TODO: PILA — pendiente fixes, no subir a prod */}
+                      {/* <Btn size="sm" variant="secondary"
+                        onClick={(e)=>{e.stopPropagation();setModalPila({ doc: f.doc, nombre: f.nombre_afiliado, mes: f.mes, anio: f.anio, empresa: ai.empresa || '' });}}>PILA</Btn> */}
                       <Btn size="sm" variant="danger"
                         onClick={(e)=>{ e.stopPropagation(); if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
                     </div>
@@ -875,6 +971,18 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         config={config} listas={listas} prefill={prefill} />
       <EditarFacturaModal open={!!modalEditar} onClose={()=>setModalEditar(null)}
         factura={modalEditar} config={config} listas={listas} />
+
+      {/* Modal editar ingreso adicional */}
+      {editIngAd && (
+        <Modal open={!!editIngAd} onClose={()=>setEditIngAd(null)} width={440} title="✏️ Editar ingreso adicional">
+          <EditIngAdForm
+            inicial={editIngAd} MESES_NUM={MESES_NUM}
+            onGuardar={(data) => editarIngAd.mutate({ id: editIngAd.id, data })}
+            onCancel={() => setEditIngAd(null)}
+            isPending={editarIngAd.isPending}
+          />
+        </Modal>
+      )}
 
       {/* Modal ingreso adicional */}
       <Modal open={modalIngAd} onClose={()=>setModalIngAd(false)} width={440} title="➕ Ingreso adicional">
@@ -943,27 +1051,48 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         </div>
       </Modal>
 
-      {/* Mini modal: seleccionar banco al marcar pagada */}
-      <Modal open={!!modalPagar} onClose={()=>setModalPagar(null)} width={400} title="✓ Marcar como pagada">
-        {modalPagar && (
+      {/* TODO: PILA — pendiente fixes, no subir a prod */}
+      {/* {modalPila && <ModalPilaAfiliado datos={modalPila} onClose={()=>setModalPila(null)} listas={listas} />} */}
+
+      {/* Mini modal: registrar pago (total o abono parcial) */}
+      <Modal open={!!modalPagar} onClose={()=>{ setModalPagar(null); setMontoPago(''); setBancoPago(''); }} width={420} title="✓ Registrar pago">
+        {modalPagar && (() => {
+          const saldo = modalPagar.ingresos - (modalPagar.monto_pagado || 0);
+          const montoNum = montoPago === '' ? null : parseFloat(montoPago);
+          const esCompleto = montoNum === null || montoNum >= saldo;
+          return (
           <div>
-            <p style={{ margin:'0 0 14px', fontSize:13, color:C.text2 }}>
+            <p style={{ margin:'0 0 6px', fontSize:13, color:C.text2 }}>
               <strong style={{ color:C.text }}>{modalPagar.nombre_afiliado}</strong> — {modalPagar.codigo}
             </p>
+            {(modalPagar.monto_pagado || 0) > 0 && (
+              <p style={{ margin:'0 0 14px', fontSize:12, color:C.amber, background:C.amberBg, padding:'6px 10px', borderRadius:6 }}>
+                Ya abonado: {fmt(modalPagar.monto_pagado)} · Saldo restante: <strong>{fmt(saldo)}</strong>
+              </p>
+            )}
+            <label style={lbl}>Monto a pagar (dejar vacío = saldo total {fmt(saldo)})</label>
+            <input type="number" style={{ ...inp, marginBottom:14 }} placeholder={String(saldo)}
+              value={montoPago} onChange={e=>setMontoPago(e.target.value)} min={1} max={saldo} />
+            {!esCompleto && montoNum > 0 && (
+              <p style={{ margin:'-8px 0 12px', fontSize:11, color:C.amber }}>
+                Abono parcial — factura queda pendiente hasta completar {fmt(saldo - montoNum)} restantes
+              </p>
+            )}
             <label style={lbl}>Banco / Forma de pago</label>
             <select style={{ ...inp, marginBottom:20 }} value={bancoPago} onChange={e=>setBancoPago(e.target.value)}>
               <option value="">Seleccionar banco...</option>
               {(listas?.bancos||[]).map(b=><option key={b}>{b}</option>)}
             </select>
             <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
-              <Btn variant="secondary" onClick={()=>setModalPagar(null)}>Cancelar</Btn>
-              <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago })}
+              <Btn variant="secondary" onClick={()=>{ setModalPagar(null); setMontoPago(''); setBancoPago(''); }}>Cancelar</Btn>
+              <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago, monto: montoNum ?? undefined })}
                 disabled={pagar.isPending}>
-                {pagar.isPending ? 'Guardando...' : '✓ Confirmar pago'}
+                {pagar.isPending ? 'Guardando...' : esCompleto ? '✓ Confirmar pago total' : `✓ Registrar abono ${fmt(montoNum)}`}
               </Btn>
             </div>
           </div>
-        )}
+          );
+        })()}
       </Modal>
     </div>
   );
@@ -973,3 +1102,105 @@ const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle
 const sel = { padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',background:C.surface,color:C.text };
 const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
 const inp = { width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface };
+
+// TODO: PILA — pendiente fixes, no subir a prod
+// const MESES_PILA = { 'Enero':1,'Febrero':2,'Marzo':3,'Abril':4,'Mayo':5,'Junio':6,
+//   'Julio':7,'Agosto':8,'Septiembre':9,'Octubre':10,'Noviembre':11,'Diciembre':12 };
+// const ARL_PILA = ['POSITIVA','SURA','AXA COLPATRIA','LIBERTY','BOLIVAR','EQUIDAD','MAPFRE','QBE'];
+
+/* TODO: PILA — ModalPilaAfiliado comentado hasta fixes
+function ModalPilaAfiliado({ datos, onClose }) {
+  // datos = { doc, nombre, mes (texto), anio (texto), empresa }
+  const [nit, setNit] = useState('');
+  const [dv, setDv] = useState('0');
+  const [razonSocial, setRazonSocial] = useState(datos.empresa || '');
+  const [arl, setArl] = useState('POSITIVA');
+  const [generando, setGenerando] = useState(false);
+
+  const mesNum = MESES_PILA[datos.mes] || new Date().getMonth() + 1;
+
+  const handleGenerar = async () => {
+    if (!nit) { toast.error('Ingresa el NIT del empleador'); return; }
+    if (!razonSocial) { toast.error('Ingresa la razón social'); return; }
+    setGenerando(true);
+    try {
+      const res = await api.get('/reportes/pila', {
+        params: {
+          doc: datos.doc,
+          nit: nit.replace(/\D/g, ''),
+          razon_social: razonSocial,
+          dv,
+          mes: mesNum,
+          anio: parseInt(datos.anio),
+          arl,
+        },
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }));
+      const a = document.createElement('a');
+      a.href = url;
+      const slug = (datos.nombre || datos.doc).replace(/\s+/g, '_').toUpperCase().slice(0, 20);
+      a.download = `PILA_${slug}_${datos.anio}${String(mesNum).padStart(2,'0')}.txt`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Archivo PILA generado — verificar antes de envío oficial');
+      onClose();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Error al generar PILA');
+    }
+    setGenerando(false);
+  };
+
+  const i2 = { ...inp, fontSize: 13 };
+
+  return (
+    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
+      <div style={{ background:C.surface,borderRadius:14,padding:26,width:440,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
+        <h3 style={{ margin:'0 0 4px',color:C.primary,fontSize:15 }}>Generar PILA — {datos.nombre}</h3>
+        <p style={{ margin:'0 0 16px',fontSize:12,color:C.text2 }}>
+          Período: <strong>{datos.mes} {datos.anio}</strong> · Doc: {datos.doc}
+        </p>
+
+        <div style={{ display:'grid',gridTemplateColumns:'2fr 1fr',gap:10,marginBottom:12 }}>
+          <div>
+            <label style={lbl}>NIT del empleador *</label>
+            <input style={i2} type="text" value={nit} maxLength={9}
+              onChange={e => setNit(e.target.value.replace(/\D/g,''))}
+              placeholder="901760008" />
+          </div>
+          <div>
+            <label style={lbl}>D.V.</label>
+            <input style={i2} type="text" value={dv} maxLength={1}
+              onChange={e => setDv(e.target.value.replace(/\D/g,''))} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom:12 }}>
+          <label style={lbl}>Razón social del empleador *</label>
+          <input style={i2} type="text" value={razonSocial}
+            onChange={e => setRazonSocial(e.target.value)}
+            placeholder={datos.empresa || 'Nombre exacto de la empresa'} />
+        </div>
+
+        <div style={{ marginBottom:18 }}>
+          <label style={lbl}>ARL del empleador</label>
+          <select style={i2} value={arl} onChange={e => setArl(e.target.value)}>
+            {ARL_PILA.map(a => <option key={a} value={a}>{a}</option>)}
+          </select>
+        </div>
+
+        <div style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',marginBottom:16,fontSize:11,color:C.text2 }}>
+          ⚠️ Borrador — validar montos y códigos antes de envío al sistema PILA oficial.
+        </div>
+
+        <div style={{ display:'flex',gap:10,justifyContent:'flex-end' }}>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={handleGenerar} disabled={generando || !nit || !razonSocial}>
+            {generando ? 'Generando...' : 'Descargar PILA .txt'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+*/

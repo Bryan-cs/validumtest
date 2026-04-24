@@ -6,12 +6,13 @@ import { bancoColor } from '../utils/colors';
 
 const MESES = ['Todos','Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-const anioActual = new Date().getFullYear().toString();
+const anioActual  = new Date().getFullYear().toString();
+const mesActual   = MESES[new Date().getMonth() + 1]; // mes actual como nombre
 
 
 export default function Dashboard() {
   const [anio, setAnio] = useState(anioActual);
-  const [mes,  setMes]  = useState('Todos');
+  const [mes,  setMes]  = useState(mesActual);
 
   const params = {};
   if (anio !== 'Todos') params.anio = anio;
@@ -50,7 +51,7 @@ export default function Dashboard() {
           <select style={sel} value={mes} onChange={e=>setMes(e.target.value)}>
             {MESES.map(m=><option key={m}>{m}</option>)}
           </select>
-          <button onClick={()=>{setAnio(anioActual);setMes('Todos');}}
+          <button onClick={()=>{setAnio(anioActual);setMes(mesActual);}}
             style={{ ...sel, cursor:'pointer', background:C.surface2 }}>↺ Hoy</button>
         </div>
       </div>
@@ -116,6 +117,16 @@ export default function Dashboard() {
               );
             })}
           </div>
+        </div>
+      )}
+
+      {/* Cargo adicional / mora / 4x1000 de planillas pagadas */}
+      {!isLoading && d && (
+        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
+          padding: '14px 20px', marginBottom: 16,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontSize: 13, color: C.text2, fontWeight: 600 }}>📋 Total planilla SS pagada (costos reales)</span>
+          <span style={{ fontSize: 16, fontWeight: 700, color: C.amber }}>{fmt(d.cargo_adm_total ?? 0)}</span>
         </div>
       )}
 

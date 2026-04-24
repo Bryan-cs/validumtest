@@ -16,10 +16,12 @@ from scheduler_jobs import (
     limpiar_notificaciones_diario,
     limpiar_token_blacklist,
     limpiar_actividad_antigua,
+    limpiar_login_attempts,
 )
 
 log.info("run_daily: inicio")
 limpiar_notificaciones_diario()
 limpiar_token_blacklist()
 limpiar_actividad_antigua()
+limpiar_login_attempts()
 log.info("run_daily: fin")
