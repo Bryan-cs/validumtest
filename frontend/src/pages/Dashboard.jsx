@@ -74,11 +74,12 @@ export default function Dashboard() {
       {/* Métricas financieras */}
       <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap' }}>
         {isLoading
-          ? [1,2,3,4].map(i => <div key={i} style={{ flex:1, minWidth:140 }}><SkeletonCard height={88} /></div>)
+          ? [1,2,3,4,5].map(i => <div key={i} style={{ flex:1, minWidth:140 }}><SkeletonCard height={88} /></div>)
           : <>
             <StatCard label="Ingresos"                  value={fmt(d?.ingresos)}              color={C.primary} icon="💰" />
             <StatCard label={`Nóminas (×${d?.meses_factor??1} mes)`}     value={fmt(d?.nominas)}      color={C.red} icon="👔" />
             <StatCard label={`Gastos fijos (×${d?.meses_factor??1} mes)`} value={fmt(d?.gastos_fijos)} color={C.red} icon="📝" />
+            <StatCard label="Impuestos planillas SS"    value={fmt(d?.total_impuestos_planillas ?? 0)} color={C.amber} icon="📋" />
             <StatCard label="Utilidad neta"             value={fmt(d?.utilidad_neta)}
               color={(d?.utilidad_neta ?? 0) >= 0 ? C.green : C.red}
               icon={(d?.utilidad_neta ?? 0) >= 0 ? '📈' : '📉'} />
@@ -117,16 +118,6 @@ export default function Dashboard() {
               );
             })}
           </div>
-        </div>
-      )}
-
-      {/* Impuestos planillas SS pagadas (costos) */}
-      {!isLoading && d && (d.total_impuestos_planillas ?? 0) > 0 && (
-        <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
-          padding: '14px 20px', marginBottom: 16,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: C.text2, fontWeight: 600 }}>📋 Impuestos planillas pagadas (período)</span>
-          <span style={{ fontSize: 16, fontWeight: 700, color: C.amber }}>{fmt(d.total_impuestos_planillas)}</span>
         </div>
       )}
 
