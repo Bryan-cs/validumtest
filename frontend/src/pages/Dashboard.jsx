@@ -125,7 +125,7 @@ export default function Dashboard() {
         <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12,
           padding: '14px 20px', marginBottom: 16,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontSize: 13, color: C.text2, fontWeight: 600 }}>📋 Total planilla SS pagada (costos reales)</span>
+          <span style={{ fontSize: 13, color: C.text2, fontWeight: 600 }}>⚙️ Mora / 4x1000 / cargo adicional (período)</span>
           <span style={{ fontSize: 16, fontWeight: 700, color: C.amber }}>{fmt(d.cargo_adm_total ?? 0)}</span>
         </div>
       )}

@@ -830,7 +830,7 @@ def get_dashboard(db, anio="", mes=""):
     facts = db.query(
         func.sum(case((period_ok, 1), else_=0)).label("n"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.ingresos), else_=0)), 0).label("ingresos"),
-        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.costos),   else_=0)), 0).label("costos_pagadas"),
+        func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.costo_adm), else_=0)), 0).label("costos_pagadas"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),    models.Factura.utilidad), else_=0)), 0).label("utilidad"),
         # pendiente: saldo real (ingresos − abonos acumulados) para facturas pendientes del período
         func.coalesce(func.sum(case(
