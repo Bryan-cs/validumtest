@@ -405,8 +405,8 @@ def create_factura(db, data: schemas.FacturaCreate):
             mes=data.mes, periodo=data.periodo, estado=data.estado, banco=data.banco,
             ingresos=data.ingresos, costos=data.costos, costo_adm=data.costo_adm,
             conceptos_extra=data.conceptos_extra,
-            # Punto 6: utilidad calculada server-side, no confiamos en el frontend
-            utilidad=(data.ingresos or 0) - (data.costos or 0) + (data.conceptos_extra or 0),
+            # utilidad server-side: ingreso − planilla_SS − cargo_adm + conceptos_extra
+            utilidad=(data.ingresos or 0) - (data.costos or 0) - (data.costo_adm or 0) + (data.conceptos_extra or 0),
             novedades=data.novedades,
             servicios_detalle=json.dumps(data.servicios_detalle),
             conceptos_detalle=json.dumps(data.conceptos_detalle),
@@ -441,8 +441,8 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
         if k in ("servicios_detalle","conceptos_detalle"): v = json.dumps(v)
         setattr(f, k, v)
 
-    # Punto 6: recalcular utilidad server-side
-    f.utilidad = (f.ingresos or 0) - (f.costos or 0) + (f.conceptos_extra or 0)
+    # recalcular utilidad server-side: ingreso − planilla_SS − cargo_adm + conceptos_extra
+    f.utilidad = (f.ingresos or 0) - (f.costos or 0) - (f.costo_adm or 0) + (f.conceptos_extra or 0)
 
     _log(db, editor, "editó una factura", "Facturación", f.codigo)
     db.commit(); db.refresh(f); return _factura_to_dict(f)
@@ -832,8 +832,8 @@ def get_dashboard(db, anio="", mes=""):
         func.sum(case((period_ok, 1), else_=0)).label("n"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.ingresos), else_=0)), 0).label("ingresos"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.utilidad), else_=0)), 0).label("utilidad"),
-        # total_impuestos: costos SS de facturas con planilla_pagada en el período
-        func.coalesce(func.sum(case((and_(planilla_ok, period_ok),   models.Factura.costos),   else_=0)), 0).label("total_impuestos"),
+        # total_impuestos: cargo adicional/mora/4x1000 de facturas planilla_pagada en el período
+        func.coalesce(func.sum(case((and_(planilla_ok, period_ok),   models.Factura.costo_adm), else_=0)), 0).label("total_impuestos"),
         # pendiente: saldo real (ingresos − abonos acumulados) para facturas pendientes del período
         func.coalesce(func.sum(case(
             (and_(pending_ok, period_ok), models.Factura.ingresos - func.coalesce(models.Factura.monto_pagado, 0)),

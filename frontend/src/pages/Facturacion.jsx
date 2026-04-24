@@ -136,7 +136,9 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
     } catch { setErrorBusq('Error buscando afiliado'); }
   };
 
-  const costoPlanilla = planilla.reduce((s, p) => s + (marcados[p.servicio] ? p.valor : 0), 0) + (+cargoAdicional || 0);
+  const planillaSS = planilla.reduce((s, p) => s + (marcados[p.servicio] ? p.valor : 0), 0);
+  const cargoAdm = +cargoAdicional || 0;
+  const costoPlanilla = planillaSS + cargoAdm; // total para mostrar
   const extra = conceptos.reduce((s, c) => {
     const val = parseFloat(c.valor) || 0;
     return s + (c.tipo === 'Deduccion' ? -val : val);
@@ -151,7 +153,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         nombre_afiliado: afiliado.nombre, doc: afiliado.doc,
         cliente: afiliado.cliente_txt || afiliado.empresa || '',
         anio, mes, periodo: String(dias), estado,
-        ingresos: ingreso, costos: costoPlanilla,
+        ingresos: ingreso, costos: planillaSS, costo_adm: cargoAdm,
         conceptos_extra: extra, utilidad, novedades,
         servicios_detalle: planilla.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
         conceptos_detalle: conceptos,
@@ -278,7 +280,9 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
     servicio: s.servicio, pct: s.pct || 0, valor: s.valor || 0, val30: s.val30 || 0,
   }));
 
-  const costoPlanilla = planillaFinal.reduce((s, p) => s + (marcados[p.servicio] !== false ? p.valor : 0), 0) + (+cargoAdicional || 0);
+  const planillaSS = planillaFinal.reduce((s, p) => s + (marcados[p.servicio] !== false ? p.valor : 0), 0);
+  const cargoAdm = +cargoAdicional || 0;
+  const costoPlanilla = planillaSS + cargoAdm; // total para mostrar
   const extra = conceptos.reduce((s, c) => {
     const val = parseFloat(c.valor) || 0;
     return s + (c.tipo === 'Deduccion' ? -val : val);
@@ -288,7 +292,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
   const guardar = useMutation({
     mutationFn: () => api.put(`/facturas/${factura.id}`, {
       mes, periodo: String(dias), estado, banco,
-      ingresos: ingreso, costos: costoPlanilla,
+      ingresos: ingreso, costos: planillaSS, costo_adm: cargoAdm,
       conceptos_extra: extra, utilidad, novedades,
       servicios_detalle: planillaFinal.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
       conceptos_detalle: conceptos,
