@@ -834,6 +834,7 @@ def get_dashboard(db, anio="", mes=""):
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.utilidad), else_=0)), 0).label("utilidad"),
         # total_impuestos: cargo adicional/mora/4x1000 de facturas planilla_pagada en el período
         func.coalesce(func.sum(case((and_(planilla_ok, period_ok),   models.Factura.costo_adm), else_=0)), 0).label("total_impuestos"),
+        func.sum(case((and_(planilla_ok, period_ok), 1), else_=0)).label("n_planillas"),
         # pendiente: saldo real (ingresos − abonos acumulados) para facturas pendientes del período
         func.coalesce(func.sum(case(
             (and_(pending_ok, period_ok), models.Factura.ingresos - func.coalesce(models.Factura.monto_pagado, 0)),
@@ -883,6 +884,14 @@ def get_dashboard(db, anio="", mes=""):
 
     pend_total = float(facts.pend_total)
 
+    # total_impuestos: usa costo_adm si fue guardado; si no (facturas históricas),
+    # fallback a count(planilla_pagada) × cargo_adicional del config
+    _total_impuestos = float(facts.total_impuestos)
+    if _total_impuestos == 0 and int(facts.n_planillas or 0) > 0:
+        _cfg = db.query(models.Config.cargo_adicional).first()
+        _cargo = float(_cfg.cargo_adicional) if _cfg and _cfg.cargo_adicional else 2200.0
+        _total_impuestos = int(facts.n_planillas) * _cargo
+
     # Factor de meses para las etiquetas
     meses_factor = 1 if (mes or not anio) else 12
 
@@ -926,7 +935,7 @@ def get_dashboard(db, anio="", mes=""):
         "pendiente_cobro": float(facts.pendiente), "facturas_pendientes": int(facts.n_pend or 0),
         "pendiente_cobro_total": float(pend_total), "meses_factor": meses_factor,
         "ingresos_por_banco": ingresos_por_banco,
-        "total_impuestos_planillas": float(facts.total_impuestos),
+        "total_impuestos_planillas": _total_impuestos,
     }
     _cache_set(cache_key, result, ttl=TTL_DASHBOARD)
     return result
