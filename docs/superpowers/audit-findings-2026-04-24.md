@@ -2,7 +2,7 @@
 
 ## Resumen ejecutivo
 
-Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana. **49 checkpoints verificados, 5 fallos ALTO, 3 observaciones MEDIO.**
+Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana + Integridad Contable + SQL/N+1. **68 checkpoints verificados, 5 fallos ALTO, 4 fallos MEDIO.**
 
 **Task 1 & 2 (sesiones previas):** Todos los fixes críticos de sesiones previas (sesión 7, 15, 17) están presentes. Tres mutaciones omiten `cache_invalidar("dashboard_clientes:")`: `restaurar_eliminado`, `create_retiro`, `delete_retiro`.
 
@@ -409,6 +409,94 @@ Recomendación: actualizar el comment en crud.py:408,444 para reflejar la fórmu
 
 ---
 
+---
+
+## Task 5 — SQL Queries & N+1 Audit (2026-04-24)
+
+### Resumen
+
+**[SQL/N+1]** `get_cobro`, `get_afiliados_filter_options`, portal reports, connection pool — verificados ✓. Un fallo MEDIO: `ix_token_blacklist_expires_at` no está en `_ensure_indexes()`.
+
+| Área | Resultado |
+|---|---|
+| get_cobro: filtros SQL (empresa/cliente/doc/estado_srv) | ✅ PASS |
+| get_cobro: load_only() columnas específicas | ✅ PASS |
+| get_cobro: notin_() para estado_srv (B-tree indexable) | ✅ PASS |
+| get_cobro: par (anio, mes) validado juntos en Python | ✅ PASS |
+| filter_options: 1 query + set comprehensions | ✅ PASS |
+| filter_options: resultado cacheado (TTL 120s) | ✅ PASS |
+| Portal reportes: facturas en 1 batch query | ✅ PASS |
+| Portal reportes: facturas_by_doc construido fuera del loop | ✅ PASS |
+| Portal reportes: loop usa .get(a.doc, []) sin per-afiliado query | ✅ PASS |
+| Pool: pool_size + max_overflow ≤ 25 | ✅ PASS |
+| Pool: fórmula dinámica según WEB_CONCURRENCY | ✅ PASS |
+| Pool: 1 worker → pool=5 + overflow=10 = 15 ≤ 25 | ✅ PASS |
+| Índice ix_factura_estado_periodo | ✅ PASS |
+| Índice ix_afiliado_cobro_cobertura (partial, activo=TRUE) | ✅ PASS |
+| Índice ix_actividad_fecha_desc | ✅ PASS |
+| Índice ix_token_blacklist_expires_at | ❌ MEDIO |
+
+---
+
+### CRÍTICO
+
+_Ninguno_
+
+---
+
+### ALTO
+
+_Ninguno_
+
+---
+
+### MEDIO
+
+**[SQL/N+1] database.py — `ix_token_blacklist_expires_at` no está en `_ensure_indexes()`**
+
+El Changelog sesión 5 registra: `CREATE INDEX ix_token_blacklist_expires_at` creado manualmente en producción via Railway. Sin embargo, este índice **no aparece en `_ensure_indexes()`** en `database.py`. El bloque de índices simples (líneas 125-151) y el bloque de índices parciales PostgreSQL (líneas 153-169) no contienen ninguna referencia a `token_blacklist`.
+
+Consecuencia: en un deploy fresh (nueva BD o Railway reset), el índice no se crea automáticamente. El job `_cleanup_expired_tokens()` que hace `DELETE FROM token_blacklist WHERE expires_at < NOW()` realizaría un Seq Scan sobre una tabla que puede crecer ilimitadamente sin limpieza eficiente.
+
+Fix `database.py`: agregar en el bloque `indexes` de `_ensure_indexes()`:
+```python
+("ix_token_blacklist_expires_at", "token_blacklist", "expires_at"),
+```
+
+---
+
+### OK (verificado sin issues)
+
+**[SQL/N+1]** `get_cobro` filtros empresa/cliente/doc aplicados en SQL con `.filter()` antes de `.all()` — `crud.py:1296-1298` ✓
+
+**[SQL/N+1]** `get_cobro` usa `load_only()` con 14 columnas específicas (id, nombre, doc, tipo_doc, empresa, cliente_txt, estado_srv, subtipo, fecha_afiliacion, fecha_ingreso, ibc, servicios, arl, novedades) — no SELECT * — `crud.py:1280-1295` ✓
+
+**[SQL/N+1]** `get_cobro` usa `notin_(["RETIRADO"])` para estado_srv — B-tree indexable, no ilike — `crud.py:1278` ✓
+
+**[SQL/N+1]** `get_cobro` valida par (anio, mes) juntos: `_pares_validos = {(str(y), MESES[m-1]) for y, m in meses_ventana}` + filtro Python `if (f.anio, f.mes) in _pares_validos` — fix sesión 7 presente — `crud.py:1262-1269` ✓
+
+**[SQL/N+1]** `get_afiliados_filter_options` ejecuta UNA sola query DISTINCT con 6 columnas + set comprehensions en Python — no 6 queries separadas — `crud.py:181-192` ✓
+
+**[SQL/N+1]** `get_afiliados_filter_options` cacheado con TTL=120s en `afiliados:filtros` — `crud.py:192` ✓
+
+**[SQL/N+1]** Portal `/reportes` carga facturas en UN batch `WHERE doc IN (docs_afil)` ANTES del loop — `portal.py:744-755` ✓
+
+**[SQL/N+1]** `facturas_by_doc` dict construido FUERA del loop de afiliados — `portal.py:753-755` ✓
+
+**[SQL/N+1]** Loop afiliados usa `facturas_by_doc.get(a.doc, [])` — 0 queries por iteración — `portal.py:764` ✓
+
+**[SQL/N+1]** Pool fórmula: `_workers=1 → _max_per_worker=15, pool_size=5, max_overflow=10, total=15 ≤ 25` — `database.py:20-23` ✓
+
+**[SQL/N+1]** Procfile configura `--workers 1` confirmando la fórmula — `backend/Procfile:1` ✓
+
+**[SQL/N+1]** `ix_factura_estado_periodo` en `_ensure_indexes()` sobre `(estado, anio, mes)` — `database.py:144` ✓
+
+**[SQL/N+1]** `ix_afiliado_cobro_cobertura` partial index `WHERE activo = TRUE` sobre `(activo, estado_srv, empresa, cliente_txt)` — `database.py:155-157` ✓
+
+**[SQL/N+1]** `ix_actividad_fecha_desc` partial index sobre `fecha DESC` — `database.py:159` ✓
+
+---
+
 ## Detalle completo de checkpoints
 
 | # | Área | Checkpoint | Estado | Ref |
@@ -465,3 +553,19 @@ Recomendación: actualizar el comment en crud.py:408,444 para reflejar la fórmu
 | 50 | SS Logic | Cobro VENCIDO = dia < hoy AND no cobrado | ✅ PASS | crud.py:1341-1345 |
 | 51 | SS Logic | Cobro PROXIMO = próximos 5 días | ❌ MEDIO | crud.py:1347 — solo día+1 |
 | 52 | SS Logic | Cobro pair (anio,mes) validados juntos | ✅ PASS | crud.py:1262-1269 — fix s7 OK |
+| 53 | SQL/N+1 | get_cobro: filtros empresa/cliente/doc en SQL | ✅ PASS | crud.py:1296-1298 |
+| 54 | SQL/N+1 | get_cobro: load_only() con 14 columnas específicas | ✅ PASS | crud.py:1280-1295 |
+| 55 | SQL/N+1 | get_cobro: notin_() para estado_srv (B-tree indexable) | ✅ PASS | crud.py:1278 |
+| 56 | SQL/N+1 | get_cobro: par (anio,mes) validado junto en Python | ✅ PASS | crud.py:1262-1269 |
+| 57 | SQL/N+1 | filter_options: 1 query DISTINCT + set comprehensions | ✅ PASS | crud.py:181-192 |
+| 58 | SQL/N+1 | filter_options: TTL cacheado (120s) | ✅ PASS | crud.py:192 |
+| 59 | SQL/N+1 | Portal reportes: batch query WHERE doc IN (...) | ✅ PASS | portal.py:744-755 |
+| 60 | SQL/N+1 | Portal reportes: facturas_by_doc fuera del loop | ✅ PASS | portal.py:753-755 |
+| 61 | SQL/N+1 | Portal reportes: loop usa .get(a.doc, []) | ✅ PASS | portal.py:764 |
+| 62 | SQL/N+1 | Pool: pool_size + max_overflow ≤ 25 | ✅ PASS | database.py:20-23 — 15 total |
+| 63 | SQL/N+1 | Pool: fórmula dinámica WEB_CONCURRENCY | ✅ PASS | database.py:20-23 |
+| 64 | SQL/N+1 | Pool: 1 worker → pool=5 + overflow=10 = 15 | ✅ PASS | Procfile + database.py |
+| 65 | SQL/N+1 | Índice ix_factura_estado_periodo en _ensure_indexes() | ✅ PASS | database.py:144 |
+| 66 | SQL/N+1 | Índice ix_afiliado_cobro_cobertura partial (activo=TRUE) | ✅ PASS | database.py:155-157 |
+| 67 | SQL/N+1 | Índice ix_actividad_fecha_desc en _ensure_indexes() | ✅ PASS | database.py:159 |
+| 68 | SQL/N+1 | Índice ix_token_blacklist_expires_at en _ensure_indexes() | ❌ MEDIO | database.py — ausente |
