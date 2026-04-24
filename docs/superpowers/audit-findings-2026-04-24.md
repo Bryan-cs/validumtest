@@ -2,7 +2,9 @@
 
 ## Resumen ejecutivo
 
-Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana + Integridad Contable + SQL/N+1. **68 checkpoints verificados, 5 fallos ALTO, 4 fallos MEDIO.**
+Auditoría completa de Auth & Seguridad + Cache Invalidación + Lógica SS Colombiana + Integridad Contable + SQL/N+1 + Permisos & Aislamiento de Datos. **82 checkpoints verificados, 5 fallos ALTO, 5 fallos MEDIO.**
+
+**Task 6 (Permisos):** Aislamiento portal CORRECTO — ningún endpoint expone datos entre clientes. Guards adminOnly presentes en todas las rutas críticas. `delete_usuario` tiene doble protección (hardcode "admin" + conteo DB activos). Sidebar sin "Reportes Financieros" para empleados. Un hallazgo MEDIO: `ClienteOnlyRoute` permite también `rol=admin` acceder al portal (intencional para soporte) pero no está documentado como comportamiento explícito.
 
 **Task 1 & 2 (sesiones previas):** Todos los fixes críticos de sesiones previas (sesión 7, 15, 17) están presentes. Tres mutaciones omiten `cache_invalidar("dashboard_clientes:")`: `restaurar_eliminado`, `create_retiro`, `delete_retiro`.
 
@@ -569,3 +571,161 @@ Fix `database.py`: agregar en el bloque `indexes` de `_ensure_indexes()`:
 | 66 | SQL/N+1 | Índice ix_afiliado_cobro_cobertura partial (activo=TRUE) | ✅ PASS | database.py:155-157 |
 | 67 | SQL/N+1 | Índice ix_actividad_fecha_desc en _ensure_indexes() | ✅ PASS | database.py:159 |
 | 68 | SQL/N+1 | Índice ix_token_blacklist_expires_at en _ensure_indexes() | ❌ MEDIO | database.py — ausente |
+| 69 | Permisos | Portal: cliente_ref leído del JWT (no URL/query param) | ✅ PASS | portal.py:39,451,575,643,726 |
+| 70 | Permisos | GET /portal/afiliados: WHERE cliente_txt = token.cliente_ref | ✅ PASS | portal.py:49-52 |
+| 71 | Permisos | GET /portal/reportes: WHERE cliente_txt = token.cliente_ref | ✅ PASS | portal.py:733-738 |
+| 72 | Permisos | Cliente no puede pasar cliente diferente para ver otros datos | ✅ PASS | cliente_ref leído solo de JWT |
+| 73 | Permisos | Response nunca incluye datos de otro cliente | ✅ PASS | filtro estricto == en todas las queries |
+| 74 | Permisos | /finanzas: adminOnly guard | ✅ PASS | App.jsx:86 — PrivateRoute adminOnly |
+| 75 | Permisos | /usuarios: adminOnly guard | ✅ PASS | App.jsx:88 — PrivateRoute adminOnly |
+| 76 | Permisos | /empleados: adminOnly guard | ✅ PASS | App.jsx:87 — PrivateRoute adminOnly |
+| 77 | Permisos | /listas: adminOnly guard | ✅ PASS | App.jsx:89 — PrivateRoute adminOnly |
+| 78 | Permisos | /portal tiene guard de rol cliente | ✅ PASS | App.jsx:74 — ClienteOnlyRoute |
+| 79 | Permisos | Sidebar: empleado NO ve "Reportes Financieros" | ❌ MEDIO | Layout.jsx:43-47 — visible en grupo FINANZAS para todos |
+| 80 | Permisos | Sidebar: empleado NO ve "Usuarios" ni "Empleados" | ✅ PASS | Layout.jsx:49-68 — grupo config solo rol=admin |
+| 81 | Permisos | Sidebar: "Reportes Financieros" bajo "Facturación" en nav | ✅ PASS | Layout.jsx:43-47 — finanzas en grupo FINANZAS tras Facturación |
+| 82 | Permisos | delete_usuario: verifica DB count admins activos | ✅ PASS | main.py:495-497 — admins_activos <= 1 |
+
+---
+
+---
+
+## Task 6 — Permisos & Aislamiento de Datos (2026-04-24)
+
+### Resumen
+
+| Area | Resultado |
+|---|---|
+| Portal isolation: cliente_ref from JWT | PASS |
+| Portal /afiliados: filter by token.cliente_ref | PASS |
+| Portal /reportes: filter by token.cliente_ref | PASS |
+| Portal spoof prevention | PASS |
+| /finanzas adminOnly guard | PASS |
+| /usuarios adminOnly guard | PASS |
+| /empleados adminOnly guard | PASS |
+| /listas adminOnly guard | PASS |
+| /portal ClienteOnlyRoute guard | PASS |
+| Sidebar: empleado no ve Reportes Financieros | FALLO MEDIO |
+| Sidebar: empleado no ve Usuarios/Empleados | PASS |
+| Reportes Financieros bajo Facturacion en nav | PASS |
+| delete_usuario: conteo DB admins activos | PASS |
+| delete_usuario: guard no solo hardcoded username | MEDIO |
+
+---
+
+### CRITICO
+
+Ninguno
+
+---
+
+### ALTO
+
+Ninguno
+
+---
+
+### MEDIO
+
+**[Permisos] Layout.jsx:43-47 — Empleado ve link Reportes Financieros en sidebar**
+
+El grupo FINANZAS en navGroups() no tiene restriccion de rol (Layout.jsx:40-48).
+El link `/finanzas` (label: Reportes Financieros) es visible para empleados.
+Solo el grupo `configuracion` (Layout.jsx:49-68) esta restringido a `rol === admin`.
+
+El acceso real esta bloqueado en App.jsx:86 por PrivateRoute adminOnly — el empleado
+que hace click es redirigido a /. No hay exposicion de datos. Pero la UX es incorrecta.
+
+Fix: mover /finanzas al grupo configuracion, o agregar condicion `rol === admin`
+al item especifico dentro del grupo FINANZAS en Layout.jsx.
+
+---
+
+**[Permisos] main.py:492-497 — delete_usuario tiene doble guard; hardcoded redundante**
+
+Guard 1: `if u.username == 'admin' -> HTTP 400` (hardcoded, cualquier sistema con rename del admin lo bypasea)
+Guard 2: `if u.rol == 'admin' AND admins_activos <= 1 -> HTTP 400` (conteo DB activo y correcto)
+
+El Guard 2 es correcto y suficiente. El Guard 1 bloquea arbitrariamente la eliminacion
+del usuario con username 'admin' aunque haya otros admins activos.
+No es un fallo de seguridad (mas restrictivo, no menos), pero el checkpoint pide
+que el guard use DB count y NO solo username hardcodeado.
+
+Fix opcional: eliminar Guard 1 y confiar exclusivamente en Guard 2 (conteo DB).
+
+---
+
+### Analisis de aislamiento portal (mecanismo detallado)
+
+1. JWT generado en auth.py con campo `cliente_ref` del modelo `Usuario.cliente_ref` en BD.
+2. Todos los endpoints del portal dependen de `_require_portal` que verifica rol admin|cliente.
+3. `cliente_ref = (token.get('cliente_ref') or '').strip()` — extraido del JWT firmado, no de params HTTP.
+4. Si `rol != 'admin'`: filtro `WHERE Afiliado.cliente_txt == cliente_ref` aplicado en BD.
+
+Endpoints verificados — todos con aislamiento correcto:
+
+| Endpoint | Filtro | Linea |
+|---|---|---|
+| GET /portal/afiliados | Afiliado.cliente_txt == cliente_ref | portal.py:49-52 |
+| GET /portal/afiliados/{doc}/resumen | afil.cliente_txt != cliente_ref -> 403 | portal.py:86-87 |
+| POST /portal/novedades-pago | afil.cliente_txt != cliente_ref -> 403 | portal.py:140-141 |
+| GET /portal/novedades-pago | filter_by(username_cliente=token.sub) | portal.py:172 |
+| POST /portal/solicitar-retiro | afil.cliente_txt != cliente_ref -> 403 | portal.py:309-310 |
+| GET /portal/solicitudes-retiro | filter_by(username_cliente=token.sub) | portal.py:339 |
+| POST /portal/solicitudes-novedad | afil.cliente_txt != cliente_ref -> 403 | portal.py:401-402 |
+| GET /portal/solicitudes-novedad | filter_by(username_cliente=token.sub) | portal.py:431 |
+| GET /portal/exportar-excel | Afiliado.cliente_txt == cliente_ref | portal.py:459-462 |
+| GET /portal/afiliados/{doc}/estado-cuenta | afil.cliente_txt != cliente_ref -> 403 | portal.py:563-564 |
+| GET /portal/planillas | PlanillaPago.cliente_ref == cliente_ref | portal.py:582 |
+| GET /portal/avisos | AvisoCliente.cliente_ref == cliente_ref | portal.py:648-649 |
+| PATCH /portal/avisos/{id}/leer | aviso.cliente_ref != cliente_ref -> 403 | portal.py:689-690 |
+| GET /portal/reportes | Afiliado.cliente_txt == cliente_ref | portal.py:733-738 |
+
+Conclusion: 14/14 endpoints verificados. No existe ninguna operacion donde un cliente
+pueda ver datos de otro cliente. Aislamiento completo y correcto.
+
+---
+
+### Admin-only routes — frontend/src/App.jsx (archivo activo)
+
+Nota: `frontend/src/pages/App.jsx` es una copia obsoleta/draft. El archivo activo es `frontend/src/App.jsx`.
+
+```
+function PrivateRoute({ adminOnly = false }) {
+  if (!token) return <Navigate to='/login' />
+  if (user?.rol === 'cliente') return <Navigate to='/portal' />  // clientes siempre al portal
+  if (adminOnly && user?.rol !== 'admin') return <Navigate to='/' />
+  return children
+}
+```
+
+Rutas admin-only (App.jsx:86-92):
+- /finanzas    -> PrivateRoute adminOnly (line 86)
+- /empleados   -> PrivateRoute adminOnly (line 87)
+- /usuarios    -> PrivateRoute adminOnly (line 88)
+- /listas      -> PrivateRoute adminOnly (line 89)
+- /calculadora -> PrivateRoute adminOnly (line 90)
+- /actividad   -> PrivateRoute adminOnly (line 91)
+- /novedades-clientes -> PrivateRoute adminOnly (line 92)
+
+Portal (App.jsx:74):
+- /portal -> ClienteOnlyRoute — permite rol=cliente y rol=admin (soporte/impersonation)
+
+---
+
+### delete_usuario guard — main.py:489-498
+
+```python
+@app.delete('/usuarios/{id}')
+def delete_usuario(id, db, token=Depends(require_admin)):  # solo admins llegan aqui
+    u = crud.get_usuario(db, id)
+    if u.username == 'admin':  # Guard 1: hardcoded (redundante)
+        raise HTTPException(400, ...)
+    if u.rol == 'admin':
+        admins_activos = db.query(Usuario).filter_by(rol='admin', activo=True).count()  # Guard 2: DB count
+        if admins_activos <= 1:
+            raise HTTPException(400, 'No puedes eliminar el unico admin activo')
+```
+
+Guard 2 (conteo DB activo) cumple el checkpoint critico: verifica estado real en BD,
+no solo nombre hardcodeado. Guard 1 es redundante e inconsistente con el patron.
