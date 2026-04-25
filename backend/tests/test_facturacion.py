@@ -98,7 +98,7 @@ def test_planilla_calculo(client, admin_token):
 
     # Obtener config para saber el IBC global
     cfg = client.get("/config", headers=h).json()
-    ibc = cfg.get("ibc_global", 1950905)
+    ibc = cfg.get("ibc_global", 1750905)
 
     # Generar factura para este afiliado — el frontend calcula planilla
     # pero podemos verificar los servicios vía cobro

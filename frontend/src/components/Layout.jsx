@@ -5,6 +5,7 @@ import useAuthStore from '../hooks/useAuth';
 import useInactivity from '../hooks/useInactivity';
 import api from '../utils/api';
 import { playBeep } from '../utils/audio';
+import WelcomeModal from './WelcomeModal';
 
 
 const SIDEBAR_MIN = 48;
@@ -77,6 +78,7 @@ export default function Layout() {
   const [dark, setDark] = useState(() => localStorage.getItem('theme') === 'dark');
   const [palette, setPalette] = useState(() => localStorage.getItem('palette') || 'indigo');
   const [showPalette, setShowPalette] = useState(false);
+  const [showWelcome, setShowWelcome] = useState(false);
   const dragging = useRef(false);
 
   useEffect(() => {
@@ -88,6 +90,20 @@ export default function Layout() {
     document.documentElement.setAttribute('data-palette', palette);
     localStorage.setItem('palette', palette);
   }, [palette]);
+
+  // WelcomeModal — una vez por sesión por usuario (no para clientes)
+  useEffect(() => {
+    if (!user?.username || user?.rol === 'cliente') return;
+    const key = `bbc_welcome_${user.username}`;
+    if (!sessionStorage.getItem(key)) {
+      setShowWelcome(true);
+    }
+  }, [user?.username, user?.rol]);
+
+  const closeWelcome = () => {
+    sessionStorage.setItem(`bbc_welcome_${user.username}`, '1');
+    setShowWelcome(false);
+  };
 
   const startX = useRef(0);
   const startW = useRef(0);
@@ -160,7 +176,11 @@ export default function Layout() {
     });
   }, []);
 
-  const handleLogout = useCallback(async () => { await logout(); navigate('/login'); }, [logout, navigate]);
+  const handleLogout = useCallback(async () => {
+    if (user?.username) sessionStorage.removeItem(`bbc_welcome_${user.username}`);
+    await logout();
+    navigate('/login');
+  }, [logout, navigate, user?.username]);
   const { showWarning, extender } = useInactivity(handleLogout);
   const groups = navGroups(user?.rol);
 
@@ -452,6 +472,8 @@ export default function Layout() {
       <main style={{ flex: 1, overflowY: 'auto', background: 'var(--c-bg)', padding: 24, minWidth: 0 }}>
         <Outlet />
       </main>
+
+      {showWelcome && <WelcomeModal user={user} onClose={closeWelcome} />}
 
       {/* Modal inactividad — aviso 2 min antes de cerrar sesión */}
       {showWarning && (

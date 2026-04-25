@@ -517,8 +517,6 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [seleccionadas, setSeleccionadas] = useState(new Set());
   const [modalBulkPagar, setModalBulkPagar] = useState(false);
   const [bancoBulk, setBancoBulk] = useState('');
-  // const [modalPila, setModalPila] = useState(null); // TODO: PILA — pendiente fixes, no subir a prod
-
   useEffect(() => {
     if (prefillAfiliado) { setPrefill(prefillAfiliado); setModalNueva(true); }
   }, [prefillAfiliado]);
@@ -715,8 +713,12 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const selPagadas    = rowsFiltradas.filter(f => f.estado === 'pagado'    && seleccionadas.has(f.id));
 
   const esPagada = f => f.estado === 'pagado' || f.estado === 'planilla_pagada';
-  const totIng  = rowsFiltradas.filter(esPagada).reduce((s,f)=>s+(f.ingresos||0),0) + totIngAd;
-  const totUtil = rowsFiltradas.filter(esPagada).reduce((s,f)=>s+(f.utilidad||0),0) + totIngAd;
+  // Si hay filtro de estado activo, las stats suman sobre todo rowsFiltradas (el usuario eligió qué ver)
+  // Sin filtro de estado → solo facturas pagadas (comportamiento original)
+  const hayFiltroEstado = !!estadoB;
+  const baseIng  = hayFiltroEstado ? rowsFiltradas : rowsFiltradas.filter(esPagada);
+  const totIng  = baseIng.reduce((s,f)=>s+(f.ingresos||0),0) + totIngAd;
+  const totUtil = baseIng.reduce((s,f)=>s+(f.utilidad||0),0) + totIngAd;
   const totPend = rowsFiltradas.filter(f=>f.estado==='pendiente').reduce((s,f)=>s+(f.ingresos||0),0);
 
   return (
@@ -947,9 +949,6 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       }}>💬 WhatsApp</Btn>
                       <Btn size="sm" variant="secondary"
                         onClick={(e)=>{e.stopPropagation();dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.nombre_afiliado?.replace(/ /g,'_')}_${f.codigo}.pdf`);}}>📄 PDF</Btn>
-                      {/* TODO: PILA — pendiente fixes, no subir a prod */}
-                      {/* <Btn size="sm" variant="secondary"
-                        onClick={(e)=>{e.stopPropagation();setModalPila({ doc: f.doc, nombre: f.nombre_afiliado, mes: f.mes, anio: f.anio, empresa: ai.empresa || '' });}}>PILA</Btn> */}
                       <Btn size="sm" variant="danger"
                         onClick={(e)=>{ e.stopPropagation(); if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
                     </div>
@@ -1070,9 +1069,6 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         </div>
       </Modal>
 
-      {/* TODO: PILA — pendiente fixes, no subir a prod */}
-      {/* {modalPila && <ModalPilaAfiliado datos={modalPila} onClose={()=>setModalPila(null)} listas={listas} />} */}
-
       {/* Mini modal: registrar pago */}
       <Modal open={!!modalPagar} onClose={()=>{ setModalPagar(null); setBancoPago(''); }} width={420} title="✓ Registrar pago">
         {modalPagar && (
@@ -1104,104 +1100,3 @@ const sel = { padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:7,f
 const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
 const inp = { width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface };
 
-// TODO: PILA — pendiente fixes, no subir a prod
-// const MESES_PILA = { 'Enero':1,'Febrero':2,'Marzo':3,'Abril':4,'Mayo':5,'Junio':6,
-//   'Julio':7,'Agosto':8,'Septiembre':9,'Octubre':10,'Noviembre':11,'Diciembre':12 };
-// const ARL_PILA = ['POSITIVA','SURA','AXA COLPATRIA','LIBERTY','BOLIVAR','EQUIDAD','MAPFRE','QBE'];
-
-/* TODO: PILA — ModalPilaAfiliado comentado hasta fixes
-function ModalPilaAfiliado({ datos, onClose }) {
-  // datos = { doc, nombre, mes (texto), anio (texto), empresa }
-  const [nit, setNit] = useState('');
-  const [dv, setDv] = useState('0');
-  const [razonSocial, setRazonSocial] = useState(datos.empresa || '');
-  const [arl, setArl] = useState('POSITIVA');
-  const [generando, setGenerando] = useState(false);
-
-  const mesNum = MESES_PILA[datos.mes] || new Date().getMonth() + 1;
-
-  const handleGenerar = async () => {
-    if (!nit) { toast.error('Ingresa el NIT del empleador'); return; }
-    if (!razonSocial) { toast.error('Ingresa la razón social'); return; }
-    setGenerando(true);
-    try {
-      const res = await api.get('/reportes/pila', {
-        params: {
-          doc: datos.doc,
-          nit: nit.replace(/\D/g, ''),
-          razon_social: razonSocial,
-          dv,
-          mes: mesNum,
-          anio: parseInt(datos.anio),
-          arl,
-        },
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }));
-      const a = document.createElement('a');
-      a.href = url;
-      const slug = (datos.nombre || datos.doc).replace(/\s+/g, '_').toUpperCase().slice(0, 20);
-      a.download = `PILA_${slug}_${datos.anio}${String(mesNum).padStart(2,'0')}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Archivo PILA generado — verificar antes de envío oficial');
-      onClose();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Error al generar PILA');
-    }
-    setGenerando(false);
-  };
-
-  const i2 = { ...inp, fontSize: 13 };
-
-  return (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-      <div style={{ background:C.surface,borderRadius:14,padding:26,width:440,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
-        <h3 style={{ margin:'0 0 4px',color:C.primary,fontSize:15 }}>Generar PILA — {datos.nombre}</h3>
-        <p style={{ margin:'0 0 16px',fontSize:12,color:C.text2 }}>
-          Período: <strong>{datos.mes} {datos.anio}</strong> · Doc: {datos.doc}
-        </p>
-
-        <div style={{ display:'grid',gridTemplateColumns:'2fr 1fr',gap:10,marginBottom:12 }}>
-          <div>
-            <label style={lbl}>NIT del empleador *</label>
-            <input style={i2} type="text" value={nit} maxLength={9}
-              onChange={e => setNit(e.target.value.replace(/\D/g,''))}
-              placeholder="901760008" />
-          </div>
-          <div>
-            <label style={lbl}>D.V.</label>
-            <input style={i2} type="text" value={dv} maxLength={1}
-              onChange={e => setDv(e.target.value.replace(/\D/g,''))} />
-          </div>
-        </div>
-
-        <div style={{ marginBottom:12 }}>
-          <label style={lbl}>Razón social del empleador *</label>
-          <input style={i2} type="text" value={razonSocial}
-            onChange={e => setRazonSocial(e.target.value)}
-            placeholder={datos.empresa || 'Nombre exacto de la empresa'} />
-        </div>
-
-        <div style={{ marginBottom:18 }}>
-          <label style={lbl}>ARL del empleador</label>
-          <select style={i2} value={arl} onChange={e => setArl(e.target.value)}>
-            {ARL_PILA.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-
-        <div style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',marginBottom:16,fontSize:11,color:C.text2 }}>
-          ⚠️ Borrador — validar montos y códigos antes de envío al sistema PILA oficial.
-        </div>
-
-        <div style={{ display:'flex',gap:10,justifyContent:'flex-end' }}>
-          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn onClick={handleGenerar} disabled={generando || !nit || !razonSocial}>
-            {generando ? 'Generando...' : 'Descargar PILA .txt'}
-          </Btn>
-        </div>
-      </div>
-    </div>
-  );
-}
-*/

@@ -822,7 +822,7 @@ def get_dashboard(db, anio="", mes=""):
         func.sum(case((period_ok, 1), else_=0)).label("n"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.ingresos), else_=0)), 0).label("ingresos"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.utilidad), else_=0)), 0).label("utilidad"),
-        func.sum(case((and_(planilla_ok, period_ok), 1), else_=0)).label("n_planillas"),
+        func.coalesce(func.sum(case((and_(planilla_ok, period_ok), models.Factura.costo_adm), else_=0)), 0).label("sum_cargo_adm"),
         func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos), else_=0)), 0).label("pendiente"),
         func.sum(case((and_(pending_ok, period_ok), 1), else_=0)).label("n_pend"),
         # pend_total: saldo histórico cobrable — excluye afiliados eliminados
@@ -867,15 +867,8 @@ def get_dashboard(db, anio="", mes=""):
 
     pend_total = float(facts.pend_total)
 
-    # total_impuestos: siempre n_planillas × cargo_adicional del config
-    # (costo_adm fue deprecado — ya no se escribe en facturas nuevas)
-    _n_planillas = int(facts.n_planillas or 0)
-    if _n_planillas > 0:
-        _cfg = db.query(models.Config.cargo_adicional).first()
-        _cargo = float(_cfg.cargo_adicional) if _cfg and _cfg.cargo_adicional else 2200.0
-        _total_impuestos = _n_planillas * _cargo
-    else:
-        _total_impuestos = 0.0
+    # total_impuestos: SUM real de costo_adm por factura (cada factura graba su cargo al crearla)
+    _total_impuestos = float(facts.sum_cargo_adm or 0)
 
     # Factor de meses para las etiquetas
     meses_factor = 1 if (mes or not anio) else 12

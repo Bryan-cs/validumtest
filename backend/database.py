@@ -192,7 +192,7 @@ def _seed(db):
                 "ARL 4":0.04350,"ARL 5":0.06960,
                 "FSP":0.0,"SENA":0.0,"ICBF":0.0}
         db.add(models.Config(
-            ibc_global=1_950_905,
+            ibc_global=1_750_905,
             porcentajes=json.dumps(pcts)
         ))
 
