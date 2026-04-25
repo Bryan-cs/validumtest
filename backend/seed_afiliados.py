@@ -78,7 +78,7 @@ while insertados < 500 and intentos < 5000:
         subtipo        = random.choice(SUBTIPOS),
         cliente_txt    = random.choice(CLIENTES),
         servicios      = json.dumps(srvs),
-        ibc            = random.choice([1_950_905, 2_000_000, 2_500_000, 3_000_000, None]),
+        ibc            = random.choice([1_750_905, 2_000_000, 2_500_000, 3_000_000, None]),
         fecha_afiliacion = rand_fecha(),
         fecha_ingreso    = rand_fecha(),
         tel            = f"3{random.randint(100_000_000, 299_999_999)}",
