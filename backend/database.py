@@ -142,6 +142,7 @@ def _ensure_indexes():
         ("ix_nomina_mensual_emp_mes", "nomina_mensual",  "empleado_id, mes, anio"),
         # Dashboard: filtra (estado, anio, mes) — evita Seq Scan en facturas
         ("ix_factura_estado_periodo", "facturas",        "estado, anio, mes"),
+        ("ix_token_blacklist_expires_at", "token_blacklist", "expires_at"),
     ]
     with engine.begin() as conn:
         for idx_name, table, cols in indexes:

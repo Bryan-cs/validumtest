@@ -159,7 +159,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         conceptos_detalle: conceptos,
       });
     },
-    onSuccess: () => { toast.success('Factura guardada'); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['cobro']}); onClose(); },
+    onSuccess: () => { toast.success('Factura guardada'); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['cobro']}); qc.invalidateQueries({queryKey:['dashboard']}); qc.invalidateQueries({queryKey:['finanzas-clientes']}); qc.invalidateQueries({queryKey:['finanzas-cliente']}); onClose(); },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||e.message||'Error')); },
   });
 
@@ -297,7 +297,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       servicios_detalle: planillaFinal.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
       conceptos_detalle: conceptos,
     }),
-    onSuccess: (res) => { toast.success('Factura actualizada'); qc.setQueriesData({ queryKey: ['facturas'] }, prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); onClose(); },
+    onSuccess: () => { toast.success('Factura actualizada'); qc.invalidateQueries({ queryKey: ['facturas'] }); qc.invalidateQueries({ queryKey: ['finanzas-clientes'] }); qc.invalidateQueries({ queryKey: ['finanzas-cliente'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['cobro'] }); onClose(); },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
@@ -580,7 +580,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
   const [modalPagar, setModalPagar] = useState(null);
   const [bancoPago, setBancoPago] = useState('');
-  const [montoPago, setMontoPago] = useState('');
+
 
   // Ingresos adicionales
   const MESES_NUM = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -644,19 +644,28 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       const estado = res.data?.estado;
       toast.success(estado === 'pagado' ? 'Factura marcada como pagada' : 'Abono registrado — factura sigue pendiente hasta pago total');
       qc.invalidateQueries({ queryKey: ['facturas'] });
-      setModalPagar(null); setBancoPago(''); setMontoPago('');
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
+      setModalPagar(null); setBancoPago('');
     },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al registrar pago'),
   });
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/facturas/${id}`),
-    onSuccess: () => { toast.success('Factura eliminada'); qc.invalidateQueries({ queryKey: ['facturas'] }); },
+    onSuccess: () => { toast.success('Factura eliminada'); qc.invalidateQueries({ queryKey: ['facturas'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['finanzas-clientes'] }); qc.invalidateQueries({ queryKey: ['finanzas-cliente'] }); },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al eliminar factura'),
   });
 
   const planillaPagada = useMutation({
     mutationFn: id => api.patch(`/facturas/${id}/planilla-pagada`),
-    onSuccess: () => { toast.success('Planilla marcada como pagada'); qc.invalidateQueries({ queryKey: ['facturas'] }); },
+    onSuccess: () => {
+      toast.success('Planilla marcada como pagada');
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
+    },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar planilla'),
   });
 
@@ -671,6 +680,9 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       if (ok) toast.success(`${ok} factura(s) marcada(s) como pagada`);
       if (err) toast.error(`${err} factura(s) no se pudieron pagar`);
       qc.invalidateQueries({ queryKey: ['facturas'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
       setSeleccionadas(new Set()); setModalBulkPagar(false); setBancoBulk('');
     },
   });
@@ -686,6 +698,9 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       if (ok) toast.success(`${ok} factura(s) marcada(s) como planilla pagada`);
       if (err) toast.error(`${err} factura(s) no se pudieron actualizar`);
       qc.invalidateQueries({ queryKey: ['facturas'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
       setSeleccionadas(new Set());
     },
   });
@@ -896,7 +911,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       color: f.estado==='planilla_pagada' ? '#166534' : f.estado==='pagado' ? C.green : C.amber,
                       borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>
                       {f.estado==='planilla_pagada' ? '📋 Planilla Pagada' : f.estado==='pagado' ? 'Pagada' :
-                        (f.monto_pagado > 0 ? `Pendiente (abonado ${fmt(f.monto_pagado)})` : 'Pendiente')}
+                        'Pendiente'}
                     </span>
                   </td>
                   <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
@@ -905,7 +920,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   <td style={tdc}>
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
                       <Btn size="sm" variant="secondary" onClick={(e)=>{e.stopPropagation();setModalEditar(f);}}>✏️ Editar</Btn>
-                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setMontoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
+                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
                       {f.estado==='pagado' && <Btn size="sm" variant="secondary" disabled={planillaPagada.isPending} onClick={(e)=>{e.stopPropagation();planillaPagada.mutate(f.id);}}>📋 Planilla Pagada</Btn>}
                       <Btn size="sm" variant="secondary" onClick={(e)=>{
                         e.stopPropagation();
@@ -1058,45 +1073,27 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       {/* TODO: PILA — pendiente fixes, no subir a prod */}
       {/* {modalPila && <ModalPilaAfiliado datos={modalPila} onClose={()=>setModalPila(null)} listas={listas} />} */}
 
-      {/* Mini modal: registrar pago (total o abono parcial) */}
-      <Modal open={!!modalPagar} onClose={()=>{ setModalPagar(null); setMontoPago(''); setBancoPago(''); }} width={420} title="✓ Registrar pago">
-        {modalPagar && (() => {
-          const saldo = modalPagar.ingresos - (modalPagar.monto_pagado || 0);
-          const montoNum = montoPago === '' ? null : parseFloat(montoPago);
-          const esCompleto = montoNum === null || montoNum >= saldo;
-          return (
+      {/* Mini modal: registrar pago */}
+      <Modal open={!!modalPagar} onClose={()=>{ setModalPagar(null); setBancoPago(''); }} width={420} title="✓ Registrar pago">
+        {modalPagar && (
           <div>
-            <p style={{ margin:'0 0 6px', fontSize:13, color:C.text2 }}>
+            <p style={{ margin:'0 0 14px', fontSize:13, color:C.text2 }}>
               <strong style={{ color:C.text }}>{modalPagar.nombre_afiliado}</strong> — {modalPagar.codigo}
             </p>
-            {(modalPagar.monto_pagado || 0) > 0 && (
-              <p style={{ margin:'0 0 14px', fontSize:12, color:C.amber, background:C.amberBg, padding:'6px 10px', borderRadius:6 }}>
-                Ya abonado: {fmt(modalPagar.monto_pagado)} · Saldo restante: <strong>{fmt(saldo)}</strong>
-              </p>
-            )}
-            <label style={lbl}>Monto a pagar (dejar vacío = saldo total {fmt(saldo)})</label>
-            <input type="number" style={{ ...inp, marginBottom:14 }} placeholder={String(saldo)}
-              value={montoPago} onChange={e=>setMontoPago(e.target.value)} min={1} max={saldo} />
-            {!esCompleto && montoNum > 0 && (
-              <p style={{ margin:'-8px 0 12px', fontSize:11, color:C.amber }}>
-                Abono parcial — factura queda pendiente hasta completar {fmt(saldo - montoNum)} restantes
-              </p>
-            )}
             <label style={lbl}>Banco / Forma de pago</label>
             <select style={{ ...inp, marginBottom:20 }} value={bancoPago} onChange={e=>setBancoPago(e.target.value)}>
               <option value="">Seleccionar banco...</option>
               {(listas?.bancos||[]).map(b=><option key={b}>{b}</option>)}
             </select>
             <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
-              <Btn variant="secondary" onClick={()=>{ setModalPagar(null); setMontoPago(''); setBancoPago(''); }}>Cancelar</Btn>
-              <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago, monto: montoNum ?? undefined })}
+              <Btn variant="secondary" onClick={()=>{ setModalPagar(null); setBancoPago(''); }}>Cancelar</Btn>
+              <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago })}
                 disabled={pagar.isPending}>
-                {pagar.isPending ? 'Guardando...' : esCompleto ? '✓ Confirmar pago total' : `✓ Registrar abono ${fmt(montoNum)}`}
+                {pagar.isPending ? 'Guardando...' : '✓ Confirmar pago'}
               </Btn>
             </div>
           </div>
-          );
-        })()}
+        )}
       </Modal>
     </div>
   );

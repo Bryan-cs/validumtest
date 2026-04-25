@@ -42,6 +42,9 @@ class AfiliadoCreate(BaseModel):
     def ibc_positivo(cls, v):
         if v is not None and float(v) <= 0:
             raise ValueError('IBC debe ser mayor a 0')
+        SMMLV_VALUE = 1_300_000
+        if v is not None and float(v) > 0 and float(v) < SMMLV_VALUE:
+            raise ValueError(f'IBC no puede ser menor al SMMLV')
         return v
     fecha_afiliacion: str = ""
     registrado_por: str = ""
@@ -90,9 +93,9 @@ class FacturaCreate(BaseModel):
     @field_validator('estado', mode='before')
     @classmethod
     def estado_valido(cls, v):
-        if v is not None and v not in ('pendiente', 'pagado', 'planilla_pagada'):
-            raise ValueError('Estado debe ser "pendiente", "pagado" o "planilla_pagada"')
-        return v or 'pendiente'
+        if v is not None and v != 'pendiente':
+            raise ValueError('Estado en creación debe ser "pendiente"')
+        return 'pendiente'
 
 class FacturaUpdate(BaseModel):
     cliente: Optional[str] = None

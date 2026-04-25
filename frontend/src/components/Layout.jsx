@@ -41,6 +41,7 @@ const navGroups = (rol) => [
     label: 'FINANZAS',
     items: [
       { to: '/facturacion',  label: '🧾 Facturación' },
+      ...(rol === 'admin' ? [{ to: '/finanzas', label: '📊 Reportes Financieros' }] : []),
       { to: '/cobro',        label: '💰 Cobro' },
       { to: '/planillas-ss', label: '📋 Planillas SS' },
     ],
