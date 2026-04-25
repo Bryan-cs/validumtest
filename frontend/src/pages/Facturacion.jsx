@@ -151,7 +151,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       if (!afiliado) return Promise.reject(new Error('Busca el afiliado primero'));
       return api.post('/facturas', {
         nombre_afiliado: afiliado.nombre, doc: afiliado.doc,
-        cliente: afiliado.cliente_txt || afiliado.empresa || '',
+        cliente: afiliado.cliente_txt || '',
         anio, mes, periodo: String(dias), estado,
         ingresos: ingreso, costos: planillaSS, costo_adm: cargoAdm,
         conceptos_extra: extra, utilidad, novedades,
@@ -232,7 +232,8 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
 
       <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
         <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-        <Btn onClick={() => guardar.mutate()} disabled={guardar.isPending || !afiliado}>
+        <Btn onClick={() => guardar.mutate()} disabled={guardar.isPending || !afiliado || !afiliado.cliente_txt}
+          title={afiliado && !afiliado.cliente_txt ? 'El afiliado no tiene cliente asignado — edítalo primero' : ''}>
           {guardar.isPending ? 'Guardando...' : '💾 Guardar factura'}
         </Btn>
       </div>

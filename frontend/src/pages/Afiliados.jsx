@@ -1433,8 +1433,8 @@ export default function Afiliados() {
           borderTop:`1px solid ${C.border}`,paddingTop:14 }}>
           <Btn variant="secondary" onClick={()=>setModal(null)}>Cancelar</Btn>
           <Btn onClick={()=>guardar.mutate()}
-            disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim()}
-            title={!form.empresa?'Selecciona una empresa':!form.nombre?.trim()?'Ingresa el nombre':!form.doc?.trim()?'Ingresa el documento':''}>
+            disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim() || !form.cliente_txt?.trim()}
+            title={!form.empresa?'Selecciona una empresa':!form.nombre?.trim()?'Ingresa el nombre':!form.doc?.trim()?'Ingresa el documento':!form.cliente_txt?.trim()?'Selecciona el cliente':''}>
             {guardar.isPending?'Guardando...':'💾 Guardar afiliado'}
           </Btn>
         </div>
