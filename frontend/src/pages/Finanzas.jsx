@@ -513,6 +513,12 @@ export default function Finanzas() {
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-1 h-4 rounded-full" style={{ background: C.red }} />
                     <span className="text-xs font-bold uppercase tracking-widest text-muted-foreground">Costos y deducciones</span>
+                    {aportesSS === 0 && ingTotal > 0 && (
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full"
+                        style={{ color: C.amber, background: `${C.amber}15`, border: `1px solid ${C.amber}30` }}>
+                        ⚠ Sin aportes SS registrados
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex flex-col divide-y">
