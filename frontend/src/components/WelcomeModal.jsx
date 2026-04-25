@@ -80,15 +80,17 @@ export default function WelcomeModal({ user, onClose }) {
 
   const toDate = (iso) => iso ? new Date(iso + 'T00:00:00') : null;
 
-  const vencidas  = (items || []).filter(t =>
+  const misTareas  = (items || []).filter(t => t.asignado_a === user?.username);
+
+  const vencidas  = misTareas.filter(t =>
     (t.estado === 'pendiente' || t.estado === 'en_proceso') &&
     toDate(t.fecha_limite) && toDate(t.fecha_limite) < hoy
   );
-  const proximas  = (items || []).filter(t =>
+  const proximas  = misTareas.filter(t =>
     (t.estado === 'pendiente' || t.estado === 'en_proceso') &&
     toDate(t.fecha_limite) && toDate(t.fecha_limite) >= hoy && toDate(t.fecha_limite) <= en7
   );
-  const porIniciar = (items || []).filter(t =>
+  const porIniciar = misTareas.filter(t =>
     t.estado === 'pendiente' &&
     (!t.fecha_limite || toDate(t.fecha_limite) > en7)
   );
