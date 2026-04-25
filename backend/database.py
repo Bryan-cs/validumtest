@@ -142,6 +142,7 @@ def _ensure_indexes():
         ("ix_nomina_mensual_emp_mes", "nomina_mensual",  "empleado_id, mes, anio"),
         # Dashboard: filtra (estado, anio, mes) — evita Seq Scan en facturas
         ("ix_factura_estado_periodo", "facturas",        "estado, anio, mes"),
+        ("ix_token_blacklist_expires_at", "token_blacklist", "expires_at"),
     ]
     with engine.begin() as conn:
         for idx_name, table, cols in indexes:
@@ -191,7 +192,7 @@ def _seed(db):
                 "ARL 4":0.04350,"ARL 5":0.06960,
                 "FSP":0.0,"SENA":0.0,"ICBF":0.0}
         db.add(models.Config(
-            ibc_global=1_950_905,
+            ibc_global=1_750_905,
             porcentajes=json.dumps(pcts)
         ))
 

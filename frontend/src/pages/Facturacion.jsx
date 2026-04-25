@@ -44,7 +44,7 @@ function calcularFechaVencimiento(fecha_afiliacion, mes, anio) {
 function calcPlanilla(afiliado, config, dias) {
   const ceil100 = v => Math.ceil(v / 100) * 100;
   if (!afiliado || !config) return [];
-  const ibc = (afiliado.ibc && afiliado.ibc > 0) ? afiliado.ibc : (config.ibc_global || 1950905);
+  const ibc = (afiliado.ibc && afiliado.ibc > 0) ? afiliado.ibc : (config.ibc_global || 1750905);
   const pcts = config.porcentajes || {};
   const servicios = afiliado.servicios || [];
   const result = [];
@@ -159,7 +159,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         conceptos_detalle: conceptos,
       });
     },
-    onSuccess: () => { toast.success('Factura guardada'); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['cobro']}); onClose(); },
+    onSuccess: () => { toast.success('Factura guardada'); qc.invalidateQueries({queryKey:['facturas']}); qc.invalidateQueries({queryKey:['cobro']}); qc.invalidateQueries({queryKey:['dashboard']}); qc.invalidateQueries({queryKey:['finanzas-clientes']}); qc.invalidateQueries({queryKey:['finanzas-cliente']}); onClose(); },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||e.message||'Error')); },
   });
 
@@ -297,7 +297,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       servicios_detalle: planillaFinal.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
       conceptos_detalle: conceptos,
     }),
-    onSuccess: (res) => { toast.success('Factura actualizada'); qc.setQueriesData({ queryKey: ['facturas'] }, prev => prev ? { ...prev, items: (prev.items || []).map(f => f.id === res.data.id ? res.data : f) } : prev); onClose(); },
+    onSuccess: () => { toast.success('Factura actualizada'); qc.invalidateQueries({ queryKey: ['facturas'] }); qc.invalidateQueries({ queryKey: ['finanzas-clientes'] }); qc.invalidateQueries({ queryKey: ['finanzas-cliente'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['cobro'] }); onClose(); },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
@@ -517,8 +517,6 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [seleccionadas, setSeleccionadas] = useState(new Set());
   const [modalBulkPagar, setModalBulkPagar] = useState(false);
   const [bancoBulk, setBancoBulk] = useState('');
-  // const [modalPila, setModalPila] = useState(null); // TODO: PILA — pendiente fixes, no subir a prod
-
   useEffect(() => {
     if (prefillAfiliado) { setPrefill(prefillAfiliado); setModalNueva(true); }
   }, [prefillAfiliado]);
@@ -580,7 +578,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
   const [modalPagar, setModalPagar] = useState(null);
   const [bancoPago, setBancoPago] = useState('');
-  const [montoPago, setMontoPago] = useState('');
+
 
   // Ingresos adicionales
   const MESES_NUM = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
@@ -644,19 +642,28 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       const estado = res.data?.estado;
       toast.success(estado === 'pagado' ? 'Factura marcada como pagada' : 'Abono registrado — factura sigue pendiente hasta pago total');
       qc.invalidateQueries({ queryKey: ['facturas'] });
-      setModalPagar(null); setBancoPago(''); setMontoPago('');
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
+      setModalPagar(null); setBancoPago('');
     },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al registrar pago'),
   });
   const eliminar = useMutation({
     mutationFn: id => api.delete(`/facturas/${id}`),
-    onSuccess: () => { toast.success('Factura eliminada'); qc.invalidateQueries({ queryKey: ['facturas'] }); },
+    onSuccess: () => { toast.success('Factura eliminada'); qc.invalidateQueries({ queryKey: ['facturas'] }); qc.invalidateQueries({ queryKey: ['dashboard'] }); qc.invalidateQueries({ queryKey: ['finanzas-clientes'] }); qc.invalidateQueries({ queryKey: ['finanzas-cliente'] }); },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al eliminar factura'),
   });
 
   const planillaPagada = useMutation({
     mutationFn: id => api.patch(`/facturas/${id}/planilla-pagada`),
-    onSuccess: () => { toast.success('Planilla marcada como pagada'); qc.invalidateQueries({ queryKey: ['facturas'] }); },
+    onSuccess: () => {
+      toast.success('Planilla marcada como pagada');
+      qc.invalidateQueries({ queryKey: ['facturas'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
+    },
     onError: (e) => toast.error(e.response?.data?.detail || 'Error al marcar planilla'),
   });
 
@@ -671,6 +678,9 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       if (ok) toast.success(`${ok} factura(s) marcada(s) como pagada`);
       if (err) toast.error(`${err} factura(s) no se pudieron pagar`);
       qc.invalidateQueries({ queryKey: ['facturas'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
       setSeleccionadas(new Set()); setModalBulkPagar(false); setBancoBulk('');
     },
   });
@@ -686,6 +696,9 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       if (ok) toast.success(`${ok} factura(s) marcada(s) como planilla pagada`);
       if (err) toast.error(`${err} factura(s) no se pudieron actualizar`);
       qc.invalidateQueries({ queryKey: ['facturas'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-clientes'] });
+      qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
       setSeleccionadas(new Set());
     },
   });
@@ -700,8 +713,12 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const selPagadas    = rowsFiltradas.filter(f => f.estado === 'pagado'    && seleccionadas.has(f.id));
 
   const esPagada = f => f.estado === 'pagado' || f.estado === 'planilla_pagada';
-  const totIng  = rowsFiltradas.filter(esPagada).reduce((s,f)=>s+(f.ingresos||0),0) + totIngAd;
-  const totUtil = rowsFiltradas.filter(esPagada).reduce((s,f)=>s+(f.utilidad||0),0) + totIngAd;
+  // Si hay filtro de estado activo, las stats suman sobre todo rowsFiltradas (el usuario eligió qué ver)
+  // Sin filtro de estado → solo facturas pagadas (comportamiento original)
+  const hayFiltroEstado = !!estadoB;
+  const baseIng  = hayFiltroEstado ? rowsFiltradas : rowsFiltradas.filter(esPagada);
+  const totIng  = baseIng.reduce((s,f)=>s+(f.ingresos||0),0) + totIngAd;
+  const totUtil = baseIng.reduce((s,f)=>s+(f.utilidad||0),0) + totIngAd;
   const totPend = rowsFiltradas.filter(f=>f.estado==='pendiente').reduce((s,f)=>s+(f.ingresos||0),0);
 
   return (
@@ -896,7 +913,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       color: f.estado==='planilla_pagada' ? '#166534' : f.estado==='pagado' ? C.green : C.amber,
                       borderRadius:10,padding:'2px 10px',fontSize:11,fontWeight:600 }}>
                       {f.estado==='planilla_pagada' ? '📋 Planilla Pagada' : f.estado==='pagado' ? 'Pagada' :
-                        (f.monto_pagado > 0 ? `Pendiente (abonado ${fmt(f.monto_pagado)})` : 'Pendiente')}
+                        'Pendiente'}
                     </span>
                   </td>
                   <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
@@ -905,7 +922,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   <td style={tdc}>
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
                       <Btn size="sm" variant="secondary" onClick={(e)=>{e.stopPropagation();setModalEditar(f);}}>✏️ Editar</Btn>
-                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setMontoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
+                      {f.estado==='pendiente' && <Btn size="sm" variant="success" onClick={(e)=>{e.stopPropagation();setBancoPago('');setModalPagar(f);}}>✓ Pagada</Btn>}
                       {f.estado==='pagado' && <Btn size="sm" variant="secondary" disabled={planillaPagada.isPending} onClick={(e)=>{e.stopPropagation();planillaPagada.mutate(f.id);}}>📋 Planilla Pagada</Btn>}
                       <Btn size="sm" variant="secondary" onClick={(e)=>{
                         e.stopPropagation();
@@ -932,9 +949,6 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       }}>💬 WhatsApp</Btn>
                       <Btn size="sm" variant="secondary"
                         onClick={(e)=>{e.stopPropagation();dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.nombre_afiliado?.replace(/ /g,'_')}_${f.codigo}.pdf`);}}>📄 PDF</Btn>
-                      {/* TODO: PILA — pendiente fixes, no subir a prod */}
-                      {/* <Btn size="sm" variant="secondary"
-                        onClick={(e)=>{e.stopPropagation();setModalPila({ doc: f.doc, nombre: f.nombre_afiliado, mes: f.mes, anio: f.anio, empresa: ai.empresa || '' });}}>PILA</Btn> */}
                       <Btn size="sm" variant="danger"
                         onClick={(e)=>{ e.stopPropagation(); if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
                     </div>
@@ -1055,48 +1069,27 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
         </div>
       </Modal>
 
-      {/* TODO: PILA — pendiente fixes, no subir a prod */}
-      {/* {modalPila && <ModalPilaAfiliado datos={modalPila} onClose={()=>setModalPila(null)} listas={listas} />} */}
-
-      {/* Mini modal: registrar pago (total o abono parcial) */}
-      <Modal open={!!modalPagar} onClose={()=>{ setModalPagar(null); setMontoPago(''); setBancoPago(''); }} width={420} title="✓ Registrar pago">
-        {modalPagar && (() => {
-          const saldo = modalPagar.ingresos - (modalPagar.monto_pagado || 0);
-          const montoNum = montoPago === '' ? null : parseFloat(montoPago);
-          const esCompleto = montoNum === null || montoNum >= saldo;
-          return (
+      {/* Mini modal: registrar pago */}
+      <Modal open={!!modalPagar} onClose={()=>{ setModalPagar(null); setBancoPago(''); }} width={420} title="✓ Registrar pago">
+        {modalPagar && (
           <div>
-            <p style={{ margin:'0 0 6px', fontSize:13, color:C.text2 }}>
+            <p style={{ margin:'0 0 14px', fontSize:13, color:C.text2 }}>
               <strong style={{ color:C.text }}>{modalPagar.nombre_afiliado}</strong> — {modalPagar.codigo}
             </p>
-            {(modalPagar.monto_pagado || 0) > 0 && (
-              <p style={{ margin:'0 0 14px', fontSize:12, color:C.amber, background:C.amberBg, padding:'6px 10px', borderRadius:6 }}>
-                Ya abonado: {fmt(modalPagar.monto_pagado)} · Saldo restante: <strong>{fmt(saldo)}</strong>
-              </p>
-            )}
-            <label style={lbl}>Monto a pagar (dejar vacío = saldo total {fmt(saldo)})</label>
-            <input type="number" style={{ ...inp, marginBottom:14 }} placeholder={String(saldo)}
-              value={montoPago} onChange={e=>setMontoPago(e.target.value)} min={1} max={saldo} />
-            {!esCompleto && montoNum > 0 && (
-              <p style={{ margin:'-8px 0 12px', fontSize:11, color:C.amber }}>
-                Abono parcial — factura queda pendiente hasta completar {fmt(saldo - montoNum)} restantes
-              </p>
-            )}
             <label style={lbl}>Banco / Forma de pago</label>
             <select style={{ ...inp, marginBottom:20 }} value={bancoPago} onChange={e=>setBancoPago(e.target.value)}>
               <option value="">Seleccionar banco...</option>
               {(listas?.bancos||[]).map(b=><option key={b}>{b}</option>)}
             </select>
             <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
-              <Btn variant="secondary" onClick={()=>{ setModalPagar(null); setMontoPago(''); setBancoPago(''); }}>Cancelar</Btn>
-              <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago, monto: montoNum ?? undefined })}
+              <Btn variant="secondary" onClick={()=>{ setModalPagar(null); setBancoPago(''); }}>Cancelar</Btn>
+              <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago })}
                 disabled={pagar.isPending}>
-                {pagar.isPending ? 'Guardando...' : esCompleto ? '✓ Confirmar pago total' : `✓ Registrar abono ${fmt(montoNum)}`}
+                {pagar.isPending ? 'Guardando...' : '✓ Confirmar pago'}
               </Btn>
             </div>
           </div>
-          );
-        })()}
+        )}
       </Modal>
     </div>
   );
@@ -1107,104 +1100,3 @@ const sel = { padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:7,f
 const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
 const inp = { width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface };
 
-// TODO: PILA — pendiente fixes, no subir a prod
-// const MESES_PILA = { 'Enero':1,'Febrero':2,'Marzo':3,'Abril':4,'Mayo':5,'Junio':6,
-//   'Julio':7,'Agosto':8,'Septiembre':9,'Octubre':10,'Noviembre':11,'Diciembre':12 };
-// const ARL_PILA = ['POSITIVA','SURA','AXA COLPATRIA','LIBERTY','BOLIVAR','EQUIDAD','MAPFRE','QBE'];
-
-/* TODO: PILA — ModalPilaAfiliado comentado hasta fixes
-function ModalPilaAfiliado({ datos, onClose }) {
-  // datos = { doc, nombre, mes (texto), anio (texto), empresa }
-  const [nit, setNit] = useState('');
-  const [dv, setDv] = useState('0');
-  const [razonSocial, setRazonSocial] = useState(datos.empresa || '');
-  const [arl, setArl] = useState('POSITIVA');
-  const [generando, setGenerando] = useState(false);
-
-  const mesNum = MESES_PILA[datos.mes] || new Date().getMonth() + 1;
-
-  const handleGenerar = async () => {
-    if (!nit) { toast.error('Ingresa el NIT del empleador'); return; }
-    if (!razonSocial) { toast.error('Ingresa la razón social'); return; }
-    setGenerando(true);
-    try {
-      const res = await api.get('/reportes/pila', {
-        params: {
-          doc: datos.doc,
-          nit: nit.replace(/\D/g, ''),
-          razon_social: razonSocial,
-          dv,
-          mes: mesNum,
-          anio: parseInt(datos.anio),
-          arl,
-        },
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }));
-      const a = document.createElement('a');
-      a.href = url;
-      const slug = (datos.nombre || datos.doc).replace(/\s+/g, '_').toUpperCase().slice(0, 20);
-      a.download = `PILA_${slug}_${datos.anio}${String(mesNum).padStart(2,'0')}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Archivo PILA generado — verificar antes de envío oficial');
-      onClose();
-    } catch (e) {
-      toast.error(e?.response?.data?.detail || 'Error al generar PILA');
-    }
-    setGenerando(false);
-  };
-
-  const i2 = { ...inp, fontSize: 13 };
-
-  return (
-    <div style={{ position:'fixed',inset:0,background:'rgba(0,0,0,.5)',zIndex:1000,display:'flex',alignItems:'center',justifyContent:'center' }}>
-      <div style={{ background:C.surface,borderRadius:14,padding:26,width:440,boxShadow:'0 20px 60px rgba(0,0,0,.3)' }}>
-        <h3 style={{ margin:'0 0 4px',color:C.primary,fontSize:15 }}>Generar PILA — {datos.nombre}</h3>
-        <p style={{ margin:'0 0 16px',fontSize:12,color:C.text2 }}>
-          Período: <strong>{datos.mes} {datos.anio}</strong> · Doc: {datos.doc}
-        </p>
-
-        <div style={{ display:'grid',gridTemplateColumns:'2fr 1fr',gap:10,marginBottom:12 }}>
-          <div>
-            <label style={lbl}>NIT del empleador *</label>
-            <input style={i2} type="text" value={nit} maxLength={9}
-              onChange={e => setNit(e.target.value.replace(/\D/g,''))}
-              placeholder="901760008" />
-          </div>
-          <div>
-            <label style={lbl}>D.V.</label>
-            <input style={i2} type="text" value={dv} maxLength={1}
-              onChange={e => setDv(e.target.value.replace(/\D/g,''))} />
-          </div>
-        </div>
-
-        <div style={{ marginBottom:12 }}>
-          <label style={lbl}>Razón social del empleador *</label>
-          <input style={i2} type="text" value={razonSocial}
-            onChange={e => setRazonSocial(e.target.value)}
-            placeholder={datos.empresa || 'Nombre exacto de la empresa'} />
-        </div>
-
-        <div style={{ marginBottom:18 }}>
-          <label style={lbl}>ARL del empleador</label>
-          <select style={i2} value={arl} onChange={e => setArl(e.target.value)}>
-            {ARL_PILA.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-
-        <div style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:'8px 12px',marginBottom:16,fontSize:11,color:C.text2 }}>
-          ⚠️ Borrador — validar montos y códigos antes de envío al sistema PILA oficial.
-        </div>
-
-        <div style={{ display:'flex',gap:10,justifyContent:'flex-end' }}>
-          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn onClick={handleGenerar} disabled={generando || !nit || !razonSocial}>
-            {generando ? 'Generando...' : 'Descargar PILA .txt'}
-          </Btn>
-        </div>
-      </div>
-    </div>
-  );
-}
-*/

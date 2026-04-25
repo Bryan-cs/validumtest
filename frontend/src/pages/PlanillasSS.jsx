@@ -169,134 +169,6 @@ export default function PlanillasSS() {
   );
 }
 
-const MESES_NUM = { 'Enero':1,'Febrero':2,'Marzo':3,'Abril':4,'Mayo':5,'Junio':6,
-  'Julio':7,'Agosto':8,'Septiembre':9,'Octubre':10,'Noviembre':11,'Diciembre':12 };
-
-const ARL_OPCIONES = [
-  'POSITIVA','SURA','AXA COLPATRIA','LIBERTY','BOLIVAR','EQUIDAD','MAPFRE','QBE'
-];
-
-function ModalGenerarPila({ onClose }) {
-  const [empresa, setEmpresa] = useState('');
-  const [nit, setNit] = useState('');
-  const [dv, setDv] = useState('0');
-  const [razonSocial, setRazonSocial] = useState('');
-  const [mes, setMes] = useState(MESES[new Date().getMonth() + 1] || 'Enero');
-  const [anio, setAnio] = useState(String(anioActual));
-  const [arl, setArl] = useState('POSITIVA');
-  const [generando, setGenerando] = useState(false);
-
-  const { data: empresas = [] } = useQuery({
-    queryKey: ['empresas-lista-pila'],
-    queryFn: () => api.get('/afiliados/filter-options').then(r => r.data.empresas || []),
-    staleTime: 300_000,
-  });
-
-  const handleGenerar = async () => {
-    if (!empresa) { toast.error('Selecciona una empresa'); return; }
-    if (!nit) { toast.error('Ingresa el NIT'); return; }
-    const mesNum = MESES_NUM[mes] || 1;
-    setGenerando(true);
-    try {
-      const res = await api.get('/reportes/pila', {
-        params: {
-          empresa,
-          nit: nit.replace(/[^0-9]/g, ''),
-          razon_social: razonSocial || empresa,
-          dv,
-          mes: mesNum,
-          anio: parseInt(anio),
-          arl,
-        },
-        responseType: 'blob',
-      });
-      const url = URL.createObjectURL(new Blob([res.data], { type: 'text/plain' }));
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `PILA_${empresa.toUpperCase().replace(/\s+/g, '_')}_${anio}${String(mesNum).padStart(2,'0')}.txt`;
-      a.click();
-      URL.revokeObjectURL(url);
-      toast.success('Archivo PILA generado — verificar antes de envío oficial');
-      onClose();
-    } catch (e) {
-      const msg = e?.response?.data?.detail || 'Error al generar PILA';
-      toast.error(typeof msg === 'string' ? msg : 'Error al generar PILA');
-    }
-    setGenerando(false);
-  };
-
-  const inp = { width: '100%', padding: '8px 10px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, boxSizing: 'border-box', outline: 'none', color: C.text, background: C.surface };
-  const lbl = { fontSize: 12, fontWeight: 600, color: C.text2, display: 'block', marginBottom: 4 };
-
-  return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div style={{ background: C.surface, borderRadius: 14, padding: 28, width: 480, boxShadow: '0 20px 60px rgba(0,0,0,.3)', maxHeight: '90vh', overflowY: 'auto' }}>
-        <h3 style={{ margin: '0 0 4px', color: C.primary, fontSize: 16 }}>Generar Archivo PILA</h3>
-        <p style={{ margin: '0 0 18px', fontSize: 12, color: C.text2 }}>
-          Genera el archivo de ancho fijo para el sistema PILA. Verifica los valores antes de envío oficial.
-        </p>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>Empresa aportante *</label>
-          <select style={inp} value={empresa} onChange={e => { setEmpresa(e.target.value); setRazonSocial(e.target.value); }}>
-            <option value="">— Seleccionar empresa —</option>
-            {empresas.map(e => <option key={e} value={e}>{e}</option>)}
-          </select>
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div>
-            <label style={lbl}>NIT (sin dígito verificación) *</label>
-            <input style={inp} type="text" value={nit} onChange={e => setNit(e.target.value.replace(/[^0-9]/g, ''))} placeholder="901760008" maxLength={9} />
-          </div>
-          <div>
-            <label style={lbl}>D.V.</label>
-            <input style={inp} type="text" value={dv} onChange={e => setDv(e.target.value.replace(/[^0-9]/g, ''))} maxLength={1} />
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 12 }}>
-          <label style={lbl}>Razón social (opcional — si difiere del nombre empresa)</label>
-          <input style={inp} type="text" value={razonSocial} onChange={e => setRazonSocial(e.target.value)} placeholder={empresa || 'Razón social exacta'} />
-        </div>
-
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
-          <div>
-            <label style={lbl}>Mes del período *</label>
-            <select style={inp} value={mes} onChange={e => setMes(e.target.value)}>
-              {MESES.filter(Boolean).map(m => <option key={m} value={m}>{m}</option>)}
-            </select>
-          </div>
-          <div>
-            <label style={lbl}>Año *</label>
-            <select style={inp} value={anio} onChange={e => setAnio(e.target.value)}>
-              {ANIOS.filter(Boolean).map(a => <option key={a} value={a}>{a}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div style={{ marginBottom: 18 }}>
-          <label style={lbl}>ARL del aportante</label>
-          <select style={inp} value={arl} onChange={e => setArl(e.target.value)}>
-            {ARL_OPCIONES.map(a => <option key={a} value={a}>{a}</option>)}
-          </select>
-        </div>
-
-        <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8, padding: '10px 14px', marginBottom: 18, fontSize: 12, color: C.text2 }}>
-          ⚠️ <strong>Borrador</strong> — Este archivo es generado con los datos actuales de afiliados activos en la empresa seleccionada. Valida los montos y códigos antes de enviar al sistema PILA oficial.
-        </div>
-
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
-          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
-          <Btn onClick={handleGenerar} disabled={generando || !empresa || !nit}>
-            {generando ? 'Generando...' : 'Descargar PILA .txt'}
-          </Btn>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
   const [cliente, setCliente] = useState('');
   const [mes, setMes] = useState(MESES[new Date().getMonth() + 1] || 'Enero');
@@ -307,6 +179,7 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
   const fileRef = useRef(null);
 
   const handleSubmit = async () => {
+    if (subiendo) return;  // guard doble-click / race condition de render
     if (!cliente) { toast.error('Selecciona un cliente'); return; }
     if (archivos.length === 0) { toast.error('Adjunta al menos un archivo'); return; }
     setSubiendo(true);

@@ -51,7 +51,6 @@ class Afiliado(Base):
     email           = Column(String(100))
     dir             = Column(String(200))
     ciudad          = Column(String(100))
-    municipio_code  = Column(String(5), nullable=True)   # DIVIPOLA 5 dígitos para PILA
     novedades       = Column(Text)
     detalle         = Column(Text)
     ibc             = Column(Numeric(15, 2), nullable=True)   # IBC individual (None = usar global)
@@ -181,7 +180,7 @@ class NominaMensual(Base):
 class Config(Base):
     __tablename__ = "config"
     id                 = Column(Integer, primary_key=True, default=1)
-    ibc_global         = Column(Numeric(15, 2), default=1_950_905)
+    ibc_global         = Column(Numeric(15, 2), default=1_750_905)
     porcentajes        = Column(Text)    # JSON dict
     plantilla_whatsapp = Column(Text)    # Plantilla del mensaje de WhatsApp
     cargo_adicional    = Column(Numeric(15, 2), default=2200)

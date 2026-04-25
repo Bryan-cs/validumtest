@@ -307,7 +307,7 @@ function PlanillaDetalle({ afiliado, cobroRow, config }) {
 
   if (!afiliado||!config) return <div style={{ color:C.text2,fontSize:12 }}>Sin datos</div>;
   const ceil100 = v=>Math.ceil(v/100)*100;
-  const ibc  = (afiliado.ibc&&afiliado.ibc>0)?afiliado.ibc:(config.ibc_global||1950905);
+  const ibc  = (afiliado.ibc&&afiliado.ibc>0)?afiliado.ibc:(config.ibc_global||1750905);
   const pcts = config.porcentajes||{};
   const seen = new Set(); const detalle=[];
   for (const s of (afiliado.servicios||[])) {
