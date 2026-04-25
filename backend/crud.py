@@ -278,6 +278,9 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     a = db.query(models.Afiliado).filter_by(id=id, activo=True).with_for_update().first()
     if not a:
         raise HTTPException(404, "Afiliado no encontrado o fue eliminado por otro usuario")
+    # Si se reactiva a ACTIVO (transición real, no rutinaria) → limpiar solicitudes de retiro del portal
+    if data.estado_srv == "ACTIVO" and a.estado_srv != "ACTIVO":
+        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=a.doc).delete()
     for field, val in [
         ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
         ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
@@ -289,9 +292,6 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
         setattr(a, field, val)
-    # Si se reactiva a ACTIVO → limpiar solicitudes de retiro del portal
-    if data.estado_srv == "ACTIVO":
-        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=a.doc).delete()
     _log(db, editor, "editó un afiliado", "Afiliados", data.nombre)
     try:
         db.commit()
