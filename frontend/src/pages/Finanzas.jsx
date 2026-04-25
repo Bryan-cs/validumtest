@@ -509,6 +509,12 @@ export default function Finanzas() {
                     </div>
                   </div>
 
+                  <div className="flex items-center gap-3 my-2">
+                    <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground px-1">Deducciones</span>
+                    <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+                  </div>
+
                   {/* ── COSTOS ── */}
                   <div className="flex items-center gap-2 mb-2">
                     <div className="w-1 h-4 rounded-full" style={{ background: C.red }} />
@@ -521,21 +527,24 @@ export default function Finanzas() {
                     )}
                   </div>
 
-                  <div className="flex flex-col divide-y">
-                    <CostRow label="Aportes Seguridad Social"
-                      icon={HeartPulse} value={aportesSS}
-                      pct={pctOf(aportesSS, ingTotal)} color={C.red} />
-                    <CostRow label={`Nóminas${mFactor > 1 ? ` (×${mFactor} meses)` : ''}`}
-                      icon={Briefcase} value={nominas}
-                      pct={pctOf(nominas, ingTotal)} color="#f97316" />
-                    <CostRow label={`Gastos fijos${mFactor > 1 ? ` (×${mFactor} meses)` : ''}`}
-                      icon={Receipt} value={gastos}
-                      pct={pctOf(gastos, ingTotal)} color="#a855f7" />
-                    {mora > 0 && (
-                      <CostRow label="Mora / 4×1000 / cargo adicional"
-                        icon={AlertCircle} value={mora}
-                        pct={pctOf(mora, ingTotal)} color={C.amber} />
-                    )}
+                  <div className="rounded-xl overflow-hidden mb-4"
+                    style={{ border: `1px solid var(--border)`, background: `${C.red}04` }}>
+                    <div className="flex flex-col divide-y">
+                      <CostRow label="Aportes Seguridad Social"
+                        icon={HeartPulse} value={aportesSS}
+                        pct={pctOf(aportesSS, ingTotal)} color={C.red} />
+                      <CostRow label={`Nóminas${mFactor > 1 ? ` (×${mFactor} meses)` : ''}`}
+                        icon={Briefcase} value={nominas}
+                        pct={pctOf(nominas, ingTotal)} color="#f97316" />
+                      <CostRow label={`Gastos fijos${mFactor > 1 ? ` (×${mFactor} meses)` : ''}`}
+                        icon={Receipt} value={gastos}
+                        pct={pctOf(gastos, ingTotal)} color="#a855f7" />
+                      {mora > 0 && (
+                        <CostRow label="Mora / 4×1000 / cargo adicional"
+                          icon={AlertCircle} value={mora}
+                          pct={pctOf(mora, ingTotal)} color={C.amber} />
+                      )}
+                    </div>
                   </div>
 
                   {/* ── UTILIDAD NETA ── */}
@@ -583,6 +592,12 @@ export default function Finanzas() {
           )}
 
           {/* Tabla clientes */}
+          <div>
+            <div className="flex items-center gap-3 mb-3">
+              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+              <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Análisis por cliente</span>
+              <div className="flex-1 h-px" style={{ background: 'var(--border)' }} />
+            </div>
           <Card className="overflow-hidden">
             <CardHeader className="pb-3 pt-4 px-5">
               <div className="flex items-center justify-between">
@@ -604,7 +619,7 @@ export default function Finanzas() {
                 <thead>
                   <tr className="border-t border-b bg-muted/40">
                     {['Cliente','Afiliados','Ingresos','Aportes SS','Utilidad','Margen','Pendiente'].map(h => (
-                      <th key={h} className={`px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap ${h === 'Cliente' ? 'text-left' : 'text-right'}`}>
+                      <th key={h} className={`px-4 py-2.5 text-[11px] font-bold uppercase tracking-wider text-muted-foreground whitespace-nowrap border-r last:border-r-0 ${h === 'Cliente' ? 'text-left' : 'text-right'}`}>
                         {h}
                       </th>
                     ))}
@@ -635,19 +650,19 @@ export default function Finanzas() {
                           <tr key={c.cliente}
                             onClick={() => setClienteSel(c.cliente)}
                             className="border-b hover:bg-muted/30 cursor-pointer transition-colors">
-                            <td className="px-4 py-3 font-semibold">{c.cliente}</td>
-                            <td className="px-4 py-3 text-right text-muted-foreground">{c.n_afiliados}</td>
-                            <td className="px-4 py-3 text-right font-semibold tabular-nums" style={{ color: C.primary }}>
+                            <td className="px-4 py-3 font-semibold border-r last:border-r-0">{c.cliente}</td>
+                            <td className="px-4 py-3 text-right text-muted-foreground border-r last:border-r-0">{c.n_afiliados}</td>
+                            <td className="px-4 py-3 text-right font-semibold tabular-nums border-r last:border-r-0" style={{ color: C.primary }}>
                               {fmt(c.ingresos)}
                             </td>
-                            <td className="px-4 py-3 text-right tabular-nums" style={{ color: C.red }}>
+                            <td className="px-4 py-3 text-right tabular-nums border-r last:border-r-0" style={{ color: C.red }}>
                               {fmt(c.costos)}
                             </td>
-                            <td className="px-4 py-3 text-right font-bold tabular-nums"
+                            <td className="px-4 py-3 text-right font-bold tabular-nums border-r last:border-r-0"
                               style={{ color: (c.utilidad ?? 0) >= 0 ? C.green : C.red }}>
                               {fmt(c.utilidad)}
                             </td>
-                            <td className="px-4 py-3">
+                            <td className="px-4 py-3 border-r last:border-r-0">
                               <div className="flex flex-col items-end gap-1.5">
                                 <span className="text-xs font-bold px-2 py-0.5 rounded-full"
                                   style={{ color: mv.color, background: mv.bg }}>
@@ -656,7 +671,7 @@ export default function Finanzas() {
                                 <ColorBar value={c.margen_pct ?? 0} color={mv.color} className="w-20" />
                               </div>
                             </td>
-                            <td className="px-4 py-3 text-right tabular-nums" style={{ color: C.amber }}>
+                            <td className="px-4 py-3 text-right tabular-nums border-r last:border-r-0" style={{ color: C.amber }}>
                               {fmt(c.pendiente)}
                             </td>
                           </tr>
@@ -667,6 +682,7 @@ export default function Finanzas() {
               </table>
             </div>
           </Card>
+          </div>
 
         </div>
       </div>
