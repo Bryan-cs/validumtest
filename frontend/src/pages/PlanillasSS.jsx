@@ -307,6 +307,7 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
   const fileRef = useRef(null);
 
   const handleSubmit = async () => {
+    if (subiendo) return;  // guard doble-click / race condition de render
     if (!cliente) { toast.error('Selecciona un cliente'); return; }
     if (archivos.length === 0) { toast.error('Adjunta al menos un archivo'); return; }
     setSubiendo(true);
