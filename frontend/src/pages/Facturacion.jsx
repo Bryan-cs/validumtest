@@ -44,7 +44,7 @@ function calcularFechaVencimiento(fecha_afiliacion, mes, anio) {
 function calcPlanilla(afiliado, config, dias) {
   const ceil100 = v => Math.ceil(v / 100) * 100;
   if (!afiliado || !config) return [];
-  const ibc = (afiliado.ibc && afiliado.ibc > 0) ? afiliado.ibc : (config.ibc_global || 1950905);
+  const ibc = (afiliado.ibc && afiliado.ibc > 0) ? afiliado.ibc : (config.ibc_global || 1750905);
   const pcts = config.porcentajes || {};
   const servicios = afiliado.servicios || [];
   const result = [];

@@ -181,7 +181,7 @@ class NominaMensual(Base):
 class Config(Base):
     __tablename__ = "config"
     id                 = Column(Integer, primary_key=True, default=1)
-    ibc_global         = Column(Numeric(15, 2), default=1_950_905)
+    ibc_global         = Column(Numeric(15, 2), default=1_750_905)
     porcentajes        = Column(Text)    # JSON dict
     plantilla_whatsapp = Column(Text)    # Plantilla del mensaje de WhatsApp
     cargo_adicional    = Column(Numeric(15, 2), default=2200)

@@ -1382,7 +1382,7 @@ export default function Afiliados() {
           <div style={{ marginBottom:14 }}>
             <label style={lbl}>IBC individual ($) — vacío = usa global</label>
             <input type="number" value={form.ibc||''} onChange={e=>sf('ibc',e.target.value?+e.target.value:null)}
-              placeholder={`IBC global: ${(1950905).toLocaleString('es-CO')}`}
+              placeholder={`IBC global: ${(1750905).toLocaleString('es-CO')}`}
               style={inp2} />
           </div>
           <div style={{ marginBottom:14 }}>

@@ -42,7 +42,7 @@ def _get_ibc(db: Session, afiliado: models.Afiliado = None) -> float:
     if afiliado and afiliado.ibc and afiliado.ibc > 0:
         return afiliado.ibc
     cfg = db.query(models.Config).first()
-    return float(cfg.ibc_global) if cfg else 1_950_905
+    return float(cfg.ibc_global) if cfg else 1_750_905
 
 def _get_pct(db: Session, servicio: str) -> float:
     cfg = db.query(models.Config).first()
@@ -677,9 +677,9 @@ def get_config(db):
     if cached is not None:
         return cached
     c = db.query(models.Config).first()
-    if not c: return {"ibc_global":1_950_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200,"mes_inicio_cobro":None,"anio_inicio_cobro":None}
+    if not c: return {"ibc_global":1_750_905,"porcentajes":{},"plantilla_whatsapp":"","cargo_adicional":2200,"mes_inicio_cobro":None,"anio_inicio_cobro":None}
     result = {
-        "ibc_global": float(c.ibc_global) if c.ibc_global is not None else 1_950_905,
+        "ibc_global": float(c.ibc_global) if c.ibc_global is not None else 1_750_905,
         "porcentajes": json.loads(c.porcentajes or "{}"),
         "plantilla_whatsapp": c.plantilla_whatsapp or "",
         "cargo_adicional": float(c.cargo_adicional) if c.cargo_adicional is not None else 2200,
@@ -1253,7 +1253,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
 
     # Pre-cargar config
     cfg = db.query(models.Config).first()
-    ibc_global = float(cfg.ibc_global) if cfg else 1_950_905
+    ibc_global = float(cfg.ibc_global) if cfg else 1_750_905
     pcts = json.loads(cfg.porcentajes or "{}") if cfg else {}
     # Fecha de corte global: el módulo de cobro ignora meses anteriores a esta fecha
     _corte = (cfg.anio_inicio_cobro, cfg.mes_inicio_cobro) if cfg and cfg.anio_inicio_cobro and cfg.mes_inicio_cobro else None
