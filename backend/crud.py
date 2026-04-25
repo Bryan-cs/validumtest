@@ -866,13 +866,15 @@ def get_dashboard(db, anio="", mes=""):
 
     pend_total = float(facts.pend_total)
 
-    # total_impuestos: usa costo_adm si fue guardado; si no (facturas históricas),
-    # fallback a count(planilla_pagada) × cargo_adicional del config
-    _total_impuestos = float(facts.total_impuestos)
-    if _total_impuestos == 0 and int(facts.n_planillas or 0) > 0:
+    # total_impuestos: siempre n_planillas × cargo_adicional del config
+    # (costo_adm fue deprecado — ya no se escribe en facturas nuevas)
+    _n_planillas = int(facts.n_planillas or 0)
+    if _n_planillas > 0:
         _cfg = db.query(models.Config.cargo_adicional).first()
         _cargo = float(_cfg.cargo_adicional) if _cfg and _cfg.cargo_adicional else 2200.0
-        _total_impuestos = int(facts.n_planillas) * _cargo
+        _total_impuestos = _n_planillas * _cargo
+    else:
+        _total_impuestos = 0.0
 
     # Factor de meses para las etiquetas
     meses_factor = 1 if (mes or not anio) else 12
