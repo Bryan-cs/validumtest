@@ -269,7 +269,7 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(re
         a.cargo = datos.get("cargo", "")
         a.tel = datos.get("tel", "")
         a.email = datos.get("email", "")
-        a.novedades = datos.get("novedades", "")
+        a.novedades = ""  # limpiar novedades stale del snapshot
         a.ibc = datos.get("ibc")
         a.fecha_ingreso = datos.get("fecha_ingreso", "")
         a.fecha_afiliacion = datos.get("fecha_afiliacion", "")
@@ -286,12 +286,15 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(re
             cliente_txt=datos.get("cliente_txt",""),
             cargo=datos.get("cargo",""), tel=datos.get("tel",""),
             email=datos.get("email",""),
-            novedades=datos.get("novedades",""),
+            novedades="",  # limpiar novedades stale del snapshot
             ibc=datos.get("ibc"), fecha_ingreso=datos.get("fecha_ingreso",""),
             fecha_afiliacion=datos.get("fecha_afiliacion",""),
             registrado_por=registrado_original,
         )
         db.add(a)
+
+    # Limpiar solicitudes de retiro del afiliado restaurado (bloqueaban nuevos retiros)
+    db.query(models.SolicitudRetiro).filter_by(afiliado_doc=e.doc).delete()
 
     # Reactivar facturas que fueron marcadas como huérfanas
     db.query(models.Factura).filter_by(doc=e.doc, afiliado_eliminado=True).update(

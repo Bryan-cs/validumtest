@@ -289,6 +289,9 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
         setattr(a, field, val)
+    # Si se reactiva a ACTIVO → limpiar solicitudes de retiro del portal
+    if data.estado_srv == "ACTIVO":
+        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=a.doc).delete()
     _log(db, editor, "editó un afiliado", "Afiliados", data.nombre)
     try:
         db.commit()
