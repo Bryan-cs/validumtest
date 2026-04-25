@@ -575,10 +575,7 @@ export default function Finanzas() {
 
                   {/* ── UTILIDAD BRUTA ── */}
                   <div className="mt-2 rounded-xl p-4 flex items-center justify-between"
-                    style={{
-                      background: `${C.primary}08`,
-                      border: `1px solid ${C.primary}20`,
-                    }}>
+                    style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }}>
                     <div className="flex items-center gap-2">
                       <TrendingUp className="h-4 w-4" style={{ color: C.primary }} />
                       <div>
@@ -587,8 +584,7 @@ export default function Finanzas() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold tabular-nums"
-                        style={{ color: C.primary }}>
+                      <div className="text-lg font-bold tabular-nums" style={{ color: C.primary }}>
                         {fmt(utilBruta)}
                       </div>
                       {ingTotal > 0 && (
