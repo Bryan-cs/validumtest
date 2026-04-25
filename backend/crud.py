@@ -819,8 +819,6 @@ def get_dashboard(db, anio="", mes=""):
         func.sum(case((period_ok, 1), else_=0)).label("n"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.ingresos), else_=0)), 0).label("ingresos"),
         func.coalesce(func.sum(case((and_(paid_ok, period_ok),       models.Factura.utilidad), else_=0)), 0).label("utilidad"),
-        # total_impuestos: cargo adicional/mora/4x1000 de facturas planilla_pagada en el período
-        func.coalesce(func.sum(case((and_(planilla_ok, period_ok),   models.Factura.costo_adm), else_=0)), 0).label("total_impuestos"),
         func.sum(case((and_(planilla_ok, period_ok), 1), else_=0)).label("n_planillas"),
         func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos), else_=0)), 0).label("pendiente"),
         func.sum(case((and_(pending_ok, period_ok), 1), else_=0)).label("n_pend"),
