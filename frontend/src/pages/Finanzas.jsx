@@ -271,9 +271,10 @@ function ModalCliente({ cliente, onClose }) {
       style={{ background: 'rgba(0,0,0,.6)' }}
       onClick={e => { if (!ref.current?.contains(e.target)) onClose(); }}>
       <div ref={ref}
-        className="bg-card border rounded-2xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col shadow-2xl">
+        className="bg-card border rounded-2xl w-full max-w-2xl flex flex-col shadow-2xl"
+        style={{ maxHeight: '90vh', height: '90vh' }}>
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b">
+        <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div>
             <div className="text-xs text-muted-foreground font-mono mb-1">Cliente</div>
             <h2 className="text-xl font-bold tracking-tight">{cliente}</h2>
@@ -286,7 +287,7 @@ function ModalCliente({ cliente, onClose }) {
           </div>
         </div>
 
-        <ScrollArea className="flex-1">
+        <div className="flex-1 overflow-y-auto min-h-0">
           <div className="p-6 flex flex-col gap-5">
             {/* KPIs */}
             {isLoading
@@ -371,7 +372,7 @@ function ModalCliente({ cliente, onClose }) {
               <p className="text-center text-muted-foreground text-sm py-8">Sin datos para el período seleccionado.</p>
             )}
           </div>
-        </ScrollArea>
+        </div>
       </div>
     </div>
   );
