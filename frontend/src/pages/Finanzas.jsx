@@ -414,6 +414,7 @@ export default function Finanzas() {
   const gastos    = dash?.gastos_fijos         ?? 0;
   const mora      = dash?.total_impuestos_planillas ?? 0;
   const utilNeta  = dash?.utilidad_neta        ?? 0;
+  const utilBruta = dash?.utilidad_bruta       ?? 0;
   const pendTotal = dash?.pendiente_cobro_total ?? 0;
   const mFactor   = dash?.meses_factor         ?? 1;
   const bancosData = dash?.ingresos_por_banco  ?? [];
@@ -567,6 +568,28 @@ export default function Finanzas() {
                       {ingTotal > 0 && (
                         <div className="text-xs text-muted-foreground">
                           {pctOf(utilNeta, ingTotal).toFixed(1)}% de margen
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ── UTILIDAD BRUTA ── */}
+                  <div className="mt-2 rounded-xl p-4 flex items-center justify-between"
+                    style={{ background: `${C.primary}08`, border: `1px solid ${C.primary}20` }}>
+                    <div className="flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" style={{ color: C.primary }} />
+                      <div>
+                        <span className="font-semibold text-sm">Utilidad bruta</span>
+                        <div className="text-xs" style={{ color: C.text2 }}>Sin descontar nóminas ni gastos fijos</div>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-lg font-bold tabular-nums" style={{ color: C.primary }}>
+                        {fmt(utilBruta)}
+                      </div>
+                      {ingTotal > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          {pctOf(utilBruta, ingTotal).toFixed(1)}% de margen
                         </div>
                       )}
                     </div>
