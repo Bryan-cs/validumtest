@@ -271,7 +271,7 @@ function ModalCliente({ cliente, onClose }) {
       onClick={e => { if (!ref.current?.contains(e.target)) onClose(); }}>
       <div ref={ref}
         className="bg-card border rounded-2xl w-full max-w-2xl flex flex-col shadow-2xl"
-        style={{ maxHeight: '90vh', height: '90vh' }}>
+        style={{ maxHeight: '90vh', minHeight: 0 }}>
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b shrink-0">
           <div>
