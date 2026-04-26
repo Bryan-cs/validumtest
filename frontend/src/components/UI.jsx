@@ -235,12 +235,12 @@ export function PageHeader({ title, subtitle, action, crumb }) {
       {crumb && (
         <div className="text-xs text-muted-foreground font-mono mb-1">{crumb}</div>
       )}
-      <div className="flex items-end">
-        <div>
+      <div className="flex items-end flex-wrap gap-2">
+        <div className="min-w-0">
           <h1 className="text-2xl font-extrabold tracking-tight text-foreground leading-tight">{title}</h1>
           {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
         </div>
-        {action && <div className="ml-auto">{action}</div>}
+        {action && <div className="ml-auto shrink-0">{action}</div>}
       </div>
     </div>
   );

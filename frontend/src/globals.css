@@ -29,8 +29,8 @@
 
 /* ── Mobile responsive — patrones globales ── */
 @media (max-width: 767px) {
-  /* Tablas: scroll horizontal */
-  .tbl, table {
+  /* Tablas .tbl: scroll horizontal */
+  .tbl {
     display: block;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
