@@ -610,7 +610,7 @@ export default function Afiliados() {
         )} />
 
       {/* Pestañas */}
-      <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
+      <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:`2px solid ${C.border}`, paddingBottom:0, overflowX:'auto', flexWrap:'nowrap' }}>
         {[
           { key:'activos',    label:`👥 Activos (${totalReg})` },
           { key:'eliminados', label:`🗑️ Eliminados (${eliminados.length || '...'})` },
