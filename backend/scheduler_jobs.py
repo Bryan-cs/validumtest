@@ -26,7 +26,7 @@ def limpiar_notificaciones_diario():
 
 
 def limpiar_actividad_antigua():
-    """Elimina registros de actividad con más de 90 días."""
+    """Elimina registros de actividad con más de 7 días."""
     from database import SessionLocal
     from logger import logger as _log
     import models
