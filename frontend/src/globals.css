@@ -30,7 +30,11 @@
 /* ── Mobile responsive — patrones globales ── */
 @media (max-width: 767px) {
   /* Tablas: scroll horizontal */
-  .tbl { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tbl, table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 
   /* Grids inline con columnas fijas → 1 columna */
   [style*="grid-template-columns: 1fr 1fr"] {

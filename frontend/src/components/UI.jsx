@@ -50,7 +50,7 @@ export function Card({ children, style }) {
 export function StatCard({ label, value, color, icon, trend, trendUp = true }) {
   const accentColor = color || 'var(--c-primary)';
   return (
-    <div className="relative overflow-hidden rounded-xl border bg-card p-[18px] flex-1">
+    <div className="relative overflow-hidden rounded-xl border bg-card p-[18px] flex-1 min-w-[130px]">
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: `linear-gradient(135deg, ${accentColor}15 0%, transparent 65%)` }}

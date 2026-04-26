@@ -128,7 +128,7 @@ function BancoChart({ data, total }) {
   const selected = activeIdx !== null ? data[activeIdx] : null;
 
   return (
-    <div className="flex gap-5 items-center">
+    <div className="flex flex-col gap-5 items-center md:flex-row md:items-center">
       {/* Donut clickeable */}
       <div className="relative shrink-0" style={{ width: 180, height: 180 }}>
         <ResponsiveContainer width={180} height={180}>
