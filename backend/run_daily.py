@@ -6,7 +6,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 import os
+import sys
 import time
+from datetime import datetime, timezone
 import sentry_sdk
 
 if dsn := os.getenv("SENTRY_DSN"):
@@ -15,7 +17,19 @@ if dsn := os.getenv("SENTRY_DSN"):
 from logger import logger as log
 
 
-def _wait_for_db(max_attempts: int = 5, delay: int = 5) -> bool:
+def _en_ventana_cron() -> bool:
+    """Verifica si estamos dentro de ±15 min de las 00:00 UTC (ventana del cron).
+    Evita que los jobs corran en cada redeploy de Railway."""
+    now = datetime.now(timezone.utc)
+    minutos = now.hour * 60 + now.minute
+    # Ventana: 23:45-00:15 UTC (minutos 1425-1440 o 0-15)
+    en_ventana = minutos >= 1425 or minutos <= 15
+    if not en_ventana:
+        log.info(f"run_daily: fuera de ventana cron ({now.strftime('%H:%M')} UTC) — saliendo sin ejecutar")
+    return en_ventana
+
+
+def _wait_for_db(max_attempts: int = 6, delay: int = 10) -> bool:
     """Espera hasta que la DB esté lista (Railway internal DNS puede tardar al arrancar)."""
     from database import SessionLocal
     import sqlalchemy
@@ -33,6 +47,10 @@ def _wait_for_db(max_attempts: int = 5, delay: int = 5) -> bool:
     log.error("run_daily: DB no disponible tras todos los intentos — abortando")
     return False
 
+
+# Guard: solo ejecutar dentro de la ventana del cron
+if not _en_ventana_cron():
+    sys.exit(0)
 
 from scheduler_jobs import (
     limpiar_notificaciones_diario,
