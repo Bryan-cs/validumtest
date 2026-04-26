@@ -428,7 +428,7 @@ export default function Finanzas() {
   return (
     <div className="flex flex-col gap-0">
       {/* Header */}
-      <div className="flex items-center justify-between pb-5 mb-6 border-b relative">
+      <div className="flex flex-col gap-3 pb-5 mb-6 border-b relative md:flex-row md:items-center md:justify-between">
         <div className="absolute bottom-[-1px] left-0 w-12 h-0.5 rounded"
           style={{ background: `linear-gradient(90deg, ${C.primary}, ${C.accent})` }} />
         <div>
@@ -447,11 +447,11 @@ export default function Finanzas() {
         </div>
       </div>
 
-      {/* Layout dos columnas */}
-      <div className="flex gap-5 items-start">
+      {/* Layout dos columnas → una columna en mobile */}
+      <div className="flex flex-col gap-5 md:flex-row md:items-start">
 
         {/* Panel izquierdo */}
-        <div className="w-52 shrink-0 flex flex-col gap-3 sticky top-4">
+        <div className="w-full md:w-52 md:shrink-0 flex flex-col gap-3 md:sticky md:top-4">
           {isLoading ? (
             [1,2,3].map(i => <SkeletonCard key={i} height={90} />)
           ) : (

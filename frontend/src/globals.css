@@ -27,6 +27,38 @@
 .dark [data-radix-popper-content-wrapper] { color-scheme: dark; }
 .dark [role="dialog"] { background-color: var(--c-surface); color: var(--c-text); }
 
+/* ── Mobile responsive — patrones globales ── */
+@media (max-width: 767px) {
+  /* Tablas: scroll horizontal */
+  .tbl { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+  /* Grids inline con columnas fijas → 1 columna */
+  [style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns: 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+  }
+  [style*="grid-template-columns: 2fr 1fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+  [style*="grid-template-columns: 1fr 1fr 1fr 1fr"] {
+    grid-template-columns: 1fr 1fr !important;
+  }
+
+  /* Modales: ancho completo en mobile */
+  [style*="maxWidth: 820px"], [style*="maxWidth: 820"],
+  [style*="maxWidth: 700px"], [style*="maxWidth: 700"],
+  [style*="maxWidth: 660px"], [style*="maxWidth: 660"],
+  [style*="maxWidth: 600px"], [style*="maxWidth: 600"],
+  [style*="maxWidth: 560px"], [style*="maxWidth: 560"],
+  [style*="maxWidth: 520px"], [style*="maxWidth: 520"],
+  [style*="maxWidth: 500px"], [style*="maxWidth: 500"] {
+    max-width: calc(100vw - 24px) !important;
+    width: calc(100vw - 24px) !important;
+  }
+}
+
 /* Skeleton loader */
 @keyframes bbcSkeleton {
   0%   { opacity: 1; }
