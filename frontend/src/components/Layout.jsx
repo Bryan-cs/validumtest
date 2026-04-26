@@ -81,6 +81,16 @@ export default function Layout() {
   const [showWelcome, setShowWelcome] = useState(false);
   const dragging = useRef(false);
 
+  // ── Mobile detection ───────────────────────────────────────────────────────
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('theme', dark ? 'dark' : 'light');
@@ -185,7 +195,7 @@ export default function Layout() {
   const groups = navGroups(user?.rol);
 
   return (
-    <div style={{ display: 'flex', height: '100vh', fontFamily: "'DM Sans', system-ui, sans-serif" }}>
+    <div style={{ display: 'flex', height: '100vh', fontFamily: "'DM Sans', system-ui, sans-serif", overflow: 'hidden' }}>
     <style>{`
       @keyframes status-pulse {
         0%, 100% { opacity: 1; transform: scale(1); }
@@ -230,14 +240,35 @@ export default function Layout() {
         background: #F9FAFB;
         border-radius: 0 2px 2px 0;
       }
+
+      /* ── Mobile sidebar ── */
+      .sb-mobile {
+        transform: translateX(-100%);
+        transition: transform .25s cubic-bezier(.4,0,.2,1);
+      }
+      .sb-mobile.open { transform: translateX(0); }
     `}</style>
 
+      {/* Backdrop mobile */}
+      {isMobile && mobileOpen && (
+        <div onClick={() => setMobileOpen(false)} style={{
+          position: 'fixed', inset: 0, background: 'rgba(0,0,0,.55)', zIndex: 1000,
+        }} />
+      )}
+
       {/* Sidebar */}
-      <aside style={{
-        width, minWidth: width, maxWidth: width,
-        background: '#111827', borderRight: '1px solid #1F2937', display: 'flex', flexDirection: 'column',
-        position: 'relative', flexShrink: 0, overflow: 'hidden',
-      }}>
+      <aside
+        className={isMobile ? `sb-mobile${mobileOpen ? ' open' : ''}` : ''}
+        style={{
+          width: isMobile ? 260 : width,
+          minWidth: isMobile ? 260 : width,
+          maxWidth: isMobile ? 260 : width,
+          background: '#111827', borderRight: '1px solid #1F2937', display: 'flex', flexDirection: 'column',
+          position: isMobile ? 'fixed' : 'relative',
+          top: 0, left: 0, height: '100vh',
+          zIndex: isMobile ? 1001 : 'auto',
+          flexShrink: 0, overflow: 'hidden',
+        }}>
         {/* Logo */}
         <div style={{ padding: collapsed ? '14px 0 16px' : '14px 16px 16px', display:'flex', alignItems:'center', gap:10, whiteSpace:'nowrap', overflow:'hidden', justifyContent: collapsed ? 'center' : 'flex-start' }}>
           <div style={{ width:30, height:30, borderRadius:8, background:'linear-gradient(135deg,#f9fafb,#d1d5db)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'#111827', flexShrink:0 }}>BB</div>
@@ -278,6 +309,7 @@ export default function Layout() {
                 {!isGroupCollapsed && group.items.map((item) => (
                   <NavLink key={item.to} to={item.to} end={item.to === '/'}
                     title={collapsed ? item.label : undefined}
+                    onClick={() => isMobile && setMobileOpen(false)}
                     className={({ isActive }) => ['sb-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
                     style={({ isActive }) => ({
                       display: 'flex', alignItems: 'center', position: 'relative',
@@ -453,8 +485,8 @@ export default function Layout() {
           </button>
         </div>
 
-        {/* ── Handle de redimensión ─────────────────────────────────────── */}
-        <div
+        {/* ── Handle de redimensión (solo desktop) ──────────────────────── */}
+        {!isMobile && <div
           onMouseDown={onMouseDown}
           title="Arrastra para redimensionar"
           style={{
@@ -465,11 +497,35 @@ export default function Layout() {
           }}
           onMouseEnter={e => e.currentTarget.style.background = 'rgba(232,155,42,.5)'}
           onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-        />
+        />}
       </aside>
 
       {/* Panel principal */}
-      <main style={{ flex: 1, overflowY: 'auto', background: 'var(--c-bg)', padding: 24, minWidth: 0 }}>
+      <main style={{ flex: 1, overflowY: 'auto', background: 'var(--c-bg)', padding: isMobile ? '56px 12px 16px' : 24, minWidth: 0 }}>
+        {/* Topbar mobile */}
+        {isMobile && (
+          <div style={{
+            position: 'fixed', top: 0, left: 0, right: 0, height: 48, zIndex: 900,
+            background: '#111827', borderBottom: '1px solid #1F2937',
+            display: 'flex', alignItems: 'center', padding: '0 14px', gap: 12,
+          }}>
+            <button onClick={() => setMobileOpen(v => !v)} style={{
+              background: 'none', border: 'none', cursor: 'pointer', color: '#F9FAFB',
+              fontSize: 22, padding: 4, lineHeight: 1, display: 'flex', alignItems: 'center',
+            }}>☰</button>
+            <span style={{ fontFamily:"'Syne',sans-serif", fontSize: 15, fontWeight: 800, color: '#F9FAFB', letterSpacing: '-.3px' }}>
+              BBC File
+            </span>
+            {noLeidas > 0 && (
+              <span style={{
+                marginLeft: 'auto', background: '#E53E3E', color: '#fff',
+                borderRadius: 20, padding: '2px 8px', fontSize: 11, fontWeight: 700,
+              }}>
+                {noLeidas} 🔔
+              </span>
+            )}
+          </div>
+        )}
         <Outlet />
       </main>
 
