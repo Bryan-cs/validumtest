@@ -128,7 +128,8 @@ def limpiar_login_attempts():
     import models
     db = SessionLocal()
     try:
-        limite = datetime.now(timezone.utc) - timedelta(hours=24)
+        import time
+        limite = time.time() - 86400  # 24h en unix timestamp float
         count = db.query(models.LoginAttempt).filter(
             models.LoginAttempt.last_attempt < limite
         ).delete()
