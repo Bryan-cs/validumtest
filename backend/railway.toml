@@ -1,5 +1,5 @@
 [deploy]
-startCommand = "if [ -n \"$PORT\" ]; then alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --loop uvloop --log-config log_config.json; else python run_daily.py; fi"
+startCommand = "if [ \"$RAILWAY_SERVICE_NAME\" = \"bbc-daily\" ]; then python run_daily.py; else alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT --workers 1 --loop uvloop --log-config log_config.json; fi"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 region = "us-east4"
