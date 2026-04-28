@@ -22,31 +22,21 @@ function _tokenValido(token) {
 }
 
 const _tokenGuardado = localStorage.getItem('token');
-const _refreshGuardado = localStorage.getItem('refresh_token');
-if (!_tokenValido(_tokenGuardado) && !_tokenValido(_refreshGuardado)) {
-  // Solo limpiar todo si AMBOS tokens expiraron
+if (!_tokenValido(_tokenGuardado)) {
+  // Access token expirado o ausente — limpiar; el interceptor intentará refresh via cookie
   localStorage.removeItem('token');
-  localStorage.removeItem('refresh_token');
   localStorage.removeItem('user');
-} else if (!_tokenValido(_tokenGuardado)) {
-  // Access token expirado pero refresh válido — limpiar solo el access token
-  // El interceptor de api.js se encargará de renovarlo
-  localStorage.removeItem('token');
 }
 
 const useAuthStore = create((set) => ({
-  token:         localStorage.getItem('token') || null,
-  refresh_token: localStorage.getItem('refresh_token') || null,
-  user:          _loadUser(),
+  token: localStorage.getItem('token') || null,
+  user:  _loadUser(),
 
-  login: (token, user, refresh_token) => {
+  login: (token, user) => {
     localStorage.setItem('token', token);
     localStorage.setItem('user', JSON.stringify(user));
-    if (refresh_token) {
-      localStorage.setItem('refresh_token', refresh_token);
-    }
     resetRedirectFlag();
-    set({ token, user, refresh_token: refresh_token || null });
+    set({ token, user });
   },
 
   setToken: (token) => {
@@ -55,18 +45,14 @@ const useAuthStore = create((set) => ({
   },
 
   logout: async () => {
-    // Invalidar refresh token en el servidor (blacklist)
-    const rt = localStorage.getItem('refresh_token');
-    if (rt) {
-      try {
-        const { default: api } = await import('../utils/api');
-        await api.post('/auth/logout', { refresh_token: rt });
-      } catch { /* si falla el servidor, igual limpiar localmente */ }
-    }
+    // Llama al servidor para invalidar el refresh token (cookie httpOnly) y borrarlo
+    try {
+      const { default: api } = await import('../utils/api');
+      await api.post('/auth/logout');
+    } catch { /* si falla el servidor, igual limpiar localmente */ }
     localStorage.removeItem('token');
-    localStorage.removeItem('refresh_token');
     localStorage.removeItem('user');
-    set({ token: null, refresh_token: null, user: null });
+    set({ token: null, user: null });
   },
 }));
 
