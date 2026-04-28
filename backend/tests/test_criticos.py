@@ -48,34 +48,38 @@ def test_restaurar_eliminado_inexistente(client, admin_token):
 
 def test_refresh_token_blacklisted_tras_logout(client):
     """Refresh token queda blacklisted tras logout — no se puede reusar."""
-    # Login fresco para obtener tokens limpios
+    # Login fresco — RT llega en cookie httpOnly
     r = client.post("/auth/login", json={"username": "empleado1", "password": "emp1234"})
     assert r.status_code == 200
-    tokens = r.json()
-    refresh_token = tokens["refresh_token"]
-    access_token = tokens["access_token"]
+    assert "refresh_token" not in r.json(), "RT no debe venir en el body"
+    access_token = r.json()["access_token"]
+    # TestClient de Starlette persiste cookies automáticamente
 
-    # Logout — blacklistea el refresh token
-    r2 = client.post("/auth/logout", json={"refresh_token": refresh_token},
-                     headers={"Authorization": f"Bearer {access_token}"})
+    # Logout — blacklistea el RT via cookie y lo borra
+    r2 = client.post("/auth/logout", headers={"Authorization": f"Bearer {access_token}"})
     assert r2.status_code == 200
 
-    # Intentar usar el refresh token ya blacklisted → 401
-    r3 = client.post("/auth/refresh", json={"refresh_token": refresh_token})
+    # Intentar refresh con cookie ya borrada/blacklisted → 401
+    r3 = client.post("/auth/refresh")
     assert r3.status_code == 401
 
 
 def test_refresh_rotation(client):
     """Tras refresh, el token original queda inválido (rotation)."""
     r = client.post("/auth/login", json={"username": "admin", "password": "admin1234"})
-    rt_original = r.json()["refresh_token"]
+    assert r.status_code == 200
+    # RT está en cookie — el client lo reenvía automáticamente
 
-    # Primer refresh — obtiene nuevo token
-    r2 = client.post("/auth/refresh", json={"refresh_token": rt_original})
+    # Primer refresh — rota la cookie
+    r2 = client.post("/auth/refresh")
     assert r2.status_code == 200
+    assert "access_token" in r2.json()
 
-    # Usar el token original de nuevo → debe fallar (ya está blacklisted por rotation)
-    r3 = client.post("/auth/refresh", json={"refresh_token": rt_original})
+    # Logout para limpiar la cookie rotada
+    client.post("/auth/logout")
+
+    # Sin cookie válida → 401
+    r3 = client.post("/auth/refresh")
     assert r3.status_code == 401
 
 

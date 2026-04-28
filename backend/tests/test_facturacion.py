@@ -144,23 +144,30 @@ def test_retiro_afiliado_inexistente(client, admin_token):
 # ─── REFRESH TOKEN ───────────────────────────────────────────────────────────
 
 def test_refresh_token(client):
+    # Login — RT llega en cookie httpOnly, TestClient la persiste automáticamente
     r = client.post("/auth/login", json={"username": "admin", "password": "admin1234"})
-    rt = r.json()["refresh_token"]
-    r2 = client.post("/auth/refresh", json={"refresh_token": rt})
+    assert r.status_code == 200
+    r2 = client.post("/auth/refresh")
     assert r2.status_code == 200
     assert "access_token" in r2.json()
+    client.post("/auth/logout")
 
 
 def test_refresh_token_invalido(client):
-    r = client.post("/auth/refresh", json={"refresh_token": "invalid.token.here"})
+    # Sin cookie → 401
+    r = client.post("/auth/refresh")
     assert r.status_code == 401
 
 
 def test_access_token_no_sirve_como_refresh(client):
     r = client.post("/auth/login", json={"username": "admin", "password": "admin1234"})
     at = r.json()["access_token"]
-    r2 = client.post("/auth/refresh", json={"refresh_token": at})
+    # Borrar cookie para aislar el test, luego enviar AT como cookie manualmente
+    client.cookies.clear()
+    client.cookies.set("refresh_token", at)
+    r2 = client.post("/auth/refresh")
     assert r2.status_code == 401
+    client.cookies.clear()
 
 
 # ─── ACTIVIDAD (paginación) ─────────────────────────────────────────────────
