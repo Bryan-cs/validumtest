@@ -99,19 +99,22 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # En producción: ALLOWED_ORIGINS=https://tu-app.vercel.app
-# En desarrollo: dejar vacío → permite cualquier origen
+# En desarrollo: dejar vacío → usa localhost:5173 y localhost:3000
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "")
-_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()] or ["*"]
-if _allowed_origins == ["*"] and (os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ENVIRONMENT") == "production"):
-    raise RuntimeError(
-        "SEGURIDAD: ALLOWED_ORIGINS no está configurado. "
-        "Define la variable de entorno con los orígenes permitidos (ej: https://tu-app.vercel.app)."
-    )
+_allowed_origins = [o.strip() for o in _raw_origins.split(",") if o.strip()]
+if not _allowed_origins:
+    if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ENVIRONMENT") == "production":
+        raise RuntimeError(
+            "SEGURIDAD: ALLOWED_ORIGINS no está configurado. "
+            "Define la variable de entorno con los orígenes permitidos (ej: https://tu-app.vercel.app)."
+        )
+    # Dev: orígenes locales (allow_credentials=True requiere orígenes explícitos, no '*')
+    _allowed_origins = ["http://localhost:5173", "http://localhost:3000"]
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_allowed_origins,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
 )

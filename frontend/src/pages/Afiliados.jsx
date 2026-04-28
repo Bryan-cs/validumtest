@@ -14,7 +14,7 @@ import {
   flexRender,
 } from '@tanstack/react-table';
 
-const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5','N/A'];
+const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5'];
 
 function EmpresaBadge({ nombre }) {
   if (!nombre) return <span style={{ color: C.text2 }}>—</span>;
@@ -105,6 +105,9 @@ export default function Afiliados() {
   const [buscarElim,    setBuscarElim]    = useState('');
   const [elimFechaDesde, setElimFechaDesde] = useState('');
   const [elimFechaHasta, setElimFechaHasta] = useState('');
+  const [elimAnio,       setElimAnio]       = useState(() => String(new Date().getFullYear()));
+  const [elimMes,        setElimMes]        = useState(() => String(new Date().getMonth()+1).padStart(2,'0'));
+  const [elimDia,        setElimDia]        = useState(() => String(new Date().getDate()).padStart(2,'0'));
 
   const [arlFiltroCliente, setArlFiltroCliente] = useState('');
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
@@ -584,6 +587,11 @@ export default function Afiliados() {
     }
   }
 
+  // Años disponibles en tab Eliminados
+  const aniosElim = useMemo(() =>
+    [...new Set(eliminados.map(e => (e.fecha_eliminacion||'').slice(0,4)).filter(Boolean))].sort().reverse()
+  , [eliminados]);
+
   // Filtro por año y totales
   const aniosDisponibles = [...new Set(factAfil.map(f => String(f.anio)).filter(Boolean))].sort().reverse();
   const factAfil_filtradas = anioFiltro === 'Todos' ? factAfil : factAfil.filter(f => String(f.anio) === anioFiltro);
@@ -765,18 +773,30 @@ export default function Afiliados() {
                 fontSize:14, outline:'none', boxSizing:'border-box', background:C.surface, color:C.text }}
             />
             <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-              <span style={{ fontSize:12, color:C.text2, whiteSpace:'nowrap' }}>Eliminado:</span>
-              <input type="date" value={elimFechaDesde} onChange={e=>setElimFechaDesde(e.target.value)}
-                title="Fecha desde"
+              <select value={elimAnio} onChange={e=>setElimAnio(e.target.value)}
                 style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
-                  outline:'none', background:C.surface, color:C.text }} />
-              <span style={{ fontSize:12,color:C.text2 }}>–</span>
-              <input type="date" value={elimFechaHasta} onChange={e=>setElimFechaHasta(e.target.value)}
-                title="Fecha hasta"
+                  outline:'none', background:C.surface, color:elimAnio ? C.text : C.text2, cursor:'pointer' }}>
+                <option value="">Año</option>
+                {aniosElim.map(a => <option key={a} value={a}>{a}</option>)}
+              </select>
+              <select value={elimMes} onChange={e=>setElimMes(e.target.value)}
                 style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
-                  outline:'none', background:C.surface, color:C.text }} />
-              {(elimFechaDesde || elimFechaHasta) && (
-                <button onClick={() => { setElimFechaDesde(''); setElimFechaHasta(''); }}
+                  outline:'none', background:C.surface, color:elimMes ? C.text : C.text2, cursor:'pointer' }}>
+                <option value="">Mes</option>
+                {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map((m,i)=>(
+                  <option key={m} value={String(i+1).padStart(2,'0')}>{m}</option>
+                ))}
+              </select>
+              <select value={elimDia} onChange={e=>setElimDia(e.target.value)}
+                style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
+                  outline:'none', background:C.surface, color:elimDia ? C.text : C.text2, cursor:'pointer' }}>
+                <option value="">Día</option>
+                {Array.from({length:31},(_,i)=>String(i+1).padStart(2,'0')).map(d=>(
+                  <option key={d} value={d}>{Number(d)}</option>
+                ))}
+              </select>
+              {(elimMes || elimAnio || elimDia) && (
+                <button onClick={() => { setElimMes(''); setElimAnio(''); setElimDia(''); }}
                   style={{ padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:8,
                     background:C.surface2, cursor:'pointer', fontSize:12, color:C.text2 }}>✕</button>
               )}
@@ -804,8 +824,9 @@ export default function Afiliados() {
                           (e.doc||'').toLowerCase().includes(q) ||
                           (e.empresa||'').toLowerCase().includes(q))) return false;
                   }
-                  if (elimFechaDesde && (e.fecha_eliminacion||'') < elimFechaDesde) return false;
-                  if (elimFechaHasta && (e.fecha_eliminacion||'') > elimFechaHasta) return false;
+                  if (elimAnio && (e.fecha_eliminacion||'').slice(0,4) !== elimAnio) return false;
+                  if (elimMes && (e.fecha_eliminacion||'').slice(5,7) !== elimMes) return false;
+                  if (elimDia && (e.fecha_eliminacion||'').slice(8,10) !== elimDia) return false;
                   return true;
                 }).map(e=>(
                   <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`, background:C.redBg }}>

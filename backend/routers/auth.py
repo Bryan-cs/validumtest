@@ -1,10 +1,10 @@
 """Router de autenticación."""
-from fastapi import APIRouter, HTTPException, Depends, Request
+from fastapi import APIRouter, HTTPException, Depends, Request, Response
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import timedelta, datetime, timezone
-import jwt, time
+import jwt, time, os
 from database import get_db
 import schemas, crud, models
 from .deps import (
@@ -15,6 +15,30 @@ from fastapi.security import HTTPAuthorizationCredentials
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from logger import logger
+
+def _is_prod() -> bool:
+    return bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ENVIRONMENT") == "production")
+
+def _set_refresh_cookie(response: Response, token: str) -> None:
+    prod = _is_prod()
+    response.set_cookie(
+        key="refresh_token",
+        value=token,
+        httponly=True,
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+        path="/auth",
+        samesite="none" if prod else "lax",
+        secure=prod,
+    )
+
+def _delete_refresh_cookie(response: Response) -> None:
+    prod = _is_prod()
+    response.delete_cookie(
+        key="refresh_token",
+        path="/auth",
+        samesite="none" if prod else "lax",
+        secure=prod,
+    )
 
 _limiter = Limiter(key_func=get_remote_address)
 
@@ -77,7 +101,7 @@ def _clear_attempts(db: Session, ip: str):
 
 @router.post("/login")
 @_limiter.limit("20/minute")
-def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(get_db)):
+def login(request: Request, response: Response, data: schemas.LoginRequest, db: Session = Depends(get_db)):
     ip  = _get_ip(request)
     now = time.time()
     rec = _get_attempts(db, ip)
@@ -119,13 +143,13 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
 
     token_data = {"sub": user.username, "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
     access_token = create_token(token_data)
-    refresh_token = create_token(
+    rt = create_token(
         {**token_data, "type": "refresh"},
         expires=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
+    _set_refresh_cookie(response, rt)
     return {
         "access_token": access_token,
-        "refresh_token": refresh_token,
         "token_type": "bearer",
         "rol": user.rol,
         "nombre": user.nombre,
@@ -136,11 +160,16 @@ def login(request: Request, data: schemas.LoginRequest, db: Session = Depends(ge
 
 @router.post("/refresh")
 @_limiter.limit("10/minute")
-def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
-    """Obtiene nuevos tokens usando el refresh token (con rotation obligatoria)."""
+def refresh_token(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Obtiene nuevos tokens usando el refresh token (con rotation obligatoria).
+    El refresh token se lee de la cookie httpOnly — no del body.
+    """
     ip = _get_ip(request)
+    rt = request.cookies.get("refresh_token")
+    if not rt:
+        raise HTTPException(status_code=401, detail="No hay refresh token")
     try:
-        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(rt, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") != "refresh":
             raise HTTPException(status_code=401, detail="Token no es de tipo refresh")
     except jwt.ExpiredSignatureError:
@@ -176,24 +205,30 @@ def refresh_token(request: Request, body: schemas.RefreshTokenRequest, db: Sessi
         {**claims, "type": "refresh"},
         expires=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
+    _set_refresh_cookie(response, new_refresh)
     logger.info(f"token_refresh_ok: usuario={sub} ip={ip}")
-    return {"access_token": new_access, "refresh_token": new_refresh, "token_type": "bearer"}
+    return {"access_token": new_access, "token_type": "bearer"}
 
 
 @router.post("/logout")
-def logout(request: Request, body: schemas.RefreshTokenRequest, db: Session = Depends(get_db)):
-    """Invalida el refresh token — impide renovar el access token tras cerrar sesión."""
+def logout(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Invalida el refresh token — impide renovar el access token tras cerrar sesión.
+    Lee el refresh token de la cookie httpOnly y la elimina.
+    """
     ip = _get_ip(request)
-    try:
-        payload = jwt.decode(body.refresh_token, SECRET_KEY, algorithms=[ALGORITHM])
-        jti = payload.get("jti")
-        sub = payload.get("sub", "desconocido")
-        if jti:
-            expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
-            _blacklist_jti(db, jti, expires_at)
-        logger.info(f"logout_ok: usuario={sub} ip={ip}")
-    except Exception as _e:
-        logger.warning(f"logout_warn: no se pudo blacklistear token ip={ip}: {_e}")
+    rt = request.cookies.get("refresh_token")
+    if rt:
+        try:
+            payload = jwt.decode(rt, SECRET_KEY, algorithms=[ALGORITHM])
+            jti = payload.get("jti")
+            sub = payload.get("sub", "desconocido")
+            if jti:
+                expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
+                _blacklist_jti(db, jti, expires_at)
+            logger.info(f"logout_ok: usuario={sub} ip={ip}")
+        except Exception as _e:
+            logger.warning(f"logout_warn: no se pudo blacklistear token ip={ip}: {_e}")
+    _delete_refresh_cookie(response)
     return {"ok": True}
 
 

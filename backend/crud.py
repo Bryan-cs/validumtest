@@ -1234,15 +1234,26 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     hoy = datetime.now(COL_TZ)
     dia_hoy = hoy.day
 
-    # Generar los últimos 6 meses (mes-5 ... mes actual) como lista (año, mes_idx 1-12)
+    # Ventana de meses a generar:
+    # - Sin filtro explícito: mes anterior + mes actual (2 meses) — reduce ~67% vs 6 meses
+    # - Con filtro mes+anio explícito: solo ese mes (mínimo posible)
     meses_ventana = []
-    for i in range(5, -1, -1):
-        m = hoy.month - i
-        y = hoy.year
-        while m <= 0:
-            m += 12
-            y -= 1
-        meses_ventana.append((y, m))   # [(2025,10),(2025,11),...,(2026,3)]
+    if mes and anio:
+        # Filtro explícito: solo el mes solicitado
+        try:
+            _m_idx = MESES.index(mes) + 1
+            meses_ventana = [(int(anio), _m_idx)]
+        except (ValueError, IndexError):
+            pass
+    if not meses_ventana:
+        # Por defecto: mes anterior + mes actual
+        for i in range(1, -1, -1):
+            m = hoy.month - i
+            y = hoy.year
+            while m <= 0:
+                m += 12
+                y -= 1
+            meses_ventana.append((y, m))   # [(2026,3),(2026,4)]
 
     # Pre-cargar config
     cfg = db.query(models.Config).first()
