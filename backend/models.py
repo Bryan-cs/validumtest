@@ -324,21 +324,6 @@ class Documento(Base):
     contexto_id  = Column(Integer, nullable=True)        # id de tarea o solicitud si aplica
     creado       = Column(DateTime, default=_utcnow)
 
-class Mensaje(Base):
-    __tablename__ = "mensajes"
-    __table_args__ = (
-        Index('ix_mensaje_tipo_creado', 'tipo', 'creado'),
-        Index('ix_mensaje_destinatario_leido', 'destinatario', 'leido'),
-    )
-    id               = Column(Integer, primary_key=True, index=True)
-    tipo             = Column(String(10), index=True)      # "grupal" | "privado"
-    remitente        = Column(String(60), index=True)      # username
-    remitente_nombre = Column(String(120))
-    destinatario     = Column(String(120), nullable=True)  # cliente_ref (solo privado)
-    texto            = Column(Text)
-    creado           = Column(DateTime, default=_utcnow, index=True)
-    leido            = Column(Boolean, default=False)      # solo aplica a mensajes privados
-
 
 class AvisoCliente(Base):
     """Avisos/comunicados que el admin envía a un cliente específico."""

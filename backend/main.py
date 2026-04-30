@@ -42,6 +42,94 @@ from slowapi.errors import RateLimitExceeded
 limiter = Limiter(key_func=get_remote_address)
 
 
+# ─── PER-USER RATE LIMITING ───────────────────────────────────────────────────
+import time as _rl_time
+import threading as _rl_threading
+
+_rl_mem: dict = {}
+_rl_lock = _rl_threading.Lock()
+
+# (path_prefix, max_requests, window_segundos)
+# Orden importa — se usa el primer match
+_RL_RULES: list[tuple[str, int, int]] = [
+    ("/reportes/",  10,  60),   # Excel/PDF — CPU+DB pesado, 10/min es generoso
+    ("/cobro",      20,  60),   # recalcula SS para todos los afiliados
+    ("/dashboard",  30,  60),   # queries agregadas con GROUP BY
+    ("/afiliados",  60,  60),   # listados paginados
+    ("/facturas",   60,  60),
+    ("/retiros",    60,  60),
+    ("/portal/",    60,  60),   # portal cliente — incluye reportes portal
+    ("/",          120,  60),   # catch-all para el resto
+]
+
+# Paths que se saltan (auth.py ya los limita por IP; health no tiene datos)
+_RL_SKIP = {"/health", "/auth/login", "/auth/refresh", "/auth/logout",
+            "/auth/verify-password"}
+
+
+def _rl_get_rule(path: str) -> tuple[int, int]:
+    for prefix, limit, window in _RL_RULES:
+        if path.startswith(prefix):
+            return limit, window
+    return 120, 60
+
+
+def _rl_get_subject(request) -> str:
+    """Extrae 'sub' del JWT (sin hit a DB). Fallback a IP."""
+    auth = request.headers.get("Authorization", "")
+    if auth.startswith("Bearer "):
+        try:
+            import jwt as _jwt_mod
+            from routers.deps import SECRET_KEY, ALGORITHM
+            payload = _jwt_mod.decode(
+                auth[7:], SECRET_KEY, algorithms=[ALGORITHM],
+                options={"verify_exp": False},  # solo necesitamos el sub, no validar expiración aquí
+            )
+            sub = payload.get("sub")
+            if sub:
+                return f"u:{sub}"
+        except Exception:
+            pass
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        ip = parts[-1] if parts else (request.client.host if request.client else "unknown")
+    else:
+        ip = request.client.host if request.client else "unknown"
+    return f"ip:{ip}"
+
+
+def _rl_check(subject: str, path: str) -> tuple[int, bool]:
+    """Incrementa contador y retorna (count, exceeded). Usa Redis si disponible."""
+    limit, window = _rl_get_rule(path)
+    key = f"rl:{subject}:{path.split('/')[1]}:{window}"
+
+    try:
+        from crud import _redis_client, _redis_disponible
+        if _redis_disponible():
+            count = _redis_client.incr(key)
+            if count == 1:
+                _redis_client.expire(key, window)
+            return count, count > limit
+    except Exception:
+        pass
+
+    # Fallback memoria (dev sin Redis)
+    now = _rl_time.time()
+    with _rl_lock:
+        entry = _rl_mem.get(key)
+        if entry and (now - entry["ts"]) < window:
+            entry["count"] += 1
+            return entry["count"], entry["count"] > limit
+        _rl_mem[key] = {"count": 1, "ts": now}
+        if len(_rl_mem) > 2000:
+            # Limpiar expirados si el dict crece mucho
+            expired = [k for k, v in list(_rl_mem.items()) if now - v["ts"] >= window]
+            for k in expired:
+                _rl_mem.pop(k, None)
+        return 1, False
+
+
 from scheduler_jobs import (
     limpiar_token_blacklist       as _limpiar_token_blacklist,
     limpiar_notificaciones_diario as _limpiar_notificaciones_diario,
@@ -136,6 +224,31 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         )
         return response
 
+class PerUserRateLimitMiddleware(BaseHTTPMiddleware):
+    """Rate limiting por usuario autenticado (sub del JWT) o por IP si no hay token.
+    Límites distintos según el costo de cada categoría de endpoint.
+    Usa Redis en producción; dict en memoria como fallback en dev.
+    """
+    async def dispatch(self, request, call_next):
+        path = request.url.path
+        if path in _RL_SKIP or request.method == "OPTIONS":
+            return await call_next(request)
+
+        subject = _rl_get_subject(request)
+        count, exceeded = _rl_check(subject, path)
+
+        if exceeded:
+            limit, window = _rl_get_rule(path)
+            from fastapi.responses import JSONResponse
+            return JSONResponse(
+                status_code=429,
+                content={"detail": f"Demasiadas peticiones. Límite: {limit}/min."},
+                headers={"Retry-After": str(window)},
+            )
+        return await call_next(request)
+
+
+app.add_middleware(PerUserRateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 

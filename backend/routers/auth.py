@@ -49,8 +49,16 @@ def _blacklist_jti(db: Session, jti: str, expires_at) -> bool:
     Usa ON CONFLICT DO NOTHING para evitar error logs en PostgreSQL cuando
     requests concurrentes intentan blacklistear el mismo token simultáneamente.
     Retorna True si se insertó, False si ya existía.
+
+    synchronous_commit=off: no espera fsync del WAL antes de confirmar.
+    El WAL writer persiste igual en ~200ms. Trade-off aceptable: si el server
+    crashea en esa ventana, el refresh token revocado podría reutilizarse
+    brevemente — el access token (15 min) sigue siendo la barrera real.
+    Elimina los spikes de 15s observados en pg_stat_statements.
     """
+    from sqlalchemy import text as _text
     try:
+        db.execute(_text("SET LOCAL synchronous_commit = off"))
         stmt = pg_insert(models.TokenBlacklist).values(
             jti=jti,
             expires_at=expires_at,
