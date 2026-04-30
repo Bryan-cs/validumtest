@@ -714,11 +714,13 @@ def get_listas(db):
     return result
 
 def update_lista(db, nombre, items, user="sistema"):
+    from sqlalchemy import text as _text
     l = db.query(models.Lista).filter_by(nombre=nombre).first()
     if not l: l = models.Lista(nombre=nombre); db.add(l)
     l.items = json.dumps(items)
     _log(db, user, "actualizó lista", "Listas", nombre)
     cache_invalidar("listas:")
+    db.execute(_text("SET LOCAL synchronous_commit = off"))
     db.commit()
     return {"nombre":nombre,"items":items}
 
