@@ -29,8 +29,11 @@ def _en_ventana_cron() -> bool:
     return en_ventana
 
 
-def _wait_for_db(max_attempts: int = 6, delay: int = 10) -> bool:
-    """Espera hasta que la DB esté lista (Railway internal DNS puede tardar al arrancar)."""
+def _wait_for_db(max_attempts: int = 10, delay: int = 15) -> bool:
+    """Espera hasta que la DB esté lista (Railway internal DNS puede tardar al arrancar).
+
+    10 intentos × 15s = 150s máx — cubre el reinicio de PostgreSQL en Railway (~00:00 UTC).
+    """
     from database import SessionLocal
     import sqlalchemy
     for attempt in range(1, max_attempts + 1):
