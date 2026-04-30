@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from database import get_db
 import models, schemas
-from .deps import require_admin
+from .deps import verify_token
 
 router = APIRouter(prefix="/seguimiento-arl", tags=["seguimiento-arl"])
 
@@ -13,7 +13,7 @@ router = APIRouter(prefix="/seguimiento-arl", tags=["seguimiento-arl"])
 def list_seguimiento(
     cliente: Optional[str] = None,
     db: Session = Depends(get_db),
-    token=Depends(require_admin),
+    token=Depends(verify_token),
 ):
     q = db.query(models.SeguimientoArl)
     if cliente:
@@ -25,7 +25,7 @@ def list_seguimiento(
 def create_seguimiento(
     data: schemas.SeguimientoArlCreate,
     db: Session = Depends(get_db),
-    token=Depends(require_admin),
+    token=Depends(verify_token),
 ):
     row = models.SeguimientoArl(**data.model_dump(), estado="activo")
     db.add(row)
@@ -38,7 +38,7 @@ def create_seguimiento(
 def bulk_estado(
     body: schemas.BulkEstadoBody,
     db: Session = Depends(get_db),
-    token=Depends(require_admin),
+    token=Depends(verify_token),
 ):
     if not body.ids:
         raise HTTPException(400, "Lista de IDs vacía")
@@ -56,7 +56,7 @@ def update_seguimiento(
     id: int,
     data: schemas.SeguimientoArlUpdate,
     db: Session = Depends(get_db),
-    token=Depends(require_admin),
+    token=Depends(verify_token),
 ):
     row = db.query(models.SeguimientoArl).filter_by(id=id).first()
     if not row:
@@ -72,7 +72,7 @@ def update_seguimiento(
 def delete_seguimiento(
     id: int,
     db: Session = Depends(get_db),
-    token=Depends(require_admin),
+    token=Depends(verify_token),
 ):
     row = db.query(models.SeguimientoArl).filter_by(id=id).first()
     if not row:

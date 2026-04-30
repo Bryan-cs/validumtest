@@ -92,9 +92,10 @@ def test_create_afiliado_doc_duplicado(client, admin_token):
 
 # ─── CONTROL DE ACCESO ────────────────────────────────────────────────────────
 
-def test_empleado_no_puede_ver_eliminados(client, empleado_token):
+def test_empleado_puede_ver_eliminados(client, empleado_token):
+    # Empleados tienen acceso a todos los tabs de afiliados incluyendo eliminados
     r = client.get("/eliminados", headers={"Authorization": f"Bearer {empleado_token}"})
-    assert r.status_code == 403
+    assert r.status_code == 200
 
 
 def test_empleado_no_puede_crear_usuario(client, empleado_token):

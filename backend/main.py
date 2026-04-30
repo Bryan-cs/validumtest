@@ -296,7 +296,7 @@ app.include_router(seguimiento_arl_router.router)
 
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
-def list_eliminados(db: Session = Depends(get_db), token=Depends(require_admin)):
+def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
     rows = db.query(models.Eliminado).order_by(models.Eliminado.id.desc()).all()
     return [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
              "fecha_eliminacion":r.fecha_eliminacion,"mes":r.mes,
@@ -304,7 +304,7 @@ def list_eliminados(db: Session = Depends(get_db), token=Depends(require_admin))
 
 
 @app.get("/eliminados/{id}/preview")
-def preview_eliminado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+def preview_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Retorna cuántos registros serán borrados junto con el eliminado."""
     e = db.query(models.Eliminado).filter_by(id=id).first()
     if not e:
@@ -325,7 +325,7 @@ def preview_eliminado(id: int, db: Session = Depends(get_db), token=Depends(requ
 
 
 @app.delete("/eliminados/{id}")
-def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     e = db.query(models.Eliminado).filter_by(id=id).first()
     if not e: raise HTTPException(404, "No encontrado")
     nombre = e.nombre
@@ -347,7 +347,7 @@ def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(requi
 
 
 @app.post("/eliminados/{id}/restaurar")
-def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     import json as _json
     e = db.query(models.Eliminado).filter_by(id=id).first()
     if not e: raise HTTPException(404, "No encontrado")
@@ -455,7 +455,7 @@ def delete_retiro(id: int, db: Session = Depends(get_db), token=Depends(verify_t
 
 
 @app.post("/eliminados/{id}/a-retiros", status_code=201)
-def eliminado_a_retiros(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+def eliminado_a_retiros(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     return crud.eliminado_a_retiro(db, id, user=token.get("sub","sistema"))
 
 
