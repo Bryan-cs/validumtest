@@ -10,6 +10,7 @@ def test_crear_factura(client, admin_token):
         "nombre": "Factura Test", "tipo_doc": "CC", "doc": "888000111",
         "empresa": "TestCorp", "servicios": ["EPS"], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
     }, headers=h)
 
     r = client.post("/facturas", json={
@@ -93,6 +94,7 @@ def test_planilla_calculo(client, admin_token):
         "nombre": "Planilla Test", "tipo_doc": "CC", "doc": "777000111",
         "empresa": "TestCorp", "servicios": ["EPS", "AFP", "ARL 1"],
         "subtipo": "0", "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
         "arl": "1",
     }, headers=h)
 
@@ -115,6 +117,7 @@ def test_crear_retiro(client, admin_token):
         "nombre": "Retiro Test", "tipo_doc": "CC", "doc": "666000111",
         "empresa": "TestCorp", "servicios": [], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
     }, headers=h)
     r = client.post("/retiros", json={
         "doc": "666000111", "fecha": "2026-03-26", "motivo": "Renuncia", "obs": "",

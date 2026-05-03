@@ -13,6 +13,7 @@ def test_restaurar_eliminado(client, admin_token):
         "nombre": "Restaurar Test", "tipo_doc": "CC", "doc": "555100200",
         "empresa": "TestCorp", "servicios": [], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
     }, headers=h)
 
     # Retirar → pasa a eliminados
@@ -103,6 +104,7 @@ def test_cobro_estado_hoy(client, admin_token):
         "nombre": "Cobro Hoy Test", "tipo_doc": "CC", "doc": "444100200",
         "empresa": "TestCorp", "servicios": ["EPS"], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
         "dia_cobro": dia_hoy,
     }, headers=h)
 
@@ -130,6 +132,7 @@ def test_estado_planilla_pagada(client, admin_token):
         "nombre": "Planilla Pagada Test", "tipo_doc": "CC", "doc": "333100200",
         "empresa": "TestCorp", "servicios": ["EPS"], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
     }, headers=h)
 
     client.post("/facturas", json={
@@ -240,6 +243,7 @@ def test_ibc_below_smmlv_rechazado(client, admin_token):
         "nombre": "IBC Bajo Test", "tipo_doc": "CC", "doc": "111200300",
         "empresa": "TestCorp", "servicios": ["EPS"], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
         "ibc": 500000,
     }, headers=h)
     assert r.status_code == 422, (

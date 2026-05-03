@@ -62,6 +62,7 @@ def test_create_and_get_afiliado(client, admin_token):
         "servicios": ["EPS"],
         "tel": "3001234567",
         "email": "test@test.com",
+        "fecha_afiliacion": "2024-01-15",
     }
     r = client.post("/afiliados", json=payload, headers=headers)
     assert r.status_code == 201
@@ -85,6 +86,7 @@ def test_create_afiliado_doc_duplicado(client, admin_token):
         "subtipo": "0",
         "estado": "ACTIVO",
         "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
     }
     r = client.post("/afiliados", json=payload, headers=headers)
     assert r.status_code == 400

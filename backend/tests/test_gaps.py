@@ -28,6 +28,7 @@ def factura_pendiente_id(client, admin_token):
         "nombre": "Gaps Test", "tipo_doc": "CC", "doc": "111333555",
         "empresa": "TestCorp", "servicios": ["EPS"], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
     }, headers=h)
     r = client.post("/facturas", json={
         "nombre_afiliado": "Gaps Test", "doc": "111333555",
@@ -190,6 +191,7 @@ def test_portal_cliente_solo_ve_sus_afiliados(client, admin_token, cliente_token
         "nombre": "Otro Cliente Afiliado", "tipo_doc": "CC", "doc": "200300400",
         "empresa": "TestCorp", "servicios": [], "subtipo": "0",
         "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
         "cliente_txt": "TestCorp",
     }, headers=h_adm)
 
