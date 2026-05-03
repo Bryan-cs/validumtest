@@ -27,6 +27,14 @@ router = APIRouter(prefix="/portal", tags=["portal"])
 
 
 def _require_portal(token=Depends(verify_token)):
+    """Datos del portal — solo cliente y admin (necesitan cliente_ref)."""
+    if token.get("rol") not in ("admin", "cliente"):
+        raise HTTPException(status_code=403, detail="Acceso solo para clientes o administradores")
+    return token
+
+
+def _require_novedades(token=Depends(verify_token)):
+    """Novedades/solicitudes/avisos — accesible a admin, empleado y cliente."""
     if token.get("rol") not in ("admin", "empleado", "cliente"):
         raise HTTPException(status_code=403, detail="Acceso solo para clientes, empleados o administradores")
     return token
@@ -169,7 +177,7 @@ def portal_novedad_pago(
 
 
 @router.get("/novedades-pago")
-def portal_list_novedades(db: Session = Depends(get_db), token=Depends(_require_portal)):
+def portal_list_novedades(db: Session = Depends(get_db), token=Depends(_require_novedades)):
     query = db.query(models.NovedadPago)
     if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
@@ -299,7 +307,7 @@ def portal_delete_novedad(id: int, db: Session = Depends(get_db), token=Depends(
 def portal_solicitar_retiro(
     data: schemas.SolicitudRetiroCreate,
     db: Session = Depends(get_db),
-    token=Depends(_require_portal),
+    token=Depends(_require_novedades),
 ):
     rol            = token.get("rol", "")
     cliente_ref    = (token.get("cliente_ref") or "").strip()
@@ -338,7 +346,7 @@ def portal_solicitar_retiro(
 
 
 @router.get("/solicitudes-retiro")
-def portal_list_solicitudes(db: Session = Depends(get_db), token=Depends(_require_portal)):
+def portal_list_solicitudes(db: Session = Depends(get_db), token=Depends(_require_novedades)):
     query = db.query(models.SolicitudRetiro)
     if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
@@ -393,7 +401,7 @@ def portal_delete_solicitud_retiro(id: int, db: Session = Depends(get_db), token
 def portal_crear_novedad(
     data: schemas.SolicitudNovedadCreate,
     db: Session = Depends(get_db),
-    token=Depends(_require_portal),
+    token=Depends(_require_novedades),
 ):
     rol            = token.get("rol", "")
     cliente_ref    = (token.get("cliente_ref") or "").strip()
@@ -432,7 +440,7 @@ def portal_crear_novedad(
 
 
 @router.get("/solicitudes-novedad")
-def portal_list_novedades_afil(db: Session = Depends(get_db), token=Depends(_require_portal)):
+def portal_list_novedades_afil(db: Session = Depends(get_db), token=Depends(_require_novedades)):
     query = db.query(models.SolicitudNovedad)
     if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
@@ -644,7 +652,7 @@ def crear_aviso(body: schemas.AvisoClienteCreate, db: Session = Depends(get_db),
 
 
 @router.get("/avisos")
-def listar_avisos(db: Session = Depends(get_db), token=Depends(_require_portal)):
+def listar_avisos(db: Session = Depends(get_db), token=Depends(_require_novedades)):
     """Admin ve todos los avisos; cliente ve solo los suyos."""
     rol = token.get("rol", "")
     cliente_ref = (token.get("cliente_ref") or "").strip()
@@ -685,7 +693,7 @@ def listar_avisos(db: Session = Depends(get_db), token=Depends(_require_portal))
 
 
 @router.patch("/avisos/{aviso_id}/leer")
-def marcar_aviso_leido(aviso_id: int, db: Session = Depends(get_db), token=Depends(_require_portal)):
+def marcar_aviso_leido(aviso_id: int, db: Session = Depends(get_db), token=Depends(_require_novedades)):
     """Cliente marca un aviso como leído."""
     rol = token.get("rol", "")
     cliente_ref = (token.get("cliente_ref") or "").strip()
@@ -723,7 +731,7 @@ def portal_reporte(
     anio: str = "",
     formato: str = "excel",
     db: Session = Depends(get_db),
-    token=Depends(_require_portal),
+    token=Depends(_require_novedades),
 ):
     """Descarga reporte Excel o PDF de afiliados del cliente para un período."""
     import openpyxl
