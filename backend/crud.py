@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
-from sqlalchemy import or_
+from sqlalchemy import or_, func, case, and_, text as _text
+from sqlalchemy import true as sa_true
 import models, schemas, json, math, calendar
 from datetime import datetime, timezone, timedelta
 from models import COL_TZ
@@ -137,7 +138,7 @@ def _factura_to_dict(f: models.Factura) -> dict:
     }
 
 # ─── USUARIOS ─────────────────────────────────────────────────────────────────
-def get_user_by_username(db, username): return db.query(models.Usuario).filter(models.Usuario.username == username.lower()).first()
+def get_user_by_username(db, username): return db.query(models.Usuario).filter(func.lower(models.Usuario.username) == username.lower()).first()
 def get_usuario(db, id): return db.query(models.Usuario).filter_by(id=id).first()
 def get_usuarios(db): return [{"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"activo":u.activo,"cliente_ref":u.cliente_ref} for u in db.query(models.Usuario).all()]
 def create_usuario(db, data: schemas.UsuarioCreate):
@@ -722,7 +723,6 @@ def get_listas(db):
     return result
 
 def update_lista(db, nombre, items, user="sistema"):
-    from sqlalchemy import text as _text
     l = db.query(models.Lista).filter_by(nombre=nombre).first()
     if not l: l = models.Lista(nombre=nombre); db.add(l)
     l.items = json.dumps(items)
@@ -805,7 +805,6 @@ def get_dashboard(db, anio="", mes=""):
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
-    from sqlalchemy import func, case
     # Contar afiliados por estado con una sola query SQL
     stats = db.query(
         func.count(models.Afiliado.id).label("total"),
@@ -819,7 +818,6 @@ def get_dashboard(db, anio="", mes=""):
 
     # Una sola query cubre el período filtrado Y el total histórico de pendiente.
     # Se usan CASE en vez de WHERE para poder calcular pend_total (sin filtro) en el mismo SELECT.
-    from sqlalchemy import and_, true as sa_true
     period_conds = []
     if anio: period_conds.append(models.Factura.anio == anio)
     if mes:  period_conds.append(models.Factura.mes == mes)
@@ -935,7 +933,6 @@ def get_resumen_clientes(db, anio="", mes=""):
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached
-    from sqlalchemy import func, case, and_, true as sa_true
 
     period_conds = []
     if anio: period_conds.append(models.Factura.anio == anio)
@@ -990,8 +987,6 @@ def get_resumen_clientes(db, anio="", mes=""):
 
 def get_dashboard_cliente(db, cliente, anio="", mes=""):
     """KPIs financieros + afiliados + historial para un cliente específico."""
-    from sqlalchemy import func, case, and_, true as sa_true
-
     period_conds = []
     if anio: period_conds.append(models.Factura.anio == anio)
     if mes:  period_conds.append(models.Factura.mes  == mes)
@@ -1456,7 +1451,6 @@ def create_tarea(db, data: schemas.TareaCreate):
     return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
 
 def get_tareas(db, username: str, rol: str, skip: int = 0, limit: int = 200):
-    from sqlalchemy import or_
     q = db.query(models.Tarea)
     if rol != "admin":
         q = q.filter_by(asignado_a=username)

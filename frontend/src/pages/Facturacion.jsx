@@ -542,8 +542,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const { data: respF={total:0,items:[]}, isLoading } = useQuery({
     queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, busqueda, hayFiltros],
     queryFn: () => api.get('/facturas', { params: hayFiltros && (hayMes || busqueda)
-      ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0, exclude_planilla: !mesB }
-      : { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F, exclude_planilla: !mesB }
+      ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0, exclude_planilla: true }
+      : { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F, exclude_planilla: true }
     }).then(r=>r.data),
     placeholderData: (prev) => prev,
   });
@@ -567,6 +567,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
   // Filtrado local (memoizado — evita recalcular en cada render)
   const rowsFiltradas = useMemo(() => rows.filter(f => {
+    if (f.estado === 'planilla_pagada') return false;
     const q = busqueda.toLowerCase();
     if (busqueda && !`${f.nombre_afiliado} ${f.doc} ${f.cliente} ${f.codigo}`.toLowerCase().includes(q)) return false;
     if (filtros.anio.length    && !filtros.anio.includes(f.anio))                    return false;
