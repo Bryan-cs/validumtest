@@ -531,7 +531,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const mesB     = filtros.mes.length     === 1 ? filtros.mes[0]     : '';
   const clienteB = filtros.cliente.length === 1 ? filtros.cliente[0] : '';
   const estadoB  = filtros.estado.length  === 1
-    ? (filtros.estado[0] === 'Pagada' ? 'pagado' : 'pendiente') : '';
+    ? (filtros.estado[0] === 'Pagada' ? 'pagado' : filtros.estado[0] === 'Planilla Pagada' ? 'planilla_pagada' : 'pendiente') : '';
   const hayFiltros = anioB || mesB || clienteB || estadoB || busqueda ||
     filtros.anio.length > 1 || filtros.mes.length > 1 ||
     filtros.cliente.length > 1 || filtros.estado.length > 1;
@@ -567,14 +567,13 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
   // Filtrado local (memoizado — evita recalcular en cada render)
   const rowsFiltradas = useMemo(() => rows.filter(f => {
-    if (f.estado === 'planilla_pagada') return false;
     const q = busqueda.toLowerCase();
     if (busqueda && !`${f.nombre_afiliado} ${f.doc} ${f.cliente} ${f.codigo}`.toLowerCase().includes(q)) return false;
     if (filtros.anio.length    && !filtros.anio.includes(f.anio))                    return false;
     if (filtros.mes.length     && !filtros.mes.includes(f.mes))                      return false;
     if (filtros.cliente.length && !filtros.cliente.includes(f.cliente))              return false;
     if (filtros.estado.length  && !filtros.estado.includes(
-      f.estado==='pagado' ? 'Pagada' : 'Pendiente'
+      f.estado==='pagado' ? 'Pagada' : f.estado==='planilla_pagada' ? 'Planilla Pagada' : 'Pendiente'
     )) return false;
     return true;
   }), [rows, busqueda, filtros]);
@@ -843,7 +842,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           { key:'anio',    label:'Año',     icon:'📅', options: aniosUnicos },
           { key:'mes',     label:'Mes',     icon:'🗓️', options: mesesOrd },
           { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
-          { key:'estado',  label:'Estado',  icon:'📌', options: ['Pendiente','Pagada'] },
+          { key:'estado',  label:'Estado',  icon:'📌', options: ['Pendiente','Pagada','Planilla Pagada'] },
         ]}
         valores={filtros}
         onChange={setFiltro}
