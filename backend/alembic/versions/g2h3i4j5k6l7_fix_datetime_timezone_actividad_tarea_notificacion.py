@@ -1,7 +1,7 @@
 """fix datetime timezone actividad tarea notificacion
 
 Revision ID: g2h3i4j5k6l7
-Revises: f1a2b3c4d5e6
+Revises: a1c2e3f4b5d6
 Create Date: 2026-05-02
 
 Cambia fecha/creado en actividad, tareas, tarea_comentarios y notificaciones
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 
 revision = 'g2h3i4j5k6l7'
-down_revision = 'f1a2b3c4d5e6'
+down_revision = 'a1c2e3f4b5d6'
 branch_labels = None
 depends_on = None
 
