@@ -330,15 +330,18 @@ def _next_codigo(db):
     return f"FVE-{str(n+1).zfill(4)}"
 
 def get_facturas(db, anio="", mes="", cliente="", estado="", banco="", doc="",
-                skip: int = 0, limit: int = 0):
+                skip: int = 0, limit: int = 0, exclude_planilla: bool = False):
     """Lista facturas con filtros opcionales y paginación (skip/limit).
     Si limit=0 devuelve todas (para exportaciones Excel y dashboard).
+    exclude_planilla=True oculta planilla_pagada cuando no hay filtro de estado ni mes.
     """
     q = db.query(models.Factura)
     if anio:    q = q.filter_by(anio=anio)
     if mes:     q = q.filter_by(mes=mes)
     if cliente: q = q.filter_by(cliente=cliente)
     if estado:  q = q.filter_by(estado=estado)
+    elif exclude_planilla:
+        q = q.filter(models.Factura.estado != 'planilla_pagada')
     if banco:   q = q.filter_by(banco=banco)
     if doc:     q = q.filter_by(doc=doc)
     total = q.count()

@@ -21,16 +21,19 @@ def list_facturas(
     anio: str = "", mes: str = "", cliente: str = "",
     estado: str = "", banco: str = "", doc: str = "",
     skip: int = 0, limit: int = 0,
+    exclude_planilla: bool = False,
     db: Session = Depends(get_db), token=Depends(verify_token)
 ):
     """Lista facturas con paginación opcional.
     Sin limit devuelve todas. Con limit retorna {"total": N, "items": [...]}
+    exclude_planilla=true oculta planilla_pagada (usado por defecto desde el frontend).
     """
     if mes and mes not in MESES:
         raise HTTPException(422, f"mes debe ser nombre en español (ej: Abril). Recibido: '{mes}'")
     return crud.get_facturas(db, anio=anio, mes=mes, cliente=cliente,
                               estado=estado, banco=banco, doc=doc,
-                              skip=skip, limit=limit)
+                              skip=skip, limit=limit,
+                              exclude_planilla=exclude_planilla)
 
 
 @router.post("", status_code=201)

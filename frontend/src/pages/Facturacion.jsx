@@ -531,7 +531,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const mesB     = filtros.mes.length     === 1 ? filtros.mes[0]     : '';
   const clienteB = filtros.cliente.length === 1 ? filtros.cliente[0] : '';
   const estadoB  = filtros.estado.length  === 1
-    ? (filtros.estado[0] === 'Pagada' ? 'pagado' : filtros.estado[0] === 'Planilla Pagada' ? 'planilla_pagada' : 'pendiente') : '';
+    ? (filtros.estado[0] === 'Pagada' ? 'pagado' : 'pendiente') : '';
   const hayFiltros = anioB || mesB || clienteB || estadoB || busqueda ||
     filtros.anio.length > 1 || filtros.mes.length > 1 ||
     filtros.cliente.length > 1 || filtros.estado.length > 1;
@@ -542,8 +542,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const { data: respF={total:0,items:[]}, isLoading } = useQuery({
     queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, busqueda, hayFiltros],
     queryFn: () => api.get('/facturas', { params: hayFiltros && (hayMes || busqueda)
-      ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0 }
-      : { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F }
+      ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0, exclude_planilla: !mesB }
+      : { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, skip: (paginaF-1)*POR_PAG_F, limit: POR_PAG_F, exclude_planilla: !mesB }
     }).then(r=>r.data),
     placeholderData: (prev) => prev,
   });
@@ -573,7 +573,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     if (filtros.mes.length     && !filtros.mes.includes(f.mes))                      return false;
     if (filtros.cliente.length && !filtros.cliente.includes(f.cliente))              return false;
     if (filtros.estado.length  && !filtros.estado.includes(
-      f.estado==='pagado' ? 'Pagada' : f.estado==='planilla_pagada' ? 'Planilla Pagada' : 'Pendiente'
+      f.estado==='pagado' ? 'Pagada' : 'Pendiente'
     )) return false;
     return true;
   }), [rows, busqueda, filtros]);
@@ -842,7 +842,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           { key:'anio',    label:'Año',     icon:'📅', options: aniosUnicos },
           { key:'mes',     label:'Mes',     icon:'🗓️', options: mesesOrd },
           { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
-          { key:'estado',  label:'Estado',  icon:'📌', options: ['Pendiente','Pagada','Planilla Pagada'] },
+          { key:'estado',  label:'Estado',  icon:'📌', options: ['Pendiente','Pagada'] },
         ]}
         valores={filtros}
         onChange={setFiltro}
