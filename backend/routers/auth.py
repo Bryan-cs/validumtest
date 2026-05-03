@@ -220,22 +220,41 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
 
 @router.post("/logout")
 def logout(request: Request, response: Response, db: Session = Depends(get_db)):
-    """Invalida el refresh token — impide renovar el access token tras cerrar sesión.
-    Lee el refresh token de la cookie httpOnly y la elimina.
+    """Invalida el refresh token y el access token activo.
+    RT: leído de cookie httpOnly.
+    AT: leído del header Authorization — blacklisteado si presente y válido.
     """
     ip = _get_ip(request)
+    sub = "desconocido"
+
+    # Blacklistear refresh token
     rt = request.cookies.get("refresh_token")
     if rt:
         try:
             payload = jwt.decode(rt, SECRET_KEY, algorithms=[ALGORITHM])
             jti = payload.get("jti")
-            sub = payload.get("sub", "desconocido")
+            sub = payload.get("sub", sub)
             if jti:
                 expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
                 _blacklist_jti(db, jti, expires_at)
-            logger.info(f"logout_ok: usuario={sub} ip={ip}")
         except Exception as _e:
-            logger.warning(f"logout_warn: no se pudo blacklistear token ip={ip}: {_e}")
+            logger.warning(f"logout_warn: RT no blacklisteado ip={ip}: {_e}")
+
+    # Blacklistear access token (si viene en Authorization header)
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        at = auth_header.split(" ", 1)[1]
+        try:
+            payload = jwt.decode(at, SECRET_KEY, algorithms=[ALGORITHM])
+            jti = payload.get("jti")
+            if jti:
+                expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
+                _blacklist_jti(db, jti, expires_at)
+                sub = payload.get("sub", sub)
+        except Exception:
+            pass  # AT expirado o inválido — no importa, igual se va a logout
+
+    logger.info(f"logout_ok: usuario={sub} ip={ip}")
     _delete_refresh_cookie(response)
     return {"ok": True}
 

@@ -189,8 +189,7 @@ def _seed(db):
         import json
         pcts = {"EPS":0.04,"AFP":0.16,"CCF":0.04,
                 "ARL 1":0.00522,"ARL 2":0.01044,"ARL 3":0.02436,
-                "ARL 4":0.04350,"ARL 5":0.06960,
-                "FSP":0.0,"SENA":0.0,"ICBF":0.0}
+                "ARL 4":0.04350,"ARL 5":0.06960}
         db.add(models.Config(
             ibc_global=1_750_905,
             porcentajes=json.dumps(pcts)

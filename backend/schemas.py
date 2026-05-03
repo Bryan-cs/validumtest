@@ -46,7 +46,7 @@ class AfiliadoCreate(BaseModel):
         if v is not None and float(v) > 0 and float(v) < SMMLV_VALUE:
             raise ValueError(f'IBC no puede ser menor al SMMLV')
         return v
-    fecha_afiliacion: str = ""
+    fecha_afiliacion: str
     registrado_por: str = ""
 
     @field_validator('empresa', 'cargo', 'cliente_txt', 'eps', 'arl', 'ccf', 'afp',
@@ -243,6 +243,46 @@ class ConfigUpdate(BaseModel):
     def no_negativos(cls, v):
         if v is not None and v < 0:
             raise ValueError('El valor no puede ser negativo')
+        return v
+
+    @field_validator('ibc_global', mode='before')
+    @classmethod
+    def validar_ibc_global(cls, v):
+        SMMLV_VALUE = 1_300_000
+        if v is not None and 0 < v < SMMLV_VALUE:
+            raise ValueError(f'ibc_global no puede ser menor al SMMLV ({SMMLV_VALUE:,})')
+        return v
+
+    @field_validator('porcentajes', mode='before')
+    @classmethod
+    def validar_porcentajes(cls, v):
+        if v is None:
+            return v
+        TOPES = {
+            "EPS":   0.125,
+            "AFP":   0.16,
+            "CCF":   0.04,
+            "ARL 1": 0.00522,
+            "ARL 2": 0.01044,
+            "ARL 3": 0.02436,
+            "ARL 4": 0.04350,
+            "ARL 5": 0.06960,
+        }
+        ELIMINADAS = {"FSP", "SENA", "ICBF"}
+        errores = []
+        for clave, valor in v.items():
+            clave_upper = clave.strip().upper()
+            if clave_upper in ELIMINADAS:
+                errores.append(f"'{clave}' ya no es un porcentaje válido")
+                continue
+            if clave_upper not in TOPES:
+                errores.append(f"Clave desconocida: '{clave}'")
+                continue
+            tope = TOPES[clave_upper]
+            if valor < 0 or valor > tope:
+                errores.append(f"{clave_upper} debe estar entre 0 y {tope} (recibido: {valor})")
+        if errores:
+            raise ValueError('; '.join(errores))
         return v
 
 class ListaUpdate(BaseModel):

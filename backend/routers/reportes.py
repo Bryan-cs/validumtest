@@ -8,7 +8,7 @@ import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import crud
 import models
-from .deps import verify_token
+from .deps import verify_token, require_admin
 
 router = APIRouter(prefix="/reportes", tags=["reportes"])
 
@@ -132,7 +132,7 @@ def reporte_retiros(
 @router.get("/financiero")
 def reporte_financiero(
     anio: str = "", mes: str = "", cliente: str = "", estado: str = "", banco: str = "",
-    db: Session = Depends(get_db), token=Depends(verify_token)
+    db: Session = Depends(get_db), token=Depends(require_admin)
 ):
     result = crud.get_facturas(db, anio=anio, mes=mes, cliente=cliente,
                                estado=estado, banco=banco, skip=0, limit=0)

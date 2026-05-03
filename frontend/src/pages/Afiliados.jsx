@@ -394,10 +394,7 @@ export default function Afiliados() {
 
   const guardar = useMutation({
     mutationFn: async () => {
-      const payload = { ...form,
-        fecha_ingreso:    form.fecha_ingreso    || new Date().toISOString().slice(0,10),
-        fecha_afiliacion: form.fecha_afiliacion || new Date().toISOString().slice(0,10),
-      };
+      const payload = { ...form };
       const res = modal==='nuevo' ? await api.post('/afiliados',payload) : await api.put(`/afiliados/${modal.id}`,payload);
       return res;
     },
@@ -446,6 +443,8 @@ export default function Afiliados() {
       qc.setQueryData(['afiliados_all'], prev => prev?.filter(a => a.id !== id));
       qc.invalidateQueries({queryKey:['eliminados']});
       qc.invalidateQueries({queryKey:['afiliados-filter-options']});
+      qc.invalidateQueries({queryKey:['dashboard']});
+      qc.invalidateQueries({queryKey:['cobro']});
     },
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
@@ -1390,12 +1389,11 @@ export default function Afiliados() {
         </div>
 
         <Seccion title="Estado" />
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:'0 16px' }}>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'0 16px' }}>
           <Sel label="Estado del afiliado" value={form.estado||'ACTIVO'}
             onChange={v=>{ sf('estado',v); sf('estado_srv',v); }}
             options={(listas.estados_srv||ESTADOS_SRV).map(e=>({value:e,label:e}))} />
-          <InputUp label="Fecha ingreso"    type="date" value={form.fecha_ingreso||''}    onChange={v=>sf('fecha_ingreso',v)} />
-          <InputUp label="Fecha afiliación" type="date" value={form.fecha_afiliacion||''} onChange={v=>sf('fecha_afiliacion',v)} />
+          <InputUp label="Fecha afiliación *" type="date" value={form.fecha_afiliacion||''} onChange={v=>sf('fecha_afiliacion',v)} />
         </div>
 
         <Seccion title="IBC, novedades y detalle" />
@@ -1454,7 +1452,7 @@ export default function Afiliados() {
           borderTop:`1px solid ${C.border}`,paddingTop:14 }}>
           <Btn variant="secondary" onClick={()=>setModal(null)}>Cancelar</Btn>
           <Btn onClick={()=>guardar.mutate()}
-            disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim() || !form.cliente_txt?.trim()}
+            disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim() || !form.cliente_txt?.trim() || !form.fecha_afiliacion}
             title={!form.empresa?'Selecciona una empresa':!form.nombre?.trim()?'Ingresa el nombre':!form.doc?.trim()?'Ingresa el documento':!form.cliente_txt?.trim()?'Selecciona el cliente':''}>
             {guardar.isPending?'Guardando...':'💾 Guardar afiliado'}
           </Btn>

@@ -247,7 +247,7 @@ class Actividad(Base):
     accion  = Column(String(200))
     modulo  = Column(String(60))
     detalle = Column(String(200))
-    fecha   = Column(DateTime, default=_utcnow)
+    fecha   = Column(DateTime(timezone=True), default=_utcnow)
 
 class Tarea(Base):
     __tablename__ = "tareas"
@@ -262,9 +262,9 @@ class Tarea(Base):
     estado        = Column(String(20), default="pendiente", index=True)  # pendiente|en_proceso|completada|finalizada
     fecha_limite  = Column(String(10), nullable=True)
     privada       = Column(Boolean, default=False)
-    creado        = Column(DateTime, default=_utcnow)
-    completado_en = Column(DateTime, nullable=True)
-    finalizado_en = Column(DateTime, nullable=True)
+    creado        = Column(DateTime(timezone=True), default=_utcnow)
+    completado_en = Column(DateTime(timezone=True), nullable=True)
+    finalizado_en = Column(DateTime(timezone=True), nullable=True)
     finalizado_por= Column(String(60), nullable=True)
 
 class TareaComentario(Base):
@@ -273,7 +273,7 @@ class TareaComentario(Base):
     tarea_id = Column(Integer, index=True)
     usuario  = Column(String(60))
     texto    = Column(Text)
-    creado   = Column(DateTime, default=_utcnow)
+    creado   = Column(DateTime(timezone=True), default=_utcnow)
 
 class LoginAttempt(Base):
     __tablename__ = "login_attempts"
@@ -292,7 +292,7 @@ class Notificacion(Base):
     mensaje  = Column(String(300))
     leida    = Column(Boolean, default=False, index=True)
     tarea_id = Column(Integer, nullable=True)
-    creado   = Column(DateTime, default=_utcnow)
+    creado   = Column(DateTime(timezone=True), default=_utcnow)
 
 class PlanillaPago(Base):
     __tablename__ = "planillas_pago"

@@ -32,7 +32,7 @@ from database import get_db, init_db, _is_sqlite
 from sqlalchemy.orm import Session
 import models, schemas, crud
 from models import COL_TZ
-from routers.deps import verify_token, require_admin
+from routers.deps import verify_token, require_admin, require_admin_or_empleado
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -180,7 +180,15 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="BBC File API", version="1.0.0", lifespan=lifespan)
+_is_prod = os.getenv("DATABASE_URL", "").startswith("postgresql")
+app = FastAPI(
+    title="BBC File API",
+    version="1.0.0",
+    lifespan=lifespan,
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
+)
 
 # Rate limiting
 app.state.limiter = limiter
@@ -621,7 +629,7 @@ def delete_usuario(id: int, db: Session = Depends(get_db), token=Depends(require
 
 # ─── CONFIGURACIÓN ────────────────────────────────────────────────────────────
 @app.get("/config")
-def get_config(db: Session = Depends(get_db), token=Depends(verify_token)):
+def get_config(db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     return crud.get_config(db)
 
 
@@ -634,7 +642,7 @@ def update_config(data: schemas.ConfigUpdate,
 # ─── DASHBOARD ────────────────────────────────────────────────────────────────
 @app.get("/dashboard")
 def dashboard(anio: str = "", mes: str = "",
-              db: Session = Depends(get_db), token=Depends(verify_token)):
+              db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     return crud.get_dashboard(db, anio=anio, mes=mes)
 
 
@@ -654,7 +662,7 @@ def dashboard_cliente(cliente: str, anio: str = "", mes: str = "",
 @app.get("/cobro")
 def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
           mes: str = "", anio: str = "", doc: str = "",
-          db: Session = Depends(get_db), token=Depends(verify_token)):
+          db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     return crud.get_cobro(db, empresa=empresa, cliente=cliente, tipo=tipo,
                           mes=mes, anio=anio, doc=doc)
 
@@ -701,16 +709,16 @@ def health_detail(db: Session = Depends(get_db), token=Depends(verify_token)):
             storage_ok = True
         else:
             storage_ok = False
-            storage_err = _s3_error or "s3 client is False/None"
-    except Exception as e:
+            storage_err = "storage_error"
+    except Exception:
         storage_ok = False
-        storage_err = str(e)
+        storage_err = "storage_error"
     result = {"status": "ok" if db_ok else "degraded", "db": "ok" if db_ok else "error"}
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"
     result["storage"] = "r2" if storage_ok else "local"
     if storage_err:
-        result["storage_err"] = storage_err
+        result["storage_error"] = True
     if _start_time:
         uptime = (datetime.now(timezone.utc) - _start_time).total_seconds()
         result["uptime_seconds"] = int(uptime)
@@ -739,7 +747,7 @@ def clear_actividad(db: Session = Depends(get_db), token=Depends(require_admin))
 
 # ─── CLIENTES ÚNICOS ──────────────────────────────────────────────────────────
 @app.get("/clientes")
-def list_clientes(db: Session = Depends(get_db), token=Depends(verify_token)):
+def list_clientes(db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """Retorna la lista de clientes únicos (cliente_txt) de afiliados activos."""
     rows = (db.query(models.Afiliado.cliente_txt)
               .filter(models.Afiliado.activo == True, models.Afiliado.cliente_txt != None, models.Afiliado.cliente_txt != "")

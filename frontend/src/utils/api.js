@@ -13,6 +13,7 @@ api.interceptors.request.use(config => {
 });
 
 let _redirigiendo = false;
+let _refreshPromise = null; // Promise compartida — evita múltiples refresh en paralelo
 
 // Resetear flag cuando se navega a /login exitosamente
 export function resetRedirectFlag() { _redirigiendo = false; }
@@ -25,14 +26,19 @@ api.interceptors.response.use(
     const esLoginRequest = originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh');
 
     if (err.response?.status === 401 && !esLoginRequest && !_redirigiendo && !originalRequest._retry) {
-      // Intentar refresh — el refresh_token se envía automáticamente como cookie httpOnly
       originalRequest._retry = true;
-      try {
-        const resp = await axios.post(
+
+      // Si ya hay un refresh en curso, esperar ese resultado en vez de lanzar otro
+      if (!_refreshPromise) {
+        _refreshPromise = axios.post(
           `${api.defaults.baseURL}/auth/refresh`,
           {},
           { withCredentials: true }
-        );
+        ).finally(() => { _refreshPromise = null; });
+      }
+
+      try {
+        const resp = await _refreshPromise;
         const newToken = resp.data.access_token;
         localStorage.setItem('token', newToken);
         // Actualizar Zustand store si está disponible
@@ -44,12 +50,11 @@ api.interceptors.response.use(
         return api(originalRequest);
       } catch {
         // Refresh falló — redirigir a login
+        _redirigiendo = true;
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login';
       }
-
-      _redirigiendo = true;
-      localStorage.removeItem('token');
-      localStorage.removeItem('user');
-      window.location.href = '/login';
     }
     return Promise.reject(err);
   }

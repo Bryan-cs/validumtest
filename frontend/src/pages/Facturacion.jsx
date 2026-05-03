@@ -103,7 +103,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
       setCargoAdicional(config?.cargo_adicional ?? 2200);
     }
-  }, [open]);
+  }, [open, config]);
 
   useEffect(() => {
     if (open && prefill && prefill.doc) {
@@ -274,7 +274,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
           .catch(() => toast.error('Error buscando afiliado'));
       }
     }
-  }, [open, factura?.id]);
+  }, [open, factura?.id, config]);
 
   const planilla = calcPlanilla(afiliado, config, dias);
   const planillaFinal = planilla.length > 0 ? planilla : (factura?.servicios_detalle || []).map(s => ({
@@ -557,12 +557,13 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const totalPagsF = Math.ceil(totalFact / POR_PAG_F);
   const { data: config={} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data), staleTime: 300_000 });
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
+  const { data: todosClientes=[] } = useQuery({ queryKey:['clientes'], queryFn:()=>api.get('/clientes').then(r=>r.data), staleTime: 300_000 });
 
-  const clientesUnicos = [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort();
-  const aniosUnicos    = [...new Set(rows.map(r=>r.anio).filter(Boolean))].sort();
-  const mesesUnicos    = [...new Set(rows.map(r=>r.mes).filter(Boolean))];
+  const clientesUnicos = todosClientes.map(c=>c.cliente).filter(Boolean).sort();
   const MESES_ORDER    = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  const mesesOrd       = MESES_ORDER.filter(m=>mesesUnicos.includes(m));
+  const anioActual     = new Date().getFullYear();
+  const aniosUnicos    = Array.from({length: 4}, (_, i) => String(anioActual - i));
+  const mesesOrd       = MESES_ORDER;
 
   // Filtrado local (memoizado — evita recalcular en cada render)
   const rowsFiltradas = useMemo(() => rows.filter(f => {
@@ -1062,7 +1063,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           </select>
           <div style={{ display:'flex',justifyContent:'flex-end',gap:10 }}>
             <Btn variant="secondary" onClick={()=>setModalBulkPagar(false)}>Cancelar</Btn>
-            <Btn variant="success" disabled={pagarBulk.isPending}
+            <Btn variant="success" disabled={pagarBulk.isPending || !bancoBulk}
               onClick={()=>pagarBulk.mutate({ ids: selPendientes.map(f=>f.id), banco: bancoBulk })}>
               {pagarBulk.isPending ? 'Guardando...' : `✓ Confirmar ${selPendientes.length} pago(s)`}
             </Btn>
@@ -1085,7 +1086,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
             <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
               <Btn variant="secondary" onClick={()=>{ setModalPagar(null); setBancoPago(''); }}>Cancelar</Btn>
               <Btn variant="success" onClick={()=>pagar.mutate({ id:modalPagar.id, banco:bancoPago })}
-                disabled={pagar.isPending}>
+                disabled={pagar.isPending || !bancoPago}>
                 {pagar.isPending ? 'Guardando...' : '✓ Confirmar pago'}
               </Btn>
             </div>

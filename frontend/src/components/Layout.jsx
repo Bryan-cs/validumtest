@@ -47,6 +47,15 @@ const navGroups = (rol) => [
       { to: '/planillas-ss', label: '📋 Planillas SS' },
     ],
   },
+  ...(rol !== 'cliente' ? [
+    {
+      id: 'clientes',
+      label: 'CLIENTES',
+      items: [
+        { to: '/novedades-clientes', label: '📬 Novedades clientes' },
+      ],
+    },
+  ] : []),
   ...(rol === 'admin' ? [
     {
       id: 'configuracion',
@@ -56,7 +65,6 @@ const navGroups = (rol) => [
         { to: '/empleados',          label: '👔 Empleados' },
         { to: '/listas',             label: '📋 Listas' },
         { to: '/calculadora',        label: '🧮 Calculadora' },
-        { to: '/novedades-clientes', label: '📬 Novedades clientes' },
       ],
     },
     {

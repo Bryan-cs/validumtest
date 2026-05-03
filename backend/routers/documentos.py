@@ -20,10 +20,42 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), '..', 'uploads')
 ALLOWED_EXT = {'pdf','jpg','jpeg','png','gif','doc','docx','xls','xlsx'}
 MAX_SIZE = 10 * 1024 * 1024  # 10 MB
 
+# Magic bytes por grupo de extensiones
+_MAGIC = {
+    'pdf':              b'%PDF',
+    'jpg':              b'\xFF\xD8\xFF',
+    'jpeg':             b'\xFF\xD8\xFF',
+    'png':              b'\x89PNG',
+    'gif':              b'GIF8',
+    'docx':             b'PK\x03\x04',  # ZIP-based (Office Open XML)
+    'xlsx':             b'PK\x03\x04',
+    'doc':              b'\xD0\xCF\x11\xE0',  # OLE2 (Office legacy)
+    'xls':              b'\xD0\xCF\x11\xE0',
+}
+
+def _validar_magic(ext: str, content: bytes) -> bool:
+    magic = _MAGIC.get(ext)
+    if magic is None:
+        return True  # extensión sin firma conocida — pasar
+    return content[:len(magic)] == magic
+
 # ─── Cloudflare R2 ───────────────────────────────────────────────────────────
 _s3 = None
 _s3_error = None  # Guarda el error de inicialización para diagnóstico
 _R2_BUCKET = os.getenv("STORAGE_BUCKET", "")
+
+# En producción (PostgreSQL), R2 es obligatorio — disco Railway es efímero
+_DB_URL = os.getenv("DATABASE_URL", "")
+if _DB_URL.startswith("postgresql") and not all([
+    os.getenv("STORAGE_ACCOUNT"),
+    os.getenv("STORAGE_KEY"),
+    os.getenv("STORAGE_SECRET"),
+    _R2_BUCKET,
+]):
+    raise RuntimeError(
+        "Producción requiere almacenamiento R2 configurado. "
+        "Faltan una o más variables: STORAGE_ACCOUNT, STORAGE_KEY, STORAGE_SECRET, STORAGE_BUCKET"
+    )
 
 def _get_s3():
     global _s3, _s3_error
@@ -197,6 +229,8 @@ async def subir_documento(
     content = await file.read()
     if len(content) > MAX_SIZE:
         raise HTTPException(400, "Archivo demasiado grande (máx 10 MB)")
+    if not _validar_magic(ext, content):
+        raise HTTPException(400, f"El contenido del archivo no corresponde a un {ext.upper()} válido")
 
     import re
     safe_name = re.sub(r'[^\w.\-]', '_', file.filename or 'archivo')

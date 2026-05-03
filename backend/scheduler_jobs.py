@@ -181,10 +181,10 @@ def limpiar_planillas_antiguas():
                 if s3 and ruta and not ruta.startswith("uploads/"):
                     try:
                         s3.delete_object(Bucket=_R2_BUCKET, Key=ruta)
-                    except Exception:
-                        pass
-        except Exception:
-            pass
+                    except Exception as e:
+                        _log.warning(f"R2 delete failed ({ruta}): {e}")
+        except Exception as e:
+            _log.warning(f"R2 cleanup error: {e}")
         for doc_id, _ in docs:
             db.execute(text("DELETE FROM documentos WHERE id = :did"), {"did": doc_id})
         db.execute(text("DELETE FROM planillas_pago WHERE id = ANY(:ids)"), {"ids": ids})

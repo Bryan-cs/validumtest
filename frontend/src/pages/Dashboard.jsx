@@ -7,7 +7,7 @@ export default function Dashboard() {
   const { data: d, isLoading } = useQuery({
     queryKey: ['dashboard', '', ''],
     queryFn: () => api.get('/dashboard').then(r => r.data),
-    refetchInterval: 120_000,
+    refetchInterval: 300_000,
   });
 
   const { data: recientes = [] } = useQuery({

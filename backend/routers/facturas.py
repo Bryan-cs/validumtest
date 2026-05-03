@@ -5,6 +5,7 @@ import json
 from datetime import datetime
 from models import COL_TZ
 from fastapi import APIRouter, HTTPException, Depends
+from const import MESES
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
@@ -25,6 +26,8 @@ def list_facturas(
     """Lista facturas con paginación opcional.
     Sin limit devuelve todas. Con limit retorna {"total": N, "items": [...]}
     """
+    if mes and mes not in MESES:
+        raise HTTPException(422, f"mes debe ser nombre en español (ej: Abril). Recibido: '{mes}'")
     return crud.get_facturas(db, anio=anio, mes=mes, cliente=cliente,
                               estado=estado, banco=banco, doc=doc,
                               skip=skip, limit=limit)

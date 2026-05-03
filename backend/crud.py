@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-import models, schemas, json, math
+import models, schemas, json, math, calendar
 from datetime import datetime, timezone, timedelta
 from models import COL_TZ
 from typing import Optional
@@ -137,11 +137,11 @@ def _factura_to_dict(f: models.Factura) -> dict:
     }
 
 # ─── USUARIOS ─────────────────────────────────────────────────────────────────
-def get_user_by_username(db, username): return db.query(models.Usuario).filter(models.Usuario.username.ilike(username)).first()
+def get_user_by_username(db, username): return db.query(models.Usuario).filter(models.Usuario.username == username.lower()).first()
 def get_usuario(db, id): return db.query(models.Usuario).filter_by(id=id).first()
 def get_usuarios(db): return [{"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"activo":u.activo,"cliente_ref":u.cliente_ref} for u in db.query(models.Usuario).all()]
 def create_usuario(db, data: schemas.UsuarioCreate):
-    u = models.Usuario(nombre=data.nombre, username=data.username, password=hash_password(data.password), rol=data.rol, cliente_ref=data.cliente_ref)
+    u = models.Usuario(nombre=data.nombre, username=data.username.lower(), password=hash_password(data.password), rol=data.rol, cliente_ref=data.cliente_ref)
     db.add(u); db.commit(); db.refresh(u)
     return {"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"cliente_ref":u.cliente_ref}
 def update_usuario_password(db, id: int, new_password: str, user: str = ""):
@@ -432,10 +432,13 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
     f = db.query(models.Factura).filter_by(id=id).first()
     if not f: return None
 
-    # Punto 5: bloquear cambio de mes/anio en facturas ya pagadas
     PAGADAS = {"pagado", "planilla_pagada"}
     if f.estado in PAGADAS:
         campos = data.model_dump(exclude_none=True)
+        # Bloquear regresión de estado: pagado/planilla_pagada → pendiente
+        if campos.get("estado") == "pendiente":
+            raise HTTPException(400, "No se puede revertir una factura pagada a pendiente")
+        # Bloquear cambio de período en facturas ya pagadas
         if ("mes" in campos and campos["mes"] != f.mes) or \
            ("anio" in campos and campos["anio"] != f.anio):
             raise HTTPException(400, "No se puede cambiar el período de una factura ya pagada")
@@ -451,13 +454,15 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
     db.commit(); db.refresh(f); return _factura_to_dict(f)
 
 def pagar_factura(db, id, banco="", user="", monto=None):
+    from fastapi import HTTPException
     cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:")
     f = db.query(models.Factura).filter_by(id=id).with_for_update().first()
     if not f: return None
     if f.estado in ("pagado", "planilla_pagada"):
         return _factura_to_dict(f)  # idempotente
-    if banco:
-        f.banco = banco
+    if not banco or not banco.strip():
+        raise HTTPException(400, "Debe seleccionar un banco antes de marcar como pagada")
+    f.banco = banco
     f.estado = "pagado"
     f.pagado_en = datetime.now(timezone.utc)
     _log(db, user, "marcó factura como pagada", "Facturación", f.codigo)
@@ -801,12 +806,12 @@ def get_dashboard(db, anio="", mes=""):
     # Contar afiliados por estado con una sola query SQL
     stats = db.query(
         func.count(models.Afiliado.id).label("total"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%ACTIVO%"), 1), else_=0)).label("activos"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%RETIR%"),  1), else_=0)).label("retirados"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%SUSPENDIDO%"), 1), else_=0)).label("suspendidos"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%DOBLE%"), 1), else_=0)).label("doble_afiliacion"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%NO SE ENCUENTRA%"), 1), else_=0)).label("no_encontrado"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%ESPERA%"), 1), else_=0)).label("en_espera"),
+        func.sum(case((models.Afiliado.estado_srv == "ACTIVO",      1), else_=0)).label("activos"),
+        func.sum(case((models.Afiliado.estado_srv == "RETIRADO",    1), else_=0)).label("retirados"),
+        func.sum(case((models.Afiliado.estado_srv == "SUSPENDIDO",  1), else_=0)).label("suspendidos"),
+        func.sum(case((models.Afiliado.estado_srv.ilike("%DOBLE%"),          1), else_=0)).label("doble_afiliacion"),
+        func.sum(case((models.Afiliado.estado_srv.ilike("%NO SE ENCUENTRA%"),1), else_=0)).label("no_encontrado"),
+        func.sum(case((models.Afiliado.estado_srv.ilike("%ESPERA%"),         1), else_=0)).label("en_espera"),
     ).filter(models.Afiliado.activo==True).one()
 
     # Una sola query cubre el período filtrado Y el total histórico de pendiente.
@@ -938,9 +943,10 @@ def get_resumen_clientes(db, anio="", mes=""):
 
     fact_rows = db.query(
         models.Factura.cliente,
-        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.ingresos), else_=0)), 0).label("ingresos"),
-        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.costos),   else_=0)), 0).label("costos"),
-        func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos), else_=0)), 0).label("pendiente"),
+        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.ingresos),  else_=0)), 0).label("ingresos"),
+        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.costos),    else_=0)), 0).label("costos"),
+        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.costo_adm), else_=0)), 0).label("costo_adm"),
+        func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos),  else_=0)), 0).label("pendiente"),
         func.sum(case((and_(paid_ok, period_ok), 1), else_=0)).label("n_pagadas"),
     ).filter(
         models.Factura.cliente != None,
@@ -960,9 +966,10 @@ def get_resumen_clientes(db, anio="", mes=""):
 
     result = []
     for r in fact_rows:
-        ing  = float(r.ingresos)
-        cos  = float(r.costos)
-        util = ing - cos
+        ing      = float(r.ingresos)
+        cos      = float(r.costos)
+        costo_adm = float(r.costo_adm)
+        util     = ing - cos - costo_adm
         result.append({
             "cliente":     r.cliente,
             "n_afiliados": afil_map.get(r.cliente, 0),
@@ -990,17 +997,18 @@ def get_dashboard_cliente(db, cliente, anio="", mes=""):
     pending_ok = models.Factura.estado == "pendiente"
 
     facts = db.query(
-        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.ingresos), else_=0)), 0).label("ingresos"),
-        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.costos),   else_=0)), 0).label("costos"),
-        func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos), else_=0)), 0).label("pendiente"),
+        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.ingresos),  else_=0)), 0).label("ingresos"),
+        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.costos),    else_=0)), 0).label("costos"),
+        func.coalesce(func.sum(case((and_(paid_ok,    period_ok), models.Factura.costo_adm), else_=0)), 0).label("costo_adm"),
+        func.coalesce(func.sum(case((and_(pending_ok, period_ok), models.Factura.ingresos),  else_=0)), 0).label("pendiente"),
         func.sum(case((and_(paid_ok,    period_ok), 1), else_=0)).label("n_pagadas"),
         func.sum(case((and_(pending_ok, period_ok), 1), else_=0)).label("n_pendientes"),
     ).filter(models.Factura.cliente == cliente).one()
 
     stats = db.query(
         func.count(models.Afiliado.id).label("total"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%ACTIVO%"),           1), else_=0)).label("activos"),
-        func.sum(case((models.Afiliado.estado_srv.ilike("%SUSPENDIDO%"),       1), else_=0)).label("suspendidos"),
+        func.sum(case((models.Afiliado.estado_srv == "ACTIVO",                  1), else_=0)).label("activos"),
+        func.sum(case((models.Afiliado.estado_srv == "SUSPENDIDO",             1), else_=0)).label("suspendidos"),
         func.sum(case((models.Afiliado.estado_srv.ilike("%DOBLE%"),            1), else_=0)).label("doble_afiliacion"),
         func.sum(case((models.Afiliado.estado_srv.ilike("%NO SE ENCUENTRA%"),  1), else_=0)).label("no_encontrado"),
         func.sum(case((models.Afiliado.estado_srv.ilike("%ESPERA%"),           1), else_=0)).label("en_espera"),
@@ -1043,10 +1051,16 @@ def get_dashboard_cliente(db, cliente, anio="", mes=""):
         func.sum(case((paid_ok, 1), else_=0)).label("n"),
     ).filter(models.Factura.cliente == cliente).group_by(
         models.Factura.anio, models.Factura.mes,
-    ).order_by(models.Factura.anio.desc(), models.Factura.mes.desc()).limit(6).all()
+    ).all()
+
+    # Ordenar cronológicamente (anio asc, mes por posición real en MESES) y tomar últimos 6
+    hist_rows = sorted(
+        hist_rows,
+        key=lambda r: (r.anio, MESES.index(r.mes) if r.mes in MESES else 99),
+    )[-6:]
 
     historial = []
-    for r in reversed(hist_rows):
+    for r in hist_rows:
         mes_num = (MESES.index(r.mes) + 1) if r.mes in MESES else 0
         historial.append({
             "anio": r.anio, "mes": r.mes, "mes_num": mes_num,
@@ -1054,9 +1068,10 @@ def get_dashboard_cliente(db, cliente, anio="", mes=""):
             "n": int(r.n or 0),
         })
 
-    ing  = float(facts.ingresos)
-    cos  = float(facts.costos)
-    util = ing - cos
+    ing       = float(facts.ingresos)
+    cos       = float(facts.costos)
+    costo_adm = float(facts.costo_adm)
+    util      = ing - cos - costo_adm
     return {
         "cliente":           cliente,
         "ingresos":          ing,
@@ -1312,7 +1327,9 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     rows = []
     for a in afils:
         fa = a.fecha_afiliacion or a.fecha_ingreso or ""
-        if not fa or "-" not in fa: continue
+        if not fa or "-" not in fa:
+            log.warning(f"cobro: afiliado doc={a.doc} omitido — sin fecha_afiliacion")
+            continue
         try:
             partes = fa.split("-")
             dia_afil  = int(partes[2])
@@ -1354,7 +1371,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
                 # Mes actual: usar día de cobro
                 if dia_afil < dia_hoy:        estado = "VENCIDO"
                 elif dia_afil == dia_hoy:     estado = "HOY"
-                elif dia_afil == dia_hoy + 1: estado = "PROXIMO"
+                elif dia_afil == (dia_hoy % calendar.monthrange(hoy.year, hoy.month)[1]) + 1: estado = "PROXIMO"
                 else:
                     continue  # aún no se muestra — el día no ha llegado
 

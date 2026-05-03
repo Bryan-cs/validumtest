@@ -2,7 +2,8 @@
 import io
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timezone
+from models import COL_TZ
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
@@ -26,8 +27,8 @@ router = APIRouter(prefix="/portal", tags=["portal"])
 
 
 def _require_portal(token=Depends(verify_token)):
-    if token.get("rol") not in ("admin", "cliente"):
-        raise HTTPException(status_code=403, detail="Acceso solo para clientes o administradores")
+    if token.get("rol") not in ("admin", "empleado", "cliente"):
+        raise HTTPException(status_code=403, detail="Acceso solo para clientes, empleados o administradores")
     return token
 
 
@@ -153,10 +154,12 @@ def portal_novedad_pago(
     )
     db.add(novedad)
 
-    admins = db.query(models.Usuario).filter_by(rol="admin", activo=True).all()
-    for admin in admins:
+    staff = db.query(models.Usuario).filter(
+        models.Usuario.rol.in_(["admin", "empleado"]), models.Usuario.activo == True
+    ).all()
+    for u in staff:
         db.add(models.Notificacion(
-            usuario=admin.username,
+            usuario=u.username,
             mensaje=f"Cliente '{nombre_cliente}' reportó novedad SS para {len(afiliados)} afiliado(s) — {data.mes} {data.anio}",
         ))
 
@@ -168,7 +171,7 @@ def portal_novedad_pago(
 @router.get("/novedades-pago")
 def portal_list_novedades(db: Session = Depends(get_db), token=Depends(_require_portal)):
     query = db.query(models.NovedadPago)
-    if token.get("rol") != "admin":
+    if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
     rows = query.order_by(models.NovedadPago.id.desc()).limit(500).all()
     return [{
@@ -260,8 +263,8 @@ def portal_update_novedad_estado(
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
-    if token.get("rol") != "admin":
-        raise HTTPException(403, "Solo administradores pueden actualizar el estado")
+    if token.get("rol") not in ("admin", "empleado"):
+        raise HTTPException(403, "Solo administradores o empleados pueden actualizar el estado")
     nov = db.query(models.NovedadPago).filter_by(id=id).first()
     if not nov:
         raise HTTPException(404, "Novedad no encontrada")
@@ -320,10 +323,12 @@ def portal_solicitar_retiro(
     )
     db.add(solicitud)
 
-    admins = db.query(models.Usuario).filter_by(rol="admin", activo=True).all()
-    for admin in admins:
+    staff = db.query(models.Usuario).filter(
+        models.Usuario.rol.in_(["admin", "empleado"]), models.Usuario.activo == True
+    ).all()
+    for u in staff:
         db.add(models.Notificacion(
-            usuario=admin.username,
+            usuario=u.username,
             mensaje=f"Cliente '{nombre_cliente}' solicita retiro de '{afil.nombre}' — {data.motivo}",
         ))
 
@@ -335,7 +340,7 @@ def portal_solicitar_retiro(
 @router.get("/solicitudes-retiro")
 def portal_list_solicitudes(db: Session = Depends(get_db), token=Depends(_require_portal)):
     query = db.query(models.SolicitudRetiro)
-    if token.get("rol") != "admin":
+    if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
     rows = query.order_by(models.SolicitudRetiro.id.desc()).limit(500).all()
     return [{
@@ -352,8 +357,8 @@ def portal_update_solicitud_estado(
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
-    if token.get("rol") != "admin":
-        raise HTTPException(403, "Solo administradores pueden actualizar el estado")
+    if token.get("rol") not in ("admin", "empleado"):
+        raise HTTPException(403, "Solo administradores o empleados pueden actualizar el estado")
     sol = db.query(models.SolicitudRetiro).filter_by(id=id).first()
     if not sol:
         raise HTTPException(404, "Solicitud no encontrada")
@@ -412,10 +417,12 @@ def portal_crear_novedad(
     )
     db.add(solicitud)
 
-    admins = db.query(models.Usuario).filter_by(rol="admin", activo=True).all()
-    for admin in admins:
+    staff = db.query(models.Usuario).filter(
+        models.Usuario.rol.in_(["admin", "empleado"]), models.Usuario.activo == True
+    ).all()
+    for u in staff:
         db.add(models.Notificacion(
-            usuario=admin.username,
+            usuario=u.username,
             mensaje=f"Cliente '{nombre_cliente}' reportó novedad '{data.tipo}' para '{afil.nombre}'",
         ))
 
@@ -427,7 +434,7 @@ def portal_crear_novedad(
 @router.get("/solicitudes-novedad")
 def portal_list_novedades_afil(db: Session = Depends(get_db), token=Depends(_require_portal)):
     query = db.query(models.SolicitudNovedad)
-    if token.get("rol") != "admin":
+    if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
     rows = query.order_by(models.SolicitudNovedad.id.desc()).limit(500).all()
     return [{
@@ -517,8 +524,8 @@ def portal_update_novedad_afil_estado(
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
-    if token.get("rol") != "admin":
-        raise HTTPException(403, "Solo administradores pueden actualizar el estado")
+    if token.get("rol") not in ("admin", "empleado"):
+        raise HTTPException(403, "Solo administradores o empleados pueden actualizar el estado")
     s = db.query(models.SolicitudNovedad).filter_by(id=id).first()
     if not s:
         raise HTTPException(404, "Solicitud no encontrada")
@@ -612,8 +619,8 @@ def portal_planillas(mes: str = "", anio: str = "",
 @router.post("/avisos", status_code=201)
 def crear_aviso(body: schemas.AvisoClienteCreate, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Admin crea un aviso dirigido a un cliente específico."""
-    if token.get("rol") != "admin":
-        raise HTTPException(status_code=403, detail="Solo administradores pueden crear avisos")
+    if token.get("rol") not in ("admin", "empleado"):
+        raise HTTPException(status_code=403, detail="Solo administradores o empleados pueden crear avisos")
     aviso = models.AvisoCliente(
         cliente_ref=body.cliente_ref.strip(),
         titulo=body.titulo.strip(),
@@ -775,7 +782,7 @@ def portal_reporte(
                     "estado_factura": "Pagada" if f.estado in PAGADOS else f.estado.capitalize(),
                     "valor": f.ingresos or 0,
                     "banco": f.banco or "",
-                    "fecha_pago": f.pagado_en.strftime("%Y-%m-%d") if f.pagado_en else "",
+                    "fecha_pago": f.pagado_en.replace(tzinfo=timezone.utc).astimezone(COL_TZ).strftime("%Y-%m-%d") if f.pagado_en else "",
                     "sin_factura": False,
                 })
         else:
@@ -797,7 +804,7 @@ def portal_reporte(
     total_pagado  = sum(r["valor"] for r in con_factura if r["estado_factura"] == "Pagada")
     total_pendiente = sum(r["valor"] for r in con_factura if r["estado_factura"] != "Pagada")
     periodo_label = f"{mes} {anio}".strip() if (mes or anio) else "Todos los períodos"
-    fecha_gen     = datetime.now().strftime("%d/%m/%Y %H:%M")
+    fecha_gen     = datetime.now(COL_TZ).strftime("%d/%m/%Y %H:%M")
     cliente_label = cliente_ref if rol != "admin" else "Administrador"
 
     if formato == "excel":

@@ -89,7 +89,7 @@ export default function App() {
             <Route path="listas"      element={<PrivateRoute adminOnly><Listas /></PrivateRoute>} />
             <Route path="calculadora" element={<PrivateRoute adminOnly><Calculadora /></PrivateRoute>} />
             <Route path="actividad"        element={<PrivateRoute adminOnly><Actividad /></PrivateRoute>} />
-            <Route path="novedades-clientes" element={<PrivateRoute adminOnly><NovedadesClientes /></PrivateRoute>} />
+            <Route path="novedades-clientes" element={<PrivateRoute><NovedadesClientes /></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
