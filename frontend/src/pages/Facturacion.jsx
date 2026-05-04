@@ -600,9 +600,11 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [paginaIA, setPaginaIA]           = useState(1);
   const POR_PAG_IA = 20;
 
+  // Sin filtros explícitos: mostrar solo el mes actual (no acumular meses anteriores)
   const iaParams = {};
   if (anioB) iaParams.anio = parseInt(anioB);
   if (mesB)  iaParams.mes  = MESES_NUM.indexOf(mesB) + 1;
+  if (!anioB && !mesB) { iaParams.mes = hoyMes; iaParams.anio = hoyAnio; }
 
   const { data: ingAdList = [] } = useQuery({
     queryKey: ['ingresos-adicionales', iaParams.mes, iaParams.anio],
