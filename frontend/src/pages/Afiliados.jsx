@@ -117,7 +117,7 @@ export default function Afiliados() {
   const [arlModal, setArlModal] = useState(null);
   const [arlForm, setArlForm] = useState({
     nombre:'', documento:'', cliente:'', empresa:'',
-    fecha_afiliacion:'', nivel_arl:'N/A', observaciones:''
+    fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', observaciones:''
   });
 
   const setFiltro = (key,vals) => { setFiltros(f=>({...f,[key]:vals})); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
@@ -570,12 +570,13 @@ export default function Afiliados() {
   function toggleTodosArl() { setArlSeleccionados(todosArlSel ? [] : segArlFiltrado.map(r => r.id)); }
   function toggleUnoArl(id) { setArlSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); }
   function abrirNuevoArl() {
-    setArlForm({ nombre:'', documento:'', cliente:'', empresa:'', fecha_afiliacion:'', nivel_arl:'N/A', observaciones:'' });
+    setArlForm({ nombre:'', documento:'', cliente:'', empresa:'', fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', observaciones:'' });
     setArlModal('nuevo');
   }
   function abrirEditarArl(row) {
     setArlForm({ nombre:row.nombre, documento:row.documento, cliente:row.cliente||'', empresa:row.empresa||'',
-      fecha_afiliacion:row.fecha_afiliacion||'', nivel_arl:row.nivel_arl||'N/A', observaciones:row.observaciones||'',
+      fecha_afiliacion:row.fecha_afiliacion||'', entidad_arl:row.entidad_arl||'SURA',
+      nivel_arl:row.nivel_arl||'N/A', observaciones:row.observaciones||'',
       estado: row.estado||'activo' });
     setArlModal(row);
   }
@@ -1181,7 +1182,7 @@ export default function Afiliados() {
                   <th style={{ padding:'10px 12px', width:36 }}>
                     <input type="checkbox" checked={todosArlSel} onChange={toggleTodosArl} />
                   </th>
-                  {['Nombre','Documento','Cliente','Empresa','Fecha afiliación','Días','Nivel ARL','Estado','Observaciones','Acciones'].map(h => (
+                  {['Nombre','Documento','Cliente','Empresa','Fecha afiliación','Días','Entidad ARL','Nivel ARL','Estado','Observaciones','Acciones'].map(h => (
                     <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
                       color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
                   ))}
@@ -1189,7 +1190,7 @@ export default function Afiliados() {
               </thead>
               <tbody>
                 {segArlFiltrado.length === 0 && (
-                  <tr><td colSpan={11} style={{ padding:30, textAlign:'center', color:C.text2 }}>
+                  <tr><td colSpan={12} style={{ padding:30, textAlign:'center', color:C.text2 }}>
                     No hay registros de seguimiento ARL
                   </td></tr>
                 )}
@@ -1222,6 +1223,7 @@ export default function Afiliados() {
                             </span>
                         }
                       </td>
+                      <td style={{ ...tdc, fontSize:12, fontWeight:600 }}>{row.entidad_arl||'SURA'}</td>
                       <td style={{ ...tdc, fontSize:12 }}>{row.nivel_arl||'N/A'}</td>
                       <td style={tdc}>{statusBadge(row.estado==='activo'?'ACTIVO':row.estado==='retirar'?'PENDIENTE DE RETIRAR':'RETIRADO')}</td>
                       <td style={{ ...tdc, maxWidth:180, fontSize:12, color:C.text2 }}>{row.observaciones||'—'}</td>
@@ -1261,6 +1263,8 @@ export default function Afiliados() {
             style={{ width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,
               fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface,colorScheme:'inherit' }} />
         </div>
+        <Sel label="Entidad ARL" value={arlForm.entidad_arl} onChange={v => setArlForm(f=>({...f,entidad_arl:v}))}
+          options={[{value:'SURA',label:'SURA'},{value:'POSITIVA',label:'POSITIVA'}]} />
         <Sel label="Nivel ARL" value={arlForm.nivel_arl} onChange={v => setArlForm(f=>({...f,nivel_arl:v}))}
           options={['N/A','1','2','3','4','5']} />
         <div style={{ marginBottom:12 }}>

@@ -320,6 +320,7 @@ class SeguimientoArlCreate(BaseModel):
     cliente: str = ""
     empresa: str = ""
     fecha_afiliacion: str = ""   # 'YYYY-MM-DD'
+    entidad_arl: str = "SURA"   # SURA | POSITIVA
     nivel_arl: str = "N/A"
     observaciones: Optional[str] = None
 
@@ -329,6 +330,7 @@ class SeguimientoArlUpdate(BaseModel):
     cliente: Optional[str] = None
     empresa: Optional[str] = None
     fecha_afiliacion: Optional[str] = None
+    entidad_arl: Optional[str] = None
     nivel_arl: Optional[str] = None
     observaciones: Optional[str] = None
     estado: Optional[str] = None

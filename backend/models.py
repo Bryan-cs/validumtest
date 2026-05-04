@@ -360,6 +360,7 @@ class SeguimientoArl(Base):
     cliente          = Column(String(150), index=True)
     empresa          = Column(String(120))
     fecha_afiliacion = Column(String(20))   # 'YYYY-MM-DD'
+    entidad_arl      = Column(String(20), default='SURA')    # SURA | POSITIVA
     nivel_arl        = Column(String(10), default='N/A')
     observaciones    = Column(Text, nullable=True)
     estado           = Column(String(20), default='activo')  # activo | retirar | retirado
