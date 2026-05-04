@@ -65,10 +65,21 @@ from scheduler_jobs import (
 log.info("run_daily: inicio")
 
 if _wait_for_db():
-    limpiar_notificaciones_diario()
-    limpiar_token_blacklist()
-    limpiar_actividad_antigua()
-    limpiar_login_attempts()
+    _jobs = [
+        limpiar_notificaciones_diario,
+        limpiar_token_blacklist,
+        limpiar_actividad_antigua,
+        limpiar_login_attempts,
+    ]
+    for job in _jobs:
+        try:
+            job()
+        except Exception as _exc:
+            log.error(f"run_daily: fallo en {job.__name__}: {_exc}")
+            try:
+                sentry_sdk.capture_exception(_exc)
+            except Exception:
+                pass
     log.info("run_daily: fin")
 else:
     log.error("run_daily: abortado por falta de conexión a DB")

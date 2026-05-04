@@ -59,15 +59,22 @@ def limpiar_novedades_antiguas():
             (models.SolicitudNovedad, ['novedad_afil', 'resp_afil']),
         ]:
             viejos = db.query(Model).filter(Model.creado < limite).all()
-            for item in viejos:
-                from routers.documentos import _delete_file
-                docs = db.query(models.Documento).filter(
-                    models.Documento.contexto.in_(ctx),
-                    models.Documento.contexto_id == item.id,
-                ).all()
-                for d in docs:
+            if not viejos:
+                continue
+            ids = [item.id for item in viejos]
+            # Bulk load de documentos — una sola query para todos los items
+            from routers.documentos import _delete_file
+            docs = db.query(models.Documento).filter(
+                models.Documento.contexto.in_(ctx),
+                models.Documento.contexto_id.in_(ids),
+            ).all()
+            for d in docs:
+                try:
                     _delete_file(d.ruta)
-                    db.delete(d)
+                except Exception as e:
+                    _log.warning(f"Error borrando archivo {d.ruta}: {e}")
+                db.delete(d)
+            for item in viejos:
                 db.delete(item)
                 total += 1
         db.commit()

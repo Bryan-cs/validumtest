@@ -89,7 +89,7 @@ class Factura(Base):
     servicios_detalle= Column(Text, default="[]")   # JSON
     conceptos_detalle= Column(Text, default="[]")   # JSON
     afiliado_eliminado = Column(Boolean, default=False)
-    pagado_en        = Column(DateTime, nullable=True)
+    pagado_en        = Column(DateTime(timezone=True), nullable=True)
     monto_pagado     = Column(Numeric(15, 2), default=0)   # acumulado de abonos parciales
     creado_por       = Column(String(60))
     creado           = Column(DateTime, default=_utcnow)
@@ -102,7 +102,7 @@ class Retiro(Base):
     )
     id              = Column(Integer, primary_key=True, index=True)
     nombre          = Column(String(150))
-    doc             = Column(String(20), unique=True, index=True)
+    doc             = Column(String(20), index=True)
     empresa         = Column(String(80))
     fecha           = Column(String(10))
     motivo          = Column(String(50))

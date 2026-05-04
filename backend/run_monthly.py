@@ -61,9 +61,20 @@ from scheduler_jobs import (
 log.info("run_monthly: inicio")
 
 if _wait_for_db():
-    limpiar_tareas_mensuales()
-    limpiar_novedades_antiguas()
-    limpiar_planillas_antiguas()
+    _jobs = [
+        limpiar_tareas_mensuales,
+        limpiar_novedades_antiguas,
+        limpiar_planillas_antiguas,
+    ]
+    for job in _jobs:
+        try:
+            job()
+        except Exception as _exc:
+            log.error(f"run_monthly: fallo en {job.__name__}: {_exc}")
+            try:
+                sentry_sdk.capture_exception(_exc)
+            except Exception:
+                pass
     log.info("run_monthly: fin")
 else:
     log.error("run_monthly: abortado por falta de conexión a DB")
