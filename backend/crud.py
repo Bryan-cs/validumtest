@@ -682,13 +682,15 @@ def delete_ingreso_adicional(db, id, user=""):
 
 
 def get_gastos(db, mes: int, anio: int):
-    return [{"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio}
+    return [{"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio,
+             "creado": g.creado.isoformat() if g.creado else None}
             for g in db.query(models.Gasto).filter_by(mes=mes, anio=anio).order_by(models.Gasto.nombre).all()]
 
 def create_gasto(db, data: schemas.GastoCreate):
     g = models.Gasto(nombre=data.nombre, valor=data.valor, mes=data.mes, anio=data.anio)
     db.add(g); db.commit(); db.refresh(g)
-    return {"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio}
+    return {"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio,
+            "creado": g.creado.isoformat() if g.creado else None}
 
 def update_gasto(db, id: int, data: schemas.GastoUpdate):
     g = db.query(models.Gasto).filter_by(id=id).first()

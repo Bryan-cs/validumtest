@@ -90,7 +90,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   const [mes, setMes] = useState(() => MESES[new Date().getMonth()]);
   const [anio, setAnio] = useState(() => String(new Date().getFullYear()));
   const [estado, setEstado] = useState('pendiente');
-  const [ingreso, setIngreso] = useState(0);
+  const [ingreso, setIngreso] = useState('');
   const [novedades, setNovedades] = useState('');
   const [marcados, setMarcados] = useState({});
   const [conceptos, setConceptos] = useState([]);
@@ -102,7 +102,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       setCedula(''); setAfiliado(null); setErrorBusq(''); setDias(30);
       const hoy = new Date();
       setMes(MESES[hoy.getMonth()]); setAnio(String(hoy.getFullYear())); setEstado('pendiente');
-      setIngreso(0); setNovedades(''); setMarcados({}); setConceptos([]);
+      setIngreso(''); setNovedades(''); setMarcados({}); setConceptos([]);
       setCargoAdicional(config?.cargo_adicional ?? 2200);
     }
   }, [open, config]);
@@ -150,7 +150,8 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
     const val = parseFloat(c.valor) || 0;
     return s + (c.tipo === 'Deduccion' ? -val : val);
   }, 0);
-  const utilidad = ingreso - costoPlanilla + extra;
+  const ingresoNum = parseFloat(ingreso) || 0;
+  const utilidad = ingresoNum - costoPlanilla + extra;
   const ibc = afiliado ? ((afiliado.ibc && afiliado.ibc > 0) ? afiliado.ibc : config?.ibc_global) : config?.ibc_global;
 
   const guardar = useMutation({
@@ -160,7 +161,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         nombre_afiliado: afiliado.nombre, doc: afiliado.doc,
         cliente: afiliado.cliente_txt || '',
         anio, mes, periodo: String(dias), estado,
-        ingresos: ingreso, costos: planillaSS, costo_adm: cargoAdm,
+        ingresos: ingresoNum, costos: planillaSS, costo_adm: cargoAdm,
         conceptos_extra: extra, utilidad, novedades,
         servicios_detalle: planilla.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
         conceptos_detalle: conceptos,
@@ -229,13 +230,13 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
         <label style={lbl}>Ingreso cobrado al cliente ($)</label>
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <input type="number" style={{ ...inp, width:220 }} value={ingreso}
-            onChange={e => setIngreso(parseFloat(e.target.value)||0)} placeholder="0" />
+            onChange={e => setIngreso(e.target.value)} placeholder="0" />
           <span style={{ fontSize:11,color:C.text2 }}>Planilla + administración cobrada</span>
         </div>
       </div>
 
       <ConceptosSection conceptos={conceptos} setConceptos={setConceptos} />
-      <ResumenFinanciero ingreso={ingreso} costoPlanilla={costoPlanilla} extra={extra} utilidad={utilidad} />
+      <ResumenFinanciero ingreso={ingresoNum} costoPlanilla={costoPlanilla} extra={extra} utilidad={utilidad} />
 
       <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
         <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
@@ -254,7 +255,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
   const [mes, setMes] = useState('');
   const [estado, setEstado] = useState('pendiente');
   const [banco, setBanco] = useState('');
-  const [ingreso, setIngreso] = useState(0);
+  const [ingreso, setIngreso] = useState('');
   const [novedades, setNovedades] = useState('');
   const [marcados, setMarcados] = useState({});
   const [conceptos, setConceptos] = useState([]);
@@ -268,7 +269,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
       setMes(factura.mes || MESES[new Date().getMonth()]);
       setEstado(factura.estado || 'pendiente');
       setBanco(factura.banco || '');
-      setIngreso(factura.ingresos || 0);
+      setIngreso(factura.ingresos ?? '');
       setNovedades(factura.novedades || '');
       setConceptos(factura.conceptos_detalle || []);
       setCargoAdicional(config?.cargo_adicional ?? 2200);
@@ -295,12 +296,13 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
     const val = parseFloat(c.valor) || 0;
     return s + (c.tipo === 'Deduccion' ? -val : val);
   }, 0);
-  const utilidad = ingreso - costoPlanilla + extra;
+  const ingresoNum = parseFloat(ingreso) || 0;
+  const utilidad = ingresoNum - costoPlanilla + extra;
 
   const guardar = useMutation({
     mutationFn: () => api.put(`/facturas/${factura.id}`, {
       mes, periodo: String(dias), estado, banco,
-      ingresos: ingreso, costos: planillaSS, costo_adm: cargoAdm,
+      ingresos: ingresoNum, costos: planillaSS, costo_adm: cargoAdm,
       conceptos_extra: extra, utilidad, novedades,
       servicios_detalle: planillaFinal.map(p => ({ ...p, incluido: marcados[p.servicio] !== false })),
       conceptos_detalle: conceptos,
@@ -336,9 +338,9 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
         cargoAdicional={cargoAdicional} setCargoAdicional={setCargoAdicional} />
       <div style={{ marginBottom:10 }}><label style={lbl}>Ingreso cobrado al cliente ($)</label>
         <input type="number" style={{ ...inp,width:220 }} value={ingreso}
-          onChange={e => setIngreso(parseFloat(e.target.value)||0)} /></div>
+          onChange={e => setIngreso(e.target.value)} placeholder="0" /></div>
       <ConceptosSection conceptos={conceptos} setConceptos={setConceptos} />
-      <ResumenFinanciero ingreso={ingreso} costoPlanilla={costoPlanilla} extra={extra} utilidad={utilidad} />
+      <ResumenFinanciero ingreso={ingresoNum} costoPlanilla={costoPlanilla} extra={extra} utilidad={utilidad} />
       <div style={{ display:'flex', justifyContent:'flex-end', gap:10 }}>
         <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
         <Btn onClick={() => guardar.mutate()} disabled={guardar.isPending}>
@@ -433,7 +435,7 @@ function ConceptosSection({ conceptos, setConceptos }) {
         </div>
       ))}
       <Btn size="sm" variant="secondary"
-        onClick={() => setConceptos(cs => [...cs, {tipo:'Bono',desc:'',valor:0}])}>
+        onClick={() => setConceptos(cs => [...cs, {tipo:'Bono',desc:'',valor:''}])}>
         + Agregar concepto
       </Btn>
     </div>
@@ -515,9 +517,9 @@ function EditIngAdForm({ inicial, MESES_NUM, onGuardar, onCancel, isPending }) {
 export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const qc = useQueryClient();
   const [busqueda, setBusqueda] = useState('');
-  const [filtros,  setFiltros]  = useState({ anio:[String(new Date().getFullYear())], mes:[], cliente:[], estado:[] });
+  const [filtros,  setFiltros]  = useState({ anio:[String(new Date().getFullYear())], mes:[MESES[new Date().getMonth()]], cliente:[], estado:[] });
   const setFiltro = (key, vals) => setFiltros(f=>({...f,[key]:vals}));
-  const limpiar   = () => setFiltros({ anio:[String(new Date().getFullYear())], mes:[], cliente:[], estado:[] });
+  const limpiar   = () => setFiltros({ anio:[String(new Date().getFullYear())], mes:[MESES[new Date().getMonth()]], cliente:[], estado:[] });
   const [modalNueva,  setModalNueva]  = useState(false);
   const [modalEditar, setModalEditar] = useState(null);
   const [prefill, setPrefill] = useState(null);

@@ -77,11 +77,11 @@ export default function Empleados() {
   });
 
   const [gnombre, setGnom] = useState('');
-  const [gvalor, setGval] = useState(0);
+  const [gvalor, setGval] = useState('');
 
   const addGasto = useMutation({
-    mutationFn: () => api.post('/gastos', { nombre: gnombre, valor: +gvalor, mes, anio }),
-    onSuccess: (res) => { toast.success('Gasto agregado'); qc.setQueryData(['gastos', mes, anio], prev => [...(prev || []), res.data]); setGnom(''); setGval(0); },
+    mutationFn: () => api.post('/gastos', { nombre: gnombre, valor: parseFloat(gvalor) || 0, mes, anio }),
+    onSuccess: (res) => { toast.success('Gasto agregado'); qc.setQueryData(['gastos', mes, anio], prev => [...(prev || []), res.data]); setGnom(''); setGval(''); },
     onError: (e) => toast.error(e?.response?.data?.detail || 'Error'),
   });
 
@@ -286,7 +286,7 @@ export default function Empleados() {
       <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
           <thead><tr style={{ background: C.surface2 }}>
-            {['Concepto', 'Valor', 'Acciones'].map(h => (
+            {['Concepto', 'Valor', 'Fecha', 'Acciones'].map(h => (
               <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
             ))}
           </tr></thead>
@@ -295,17 +295,18 @@ export default function Empleados() {
               <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}` }}>
                 <td style={tdc}>{g.nombre}</td>
                 <td style={{ ...tdc, textAlign: 'right', fontWeight: 600 }}>{fmt(g.valor)}</td>
+                <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>{g.creado ? new Date(g.creado).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—'}</td>
                 <td style={tdc}>
                   <Btn size="sm" variant="danger" onClick={() => setConfirmState({ open:true, title:'Eliminar gasto', message:`¿Eliminar el gasto "${g.nombre}"?`, onConfirm:()=>{ delGasto.mutate(g.id); setConfirmState(s=>({...s,open:false})); } })}>Eliminar</Btn>
                 </td>
               </tr>
             ))}
-            {gastos.length === 0 && <tr><td colSpan={3} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin gastos este mes</td></tr>}
+            {gastos.length === 0 && <tr><td colSpan={4} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin gastos este mes</td></tr>}
             {gastos.length > 0 && (
               <tr style={{ background: C.surface2, fontWeight: 700 }}>
                 <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>Total gastos:</td>
                 <td style={{ ...tdc, textAlign: 'right', color: C.amber }}>{fmt(gasTotal)}</td>
-                <td style={tdc} />
+                <td style={tdc} /><td style={tdc} />
               </tr>
             )}
           </tbody>
@@ -328,7 +329,7 @@ export default function Empleados() {
               {usuarios.filter(u => u.rol === 'empleado').map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
             </select>
             <label style={lbl}>Salario base de referencia ($)</label>
-            <input type="number" style={inp} value={form.nomina || 0} onChange={e => sf('nomina', +e.target.value)} />
+            <input type="number" style={inp} value={form.nomina ?? ''} onChange={e => sf('nomina', +e.target.value)} />
             <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>
               <Btn variant="secondary" onClick={() => setModal(null)}>Cancelar</Btn>
               <Btn onClick={() => guardarEmp.mutate()} disabled={guardarEmp.isPending || !form.nombre}>
