@@ -167,8 +167,10 @@ class GastoCreate(BaseModel):
     anio: int
 
 class GastoUpdate(BaseModel):
-    nombre: str
-    valor: float
+    nombre: Optional[str] = None
+    valor: Optional[float] = None
+    mes: Optional[int] = None
+    anio: Optional[int] = None
 
 class NominaItemUpdate(BaseModel):
     valor: float

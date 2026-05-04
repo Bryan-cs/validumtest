@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas, crud
-from .deps import verify_token, require_admin
+from .deps import verify_token, require_admin, require_admin_or_empleado
 
 router = APIRouter(prefix="/afiliados", tags=["afiliados"])
 
@@ -73,7 +73,7 @@ def list_afiliados(
 @router.get("/{id}/certificado")
 def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Genera un certificado de inicio de afiliación en PDF con membrete corporativo."""
-    import PyPDF2
+    import pypdf as PyPDF2
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
@@ -214,7 +214,7 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
 @router.get("/{id}/estado-cuenta")
 def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Genera un PDF 'Estado de Cuenta' del afiliado con todas sus facturas."""
-    import PyPDF2
+    import pypdf as PyPDF2
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors
@@ -418,7 +418,7 @@ def get_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_to
 
 @router.post("", status_code=201)
 def create_afiliado(data: schemas.AfiliadoCreate,
-                    db: Session = Depends(get_db), token=Depends(verify_token)):
+                    db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     registrado_por = token.get("sub", "sistema")
     # Si existe un afiliado activo sin registro de eliminado → bloquear (afiliado real)
     activo = crud.get_afiliado_by_doc(db, data.doc)
@@ -439,7 +439,7 @@ def create_afiliado(data: schemas.AfiliadoCreate,
 
 @router.put("/{id}")
 def update_afiliado(id: int, data: schemas.AfiliadoCreate,
-                    db: Session = Depends(get_db), token=Depends(verify_token)):
+                    db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     a = crud.get_afiliado(db, id)
     if not a:
         raise HTTPException(404, "Afiliado no encontrado")
@@ -450,7 +450,7 @@ def update_afiliado(id: int, data: schemas.AfiliadoCreate,
 
 
 @router.delete("/{id}")
-def delete_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def delete_afiliado(id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     a = db.query(models.Afiliado).filter_by(id=id, activo=True).first()
     if not a:
         raise HTTPException(404, "Afiliado no encontrado")

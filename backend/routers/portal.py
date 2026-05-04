@@ -177,11 +177,16 @@ def portal_novedad_pago(
 
 
 @router.get("/novedades-pago")
-def portal_list_novedades(db: Session = Depends(get_db), token=Depends(_require_novedades)):
+def portal_list_novedades(
+    skip: int = 0, limit: int = 50,
+    db: Session = Depends(get_db), token=Depends(_require_novedades),
+):
+    # SEC2-M3: paginación con tope máximo de 200
+    limit = min(limit, 200)
     query = db.query(models.NovedadPago)
     if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
-    rows = query.order_by(models.NovedadPago.id.desc()).limit(500).all()
+    rows = query.order_by(models.NovedadPago.id.desc()).offset(skip).limit(limit).all()
     return [{
         "id": r.id, "cliente_ref": r.cliente_ref, "username_cliente": r.username_cliente,
         "mes": r.mes, "anio": r.anio,
@@ -346,11 +351,16 @@ def portal_solicitar_retiro(
 
 
 @router.get("/solicitudes-retiro")
-def portal_list_solicitudes(db: Session = Depends(get_db), token=Depends(_require_novedades)):
+def portal_list_solicitudes(
+    skip: int = 0, limit: int = 50,
+    db: Session = Depends(get_db), token=Depends(_require_novedades),
+):
+    # SEC2-M3: paginación con tope máximo de 200
+    limit = min(limit, 200)
     query = db.query(models.SolicitudRetiro)
     if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
-    rows = query.order_by(models.SolicitudRetiro.id.desc()).limit(500).all()
+    rows = query.order_by(models.SolicitudRetiro.id.desc()).offset(skip).limit(limit).all()
     return [{
         "id": r.id, "cliente_ref": r.cliente_ref,
         "afiliado_doc": r.afiliado_doc, "afiliado_nombre": r.afiliado_nombre,
@@ -440,11 +450,16 @@ def portal_crear_novedad(
 
 
 @router.get("/solicitudes-novedad")
-def portal_list_novedades_afil(db: Session = Depends(get_db), token=Depends(_require_novedades)):
+def portal_list_novedades_afil(
+    skip: int = 0, limit: int = 50,
+    db: Session = Depends(get_db), token=Depends(_require_novedades),
+):
+    # SEC2-M3: paginación con tope máximo de 200
+    limit = min(limit, 200)
     query = db.query(models.SolicitudNovedad)
     if token.get("rol") == "cliente":
         query = query.filter_by(username_cliente=token.get("sub"))
-    rows = query.order_by(models.SolicitudNovedad.id.desc()).limit(500).all()
+    rows = query.order_by(models.SolicitudNovedad.id.desc()).offset(skip).limit(limit).all()
     return [{
         "id": r.id, "cliente_ref": r.cliente_ref,
         "afiliado_doc": r.afiliado_doc, "afiliado_nombre": r.afiliado_nombre,

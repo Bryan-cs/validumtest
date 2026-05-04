@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from datetime import timedelta, datetime, timezone
-import jwt, time, os
+import jwt, time, os, hashlib
 from database import get_db
 import schemas, crud, models
 from .deps import (
@@ -74,8 +74,13 @@ def _blacklist_jti(db: Session, jti: str, expires_at) -> bool:
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 # ── Protección contra fuerza bruta (usando DB para funcionar con múltiples workers) ──
-_MAX_ATTEMPTS = 5
-_BLOCK_WINDOW = 300  # segundos (5 minutos)
+_MAX_ATTEMPTS       = 5   # por IP
+_MAX_ATTEMPTS_COMBO = 20  # por (ip, username) — bloquea NAT/proxy sin afectar otras cuentas
+_BLOCK_WINDOW       = 300  # segundos (5 minutos)
+
+def _combo_key(ip: str, username: str) -> str:
+    """Key hash para contador (ip, username) — siempre ≤ 45 chars."""
+    return "c:" + hashlib.sha1(f"{ip}:{username}".encode()).hexdigest()[:40]
 
 def _get_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For", "")
@@ -110,10 +115,13 @@ def _clear_attempts(db: Session, ip: str):
 @router.post("/login")
 @_limiter.limit("20/minute")
 def login(request: Request, response: Response, data: schemas.LoginRequest, db: Session = Depends(get_db)):
-    ip  = _get_ip(request)
-    now = time.time()
-    rec = _get_attempts(db, ip)
+    ip    = _get_ip(request)
+    now   = time.time()
+    rec   = _get_attempts(db, ip)
+    ckey  = _combo_key(ip, data.username)
+    crec  = _get_attempts(db, ckey)
 
+    # Bloqueo por IP (5 intentos)
     if rec["count"] >= _MAX_ATTEMPTS and now - rec["last"] < _BLOCK_WINDOW:
         secs_left = int(_BLOCK_WINDOW - (now - rec["last"]))
         logger.warning(f"Login bloqueado para IP {ip} — {rec['count']} intentos fallidos")
@@ -121,21 +129,34 @@ def login(request: Request, response: Response, data: schemas.LoginRequest, db: 
             status_code=429,
             detail=f"Demasiados intentos fallidos. Espera {secs_left // 60}m {secs_left % 60}s"
         )
-    # Si la ventana expiró, resetear contador
     if rec["count"] >= _MAX_ATTEMPTS and now - rec["last"] >= _BLOCK_WINDOW:
         rec = {"count": 0, "last": 0.0}
+
+    # Bloqueo por (ip, username) — 20 intentos, bloquea NAT/proxy por cuenta específica
+    if crec["count"] >= _MAX_ATTEMPTS_COMBO and now - crec["last"] < _BLOCK_WINDOW:
+        secs_left = int(_BLOCK_WINDOW - (now - crec["last"]))
+        logger.warning(f"Login bloqueado para combo ip={ip} user={data.username} — {crec['count']} intentos")
+        raise HTTPException(
+            status_code=429,
+            detail=f"Demasiados intentos fallidos. Espera {secs_left // 60}m {secs_left % 60}s"
+        )
+    if crec["count"] >= _MAX_ATTEMPTS_COMBO and now - crec["last"] >= _BLOCK_WINDOW:
+        crec = {"count": 0, "last": 0.0}
 
     _generic_error = "Credenciales inválidas"
     user = crud.get_user_by_username(db, data.username)
     if not user or not user.activo:
         _set_attempts(db, ip, rec["count"] + 1, now)
+        _set_attempts(db, ckey, crec["count"] + 1, now)
         raise HTTPException(status_code=401, detail=_generic_error)
     if not user.password or not crud.verify_password(data.password, user.password):
         _set_attempts(db, ip, rec["count"] + 1, now)
-        logger.warning(f"Login fallido para '{data.username}' desde IP {ip} (intento {rec['count']+1})")
+        _set_attempts(db, ckey, crec["count"] + 1, now)
+        logger.warning(f"Login fallido para '{data.username}' desde IP {ip} (intento ip={rec['count']+1} combo={crec['count']+1})")
         raise HTTPException(status_code=401, detail=_generic_error)
-    # Login exitoso — limpiar intentos fallidos y registros expirados
+    # Login exitoso — limpiar ambos contadores
     _clear_attempts(db, ip)
+    _clear_attempts(db, ckey)
     db.query(models.TokenBlacklist).filter(
         models.TokenBlacklist.expires_at < datetime.now(timezone.utc)
     ).delete()

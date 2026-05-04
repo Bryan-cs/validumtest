@@ -306,28 +306,44 @@ def delete_afiliado(db, id, deleted_by=""):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:"); cache_invalidar("afiliados:")
     a = db.query(models.Afiliado).filter_by(id=id).first()
     if not a: return
-    # Guardar en eliminados
-    elim = models.Eliminado(
-        nombre=a.nombre, doc=a.doc, empresa=a.empresa,
-        datos_completos=json.dumps(_afiliado_to_dict(a)),
-        fecha_eliminacion=datetime.now(COL_TZ).strftime("%Y-%m-%d"),
-        mes=MESES[datetime.now(COL_TZ).month-1], eliminado_por=deleted_by,
-    )
-    db.add(elim)
-    # Marcar TODAS las facturas del afiliado como huérfanas (no solo pendientes)
-    db.query(models.Factura).filter_by(doc=a.doc).update(
-        {"afiliado_eliminado": True})
-    a.activo = False
-    _log(db, deleted_by, "eliminó un afiliado", "Afiliados", a.nombre)
-    db.commit()
+    try:
+        nombre = a.nombre
+        # Guardar en eliminados
+        elim = models.Eliminado(
+            nombre=a.nombre, doc=a.doc, empresa=a.empresa,
+            datos_completos=json.dumps(_afiliado_to_dict(a)),
+            fecha_eliminacion=datetime.now(COL_TZ).strftime("%Y-%m-%d"),
+            mes=MESES[datetime.now(COL_TZ).month-1], eliminado_por=deleted_by,
+        )
+        db.add(elim)
+        # Marcar TODAS las facturas del afiliado como huérfanas (no solo pendientes)
+        db.query(models.Factura).filter_by(doc=a.doc).update(
+            {"afiliado_eliminado": True})
+        a.activo = False
+        db.commit()
+        _log(db, deleted_by, "eliminó un afiliado", "Afiliados", nombre)
+    except Exception:
+        db.rollback()
+        raise
 
 # ─── FACTURAS ─────────────────────────────────────────────────────────────────
 def _next_codigo(db):
-    last = db.query(models.Factura).filter(models.Factura.codigo.like("FVE-%")).order_by(models.Factura.id.desc()).first()
-    n = 2650
-    if last:
-        try: n = max(n, int(last.codigo.split("-")[1]))
-        except: pass
+    import os
+    db_url = str(db.bind.url) if db.bind else os.environ.get("DATABASE_URL", "")
+    if "postgresql" in db_url:
+        # FOR UPDATE evita race condition en alta concurrencia (PostgreSQL)
+        result = db.execute(_text(
+            "SELECT MAX(CAST(SPLIT_PART(codigo, '-', 2) AS INTEGER)) "
+            "FROM facturas WHERE codigo LIKE 'FVE-%' FOR UPDATE"
+        )).scalar()
+        n = max(2650, result) if result else 2650
+    else:
+        # SQLite dev: MAX simple (no soporta FOR UPDATE)
+        last = db.query(models.Factura).filter(models.Factura.codigo.like("FVE-%")).order_by(models.Factura.id.desc()).first()
+        n = 2650
+        if last:
+            try: n = max(n, int(last.codigo.split("-")[1]))
+            except: pass
     return f"FVE-{str(n+1).zfill(4)}"
 
 def get_facturas(db, anio="", mes="", cliente="", estado="", banco="", doc="",
@@ -437,8 +453,13 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
     if not f: return None
 
     PAGADAS = {"pagado", "planilla_pagada"}
+    campos = data.model_dump(exclude_none=True)
+
+    # Bloquear salto de estado: pendiente → planilla_pagada sin pasar por pagado
+    if campos.get("estado") == "planilla_pagada" and f.estado == "pendiente":
+        raise HTTPException(400, "No se puede marcar como planilla_pagada sin pasar por pagado")
+
     if f.estado in PAGADAS:
-        campos = data.model_dump(exclude_none=True)
         # Bloquear regresión de estado: pagado/planilla_pagada → pendiente
         if campos.get("estado") == "pendiente":
             raise HTTPException(400, "No se puede revertir una factura pagada a pendiente")
@@ -640,6 +661,18 @@ def create_ingreso_adicional(db, data, user=""):
             "valor": i.valor, "mes": i.mes, "anio": i.anio, "creado_por": i.creado_por,
             "creado": i.creado.isoformat() if i.creado else None}
 
+def update_ingreso_adicional(db, id, data, user=""):
+    i = db.query(models.IngresoAdicional).filter_by(id=id).first()
+    if not i: return None
+    i.concepto = data.concepto; i.descripcion = data.descripcion
+    i.valor = data.valor; i.mes = data.mes; i.anio = data.anio
+    db.commit(); db.refresh(i)
+    cache_invalidar("dashboard:")
+    _log(db, user, "editó ingreso adicional", "Facturación", f"{i.concepto} ${i.valor:,.0f}")
+    return {"id": i.id, "concepto": i.concepto, "descripcion": i.descripcion,
+            "valor": i.valor, "mes": i.mes, "anio": i.anio, "creado_por": i.creado_por,
+            "creado": i.creado.isoformat() if i.creado else None}
+
 def delete_ingreso_adicional(db, id, user=""):
     cache_invalidar("dashboard:")
     i = db.query(models.IngresoAdicional).filter_by(id=id).first()
@@ -660,8 +693,11 @@ def create_gasto(db, data: schemas.GastoCreate):
 def update_gasto(db, id: int, data: schemas.GastoUpdate):
     g = db.query(models.Gasto).filter_by(id=id).first()
     if not g: return None
-    g.nombre = data.nombre; g.valor = data.valor
-    db.commit()
+    if data.nombre is not None: g.nombre = data.nombre
+    if data.valor is not None: g.valor = data.valor
+    if data.mes is not None: g.mes = data.mes
+    if data.anio is not None: g.anio = data.anio
+    db.commit(); db.refresh(g)
     return {"id":g.id,"nombre":g.nombre,"valor":g.valor,"mes":g.mes,"anio":g.anio}
 
 def delete_gasto(db, id, user=""):
@@ -728,7 +764,6 @@ def update_lista(db, nombre, items, user="sistema"):
     l.items = json.dumps(items)
     _log(db, user, "actualizó lista", "Listas", nombre)
     cache_invalidar("listas:")
-    db.execute(_text("SET LOCAL synchronous_commit = off"))
     db.commit()
     return {"nombre":nombre,"items":items}
 

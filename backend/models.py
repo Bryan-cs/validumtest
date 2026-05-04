@@ -128,7 +128,7 @@ class Empleado(Base):
     __tablename__ = "empleados"
     id            = Column(Integer, primary_key=True, index=True)
     nombre        = Column(String(150))
-    doc           = Column(String(20))
+    doc           = Column(String(20), unique=True, index=True)
     cargo         = Column(String(80))
     tel           = Column(String(20))
     email         = Column(String(100))
@@ -170,6 +170,7 @@ class NominaMensual(Base):
     __tablename__ = "nomina_mensual"
     __table_args__ = (
         Index('ix_nomina_empleado_anio_mes', 'empleado_id', 'anio', 'mes'),
+        UniqueConstraint('empleado_id', 'mes', 'anio', name='uq_nomina_emp_mes_anio'),
     )
     id          = Column(Integer, primary_key=True, index=True)
     empleado_id = Column(Integer, index=True)

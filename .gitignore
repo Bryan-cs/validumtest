@@ -54,13 +54,6 @@ Thumbs.db
 *.swo
 
 # Ignorados recientemente
-26.0.1
-648653184_122119207905163301_3182298259680697326_n.jpg
 backend/bbcfile.db.bak
 backend/restore_local.py
-cd
-facebook.png
-pip
-protsecoop.svg
-uvicorn
 .vercel

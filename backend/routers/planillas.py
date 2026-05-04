@@ -56,7 +56,7 @@ async def crear_planilla(
     token=Depends(require_admin_or_empleado),
 ):
     import asyncio
-    from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE
+    from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE, _validar_magic
     s3 = _get_s3()
     safe_cliente = re.sub(r'[^\w\-]', '_', cliente_ref or 'sin_cliente')
     safe_mes     = re.sub(r'[^\w\-]', '_', mes or 'sin_mes')
@@ -75,6 +75,10 @@ async def crear_planilla(
         content = await file.read()
         if len(content) > MAX_SIZE:
             omitidos.append({"nombre": nombre, "motivo": f"Excede {MAX_SIZE // (1024*1024)} MB"})
+            continue
+        # SEC2-M2: validar magic bytes del contenido
+        if not _validar_magic(ext, content):
+            omitidos.append({"nombre": nombre, "motivo": f"El contenido no corresponde a un {ext.upper()} válido"})
             continue
         safe_name   = re.sub(r'[^\w.\-]', '_', nombre)
         unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"

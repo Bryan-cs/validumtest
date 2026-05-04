@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas, crud
-from .deps import verify_token, require_admin
+from .deps import verify_token, require_admin, require_admin_or_empleado
 from logger import logger
 
 router = APIRouter(prefix="/facturas", tags=["facturas"])
@@ -56,7 +56,7 @@ def update_factura(id: int, data: schemas.FacturaUpdate,
 
 @router.patch("/{id}/pagar")
 def pagar_factura(id: int, banco: str = "", monto: float = None,
-                  db: Session = Depends(get_db), token=Depends(verify_token)):
+                  db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     f = crud.get_factura(db, id)
     if not f:
         raise HTTPException(404, "Factura no encontrada")
@@ -93,7 +93,7 @@ def delete_factura(id: int, force: bool = False,
 @router.get("/{id}/pdf")
 def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Genera PDF de la factura sobre el membrete corporativo."""
-    import PyPDF2
+    import pypdf as PyPDF2
     from reportlab.pdfgen import canvas
     from reportlab.lib.pagesizes import letter
     from reportlab.lib import colors

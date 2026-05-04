@@ -26,13 +26,13 @@ def limpiar_notificaciones_diario():
 
 
 def limpiar_actividad_antigua():
-    """Elimina registros de actividad con más de 7 días."""
+    """Elimina registros de actividad con más de 90 días."""
     from database import SessionLocal
     from logger import logger as _log
     import models
     db = SessionLocal()
     try:
-        limite = datetime.now(timezone.utc) - timedelta(days=7)
+        limite = datetime.now(timezone.utc) - timedelta(days=90)
         count = db.query(models.Actividad).filter(models.Actividad.fecha < limite).delete()
         db.commit()
         if count:

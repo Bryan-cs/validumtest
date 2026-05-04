@@ -75,7 +75,7 @@ def _rl_get_rule(path: str) -> tuple[int, int]:
 
 
 def _rl_get_subject(request) -> str:
-    """Extrae 'sub' del JWT (sin hit a DB). Fallback a IP."""
+    """Extrae 'sub' del JWT (solo tokens válidos y vigentes). Fallback a IP."""
     auth = request.headers.get("Authorization", "")
     if auth.startswith("Bearer "):
         try:
@@ -83,11 +83,14 @@ def _rl_get_subject(request) -> str:
             from routers.deps import SECRET_KEY, ALGORITHM
             payload = _jwt_mod.decode(
                 auth[7:], SECRET_KEY, algorithms=[ALGORITHM],
-                options={"verify_exp": False},  # solo necesitamos el sub, no validar expiración aquí
-            )
+            )  # token válido y vigente → usar sub
             sub = payload.get("sub")
             if sub:
                 return f"u:{sub}"
+        except _jwt_mod.ExpiredSignatureError:
+            pass  # token expirado → usar IP
+        except _jwt_mod.InvalidTokenError:
+            pass  # token inválido → usar IP
         except Exception:
             pass
     xff = request.headers.get("X-Forwarded-For", "")
@@ -338,19 +341,23 @@ def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verif
     if not e: raise HTTPException(404, "No encontrado")
     nombre = e.nombre
     doc = e.doc
-    # Borrar cualquier registro del afiliado (activo o no)
-    db.query(models.Afiliado).filter_by(doc=doc).delete()
-    # Borrar facturas del afiliado
-    db.query(models.Factura).filter_by(doc=doc).delete()
-    # Borrar documentos del afiliado
-    db.query(models.Documento).filter_by(afiliado_doc=doc).delete()
-    # Borrar solicitudes de novedad y retiro del portal
-    db.query(models.SolicitudNovedad).filter_by(afiliado_doc=doc).delete()
-    db.query(models.SolicitudRetiro).filter_by(afiliado_doc=doc).delete()
-    # Borrar el registro de eliminado
-    db.delete(e)
-    crud._log(db, token.get("sub","sistema"), "eliminó permanentemente un afiliado y todos sus registros", "Afiliados", nombre)
-    db.commit()
+    try:
+        # Borrar cualquier registro del afiliado (activo o no)
+        db.query(models.Afiliado).filter_by(doc=doc).delete()
+        # Borrar facturas del afiliado
+        db.query(models.Factura).filter_by(doc=doc).delete()
+        # Borrar documentos del afiliado
+        db.query(models.Documento).filter_by(afiliado_doc=doc).delete()
+        # Borrar solicitudes de novedad y retiro del portal
+        db.query(models.SolicitudNovedad).filter_by(afiliado_doc=doc).delete()
+        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=doc).delete()
+        # Borrar el registro de eliminado
+        db.delete(e)
+        crud._log(db, token.get("sub","sistema"), "eliminó permanentemente un afiliado y todos sus registros", "Afiliados", nombre)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise HTTPException(500, "Error al eliminar")
     return {"ok": True}
 
 
@@ -431,6 +438,14 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(ve
     crud.cache_invalidar("dashboard:")
     crud.cache_invalidar("dashboard_clientes:")
     db.commit()
+    # Invalidar caché de usuarios cliente asociados al cliente_txt del afiliado restaurado
+    cliente_txt = datos.get("cliente_txt", "")
+    if cliente_txt:
+        from routers.deps import invalidate_user_cache
+        usuarios_cliente = db.query(models.Usuario).filter_by(cliente_ref=cliente_txt).all()
+        for u in usuarios_cliente:
+            invalidate_user_cache(u.username)
+            crud.cache_invalidar(f"usuario_rol:{u.username}")
     return {"ok": True, "nombre": e.nombre}
 
 
@@ -439,6 +454,7 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(ve
 def list_retiros(anio: str = "", mes: str = "", doc: str = "",
                  skip: int = 0, limit: int = 500,
                  db: Session = Depends(get_db), token=Depends(verify_token)):
+    limit = min(limit, 500)
     return crud.get_retiros(db, anio=anio, mes=mes, doc=doc, skip=skip, limit=limit)
 
 
@@ -547,16 +563,10 @@ def create_ingreso_adicional(data: schemas.IngresoAdicionalCreate,
 @app.put("/ingresos-adicionales/{id}")
 def update_ingreso_adicional(id: int, data: schemas.IngresoAdicionalCreate,
                               db: Session = Depends(get_db), token=Depends(require_admin)):
-    i = db.query(models.IngresoAdicional).filter_by(id=id).first()
-    if not i: raise HTTPException(404, "Ingreso adicional no encontrado")
-    from crud import cache_invalidar
-    cache_invalidar("dashboard:")
-    i.concepto = data.concepto; i.descripcion = data.descripcion
-    i.valor = data.valor; i.mes = data.mes; i.anio = data.anio
-    db.commit(); db.refresh(i)
-    return {"id": i.id, "concepto": i.concepto, "descripcion": i.descripcion,
-            "valor": i.valor, "mes": i.mes, "anio": i.anio, "creado_por": i.creado_por,
-            "creado": i.creado.isoformat() if i.creado else None}
+    result = crud.update_ingreso_adicional(db, id, data, user=token.get("sub", "sistema"))
+    if not result:
+        raise HTTPException(404, "Ingreso adicional no encontrado")
+    return result
 
 
 @app.delete("/ingresos-adicionales/{id}")

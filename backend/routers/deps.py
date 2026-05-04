@@ -92,6 +92,10 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(security)):
         payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
         if payload.get("type") == "refresh":
             raise HTTPException(status_code=401, detail="Token de refresco no válido como token de acceso")
+        # SEC2-A6: verificar blacklist de access tokens (post-logout)
+        jti = payload.get("jti")
+        if jti and is_token_blacklisted(jti):
+            raise HTTPException(status_code=401, detail="Token invalidado")
         # Verificar que el usuario siga activo (con cache de 5 min)
         if not _is_user_active(payload.get("sub", "")):
             raise HTTPException(status_code=401, detail="Usuario desactivado o eliminado")

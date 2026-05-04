@@ -290,6 +290,13 @@ def listar_documentos(
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
+    # SEC2-M1: si es cliente, verificar que el afiliado pertenece a su cliente_ref
+    if token.get("rol") == "cliente" and afiliado_doc:
+        cliente_ref = token.get("cliente_ref", "")
+        afil = db.query(models.Afiliado).filter_by(doc=afiliado_doc).first()
+        if not afil or afil.cliente_txt != cliente_ref:
+            raise HTTPException(403, "Acceso denegado")
+
     q = db.query(models.Documento)
     if afiliado_doc:
         q = q.filter_by(afiliado_doc=afiliado_doc)
@@ -329,8 +336,36 @@ def descargar_documento(
             aviso = db.query(models.AvisoCliente).filter_by(id=doc.contexto_id, cliente_ref=cliente_ref).first()
             if not aviso:
                 raise HTTPException(403, "No tienes acceso a este documento")
-        elif doc.contexto in _ctx_cliente or doc.subido_por == token["sub"]:
-            pass  # Permitido: novedades del portal o archivos propios
+        elif doc.subido_por == token["sub"]:
+            pass  # Permitido: archivos propios del cliente
+        elif doc.contexto in _ctx_cliente:
+            # SEC2-A4: verificar que el contexto_id pertenece al cliente autenticado
+            if doc.contexto in ("novedad_pago", "resp_pago"):
+                novedad = db.query(models.NovedadPago).filter_by(
+                    id=doc.contexto_id, cliente_ref=cliente_ref
+                ).first()
+                if not novedad:
+                    raise HTTPException(403, "No tienes acceso a este documento")
+            elif doc.contexto in ("novedad_afil", "resp_afil",
+                                  "novedad_retiro", "resp_retiro"):
+                # SolicitudNovedad y SolicitudRetiro usan username_cliente
+                sol = None
+                if doc.contexto in ("novedad_afil", "resp_afil"):
+                    sol = db.query(models.SolicitudNovedad).filter_by(
+                        id=doc.contexto_id, cliente_ref=cliente_ref
+                    ).first()
+                else:
+                    sol = db.query(models.SolicitudRetiro).filter_by(
+                        id=doc.contexto_id, cliente_ref=cliente_ref
+                    ).first()
+                if not sol:
+                    raise HTTPException(403, "No tienes acceso a este documento")
+            elif doc.contexto == "planilla_pago":
+                planilla = db.query(models.PlanillaPago).filter_by(
+                    id=doc.contexto_id, cliente_ref=cliente_ref
+                ).first()
+                if not planilla:
+                    raise HTTPException(403, "No tienes acceso a este documento")
         elif doc.afiliado_doc:
             afil = db.query(models.Afiliado).filter_by(doc=doc.afiliado_doc, cliente_txt=cliente_ref).first()
             if not afil:

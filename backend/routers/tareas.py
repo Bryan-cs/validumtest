@@ -114,7 +114,15 @@ def eliminar_tarea(id: int, db: Session = Depends(get_db), token=Depends(verify_
 @router.post("/{id}/comentarios", status_code=201)
 def comentar(id: int, data: schemas.TareaComentarioCreate,
              db: Session = Depends(get_db), token=Depends(verify_token)):
-    data.usuario = token["sub"]
+    tarea = db.query(models.Tarea).filter_by(id=id).first()
+    if not tarea:
+        raise HTTPException(404, "Tarea no encontrada")
+    # SEC2-M4: solo admin, el asignado o el creador pueden comentar
+    usuario = token.get("sub")
+    rol = token.get("rol")
+    if rol != "admin" and usuario != tarea.asignado_a and usuario != tarea.creado_por:
+        raise HTTPException(403, "No tienes permiso para comentar en esta tarea")
+    data.usuario = usuario
     result = crud.add_comentario(db, id, data)
     if not result:
         raise HTTPException(404, "Tarea no encontrada")
