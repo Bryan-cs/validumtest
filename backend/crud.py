@@ -331,10 +331,11 @@ def _next_codigo(db):
     import os
     db_url = str(db.bind.url) if db.bind else os.environ.get("DATABASE_URL", "")
     if "postgresql" in db_url:
-        # FOR UPDATE evita race condition en alta concurrencia (PostgreSQL)
+        # Advisory lock de transacción evita race condition (FOR UPDATE no aplica a agregados)
+        db.execute(_text("SELECT pg_advisory_xact_lock(9876543210)"))
         result = db.execute(_text(
             "SELECT MAX(CAST(SPLIT_PART(codigo, '-', 2) AS INTEGER)) "
-            "FROM facturas WHERE codigo LIKE 'FVE-%' FOR UPDATE"
+            "FROM facturas WHERE codigo LIKE 'FVE-%'"
         )).scalar()
         n = max(2650, result) if result else 2650
     else:
