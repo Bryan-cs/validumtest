@@ -74,7 +74,8 @@ const Sel = ({ label, value, onChange, options=[], style }) => (
 export default function Afiliados() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
-  const esAdmin = user?.rol === 'admin';
+  const esAdmin   = user?.rol === 'admin';
+  const esEmpleado = user?.rol === 'empleado';
   const [tab, setTab]           = useState('activos');
   const [busqueda, setBusqueda] = useState(() => {
     try { return localStorage.getItem('bbc_afil_busqueda') || ''; } catch { return ''; }
@@ -189,7 +190,7 @@ export default function Afiliados() {
   const { data: actividad=[] } = useQuery({ queryKey:['actividad','Afiliados'], queryFn:()=>api.get('/actividad',{params:{modulo:'Afiliados'}}).then(r=>r.data?.items||r.data), enabled: esAdmin });
   const { data: eliminados=[], isLoading: loadElim } = useQuery({
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
-    enabled: (tab === 'eliminados' || tab === 'pagos') && esAdmin,
+    enabled: (tab === 'eliminados' || tab === 'pagos') && (esAdmin || esEmpleado),
   });
 
   // Facturas del afiliado seleccionado en tab pagos
