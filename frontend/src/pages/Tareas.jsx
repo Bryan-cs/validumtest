@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api, { buildUploadForm } from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
-import { C, ConfirmModal } from '../components/UI';
+import { C, ConfirmModal, ErrorMsg } from '../components/UI';
 
 const inp = { width: '100%', padding: '9px 12px', border: `1px solid ${C.border}`, borderRadius: 7, fontSize: 13, outline: 'none', boxSizing: 'border-box', color: C.text, background: C.surface };
 const lbl = { display: 'block', fontSize: 12, color: C.text2, fontWeight: 500, marginBottom: 4 };
@@ -139,7 +139,7 @@ export default function Tareas() {
   // Limpiar selección al cambiar tab
   useEffect(() => { setSeleccionadas(new Set()); }, [tab]);
 
-  const { data: tareas = [], isLoading } = useQuery({
+  const { data: tareas = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['tareas'],
     queryFn: () => api.get('/tareas').then(r => r.data.items || []),
     refetchInterval: 60_000,
@@ -152,9 +152,12 @@ export default function Tareas() {
     staleTime: 300_000,
   });
 
+  const initialForm = { titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false };
+
   const crear = useMutation({
     mutationFn: (payload) => api.post('/tareas', payload),
     onMutate: async (payload) => {
+      // Solo actualizar caché optimistamente — NO cerrar modal ni limpiar form
       await qc.cancelQueries({ queryKey: ['tareas'] });
       const prev = qc.getQueryData(['tareas']);
       const optimistic = {
@@ -163,17 +166,18 @@ export default function Tareas() {
         creado_por: user?.username || '', comentarios: [],
       };
       qc.setQueryData(['tareas'], old => [optimistic, ...(old || [])]);
-      setModalNueva(false);
-      setForm({ titulo: '', descripcion: '', asignado_a: '', fecha_limite: '', privada: false });
       return { prev };
     },
     onError: (e, _vars, ctx) => {
       if (ctx?.prev) qc.setQueryData(['tareas'], ctx.prev);
       const d = e.response?.data?.detail;
-      toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error'));
+      toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error al crear tarea'));
     },
     onSuccess: (res) => {
       const tareaId = res.data?.id;
+      // Cerrar modal y limpiar form solo si la operación tuvo éxito
+      setModalNueva(false);
+      setForm(initialForm);
       toast.success('Tarea creada');
 
       // Subir archivos en background
@@ -435,7 +439,9 @@ export default function Tareas() {
       )}
 
       {/* Lista */}
-      {isLoading ? (
+      {isError ? (
+        <ErrorMsg message="Error al cargar tareas" onRetry={refetch} />
+      ) : isLoading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {[80, 64, 72, 80].map((h, i) => (
             <div key={i} className="bbc-skeleton" style={{ height: h, borderRadius: 10 }} />
@@ -767,7 +773,7 @@ function TareaDocumentos({ tareaId }) {
       }));
       qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
     } catch (e) {
-      alert(e.response?.data?.detail || 'Error subiendo archivo');
+      toast.error(e.response?.data?.detail || 'Error subiendo archivo');
     } finally {
       setUploading(false);
     }
@@ -796,15 +802,22 @@ function TareaDocumentos({ tareaId }) {
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
-    } catch { alert('Error descargando'); }
+    } catch { toast.error('Error descargando archivo'); }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar documento?')) return;
+  const [delConfirm, setDelConfirm] = useState({ open: false, id: null });
+
+  const handleDelete = (id) => {
+    setDelConfirm({ open: true, id });
+  };
+
+  const doDelete = async () => {
+    const id = delConfirm.id;
+    setDelConfirm({ open: false, id: null });
     try {
       await api.delete(`/documentos/${id}`);
       qc.invalidateQueries({ queryKey: ['documentos-tarea', tareaId] });
-    } catch { alert('Error eliminando'); }
+    } catch { toast.error('Error eliminando documento'); }
   };
 
   if (docs.length === 0) return null;
@@ -823,6 +836,13 @@ function TareaDocumentos({ tareaId }) {
           <span style={{ cursor:'pointer',color:C.red,fontWeight:700 }} onClick={()=>handleDelete(d.id)}>×</span>
         </div>
       ))}
+      <ConfirmModal
+        open={delConfirm.open}
+        title="Eliminar documento"
+        message="¿Eliminar este documento? Esta acción no se puede deshacer."
+        onConfirm={doDelete}
+        onCancel={() => setDelConfirm({ open: false, id: null })}
+      />
     </div>
   );
 }

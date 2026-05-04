@@ -17,6 +17,9 @@ const useAuthStore = create(
     (set, get) => ({
       token: null,
       user:  null,
+      _hasHydrated: false,
+
+      setHasHydrated: (v) => set({ _hasHydrated: v }),
 
       login: (token, user) => {
         resetRedirectFlag();
@@ -43,6 +46,7 @@ const useAuthStore = create(
           state.token = null;
           state.user  = null;
         }
+        state?.setHasHydrated(true);
       },
     }
   )

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
-import { C, fmt, SkeletonCard } from '../components/UI';
+import { C, fmt, SkeletonCard, ErrorMsg } from '../components/UI';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import { Separator } from '../components/ui/separator';
@@ -249,7 +249,7 @@ function ModalCliente({ cliente, onClose }) {
   if (anio !== 'Todos') params.anio = anio;
   if (mes  !== 'Todos') params.mes  = mes;
 
-  const { data: d, isLoading } = useQuery({
+  const { data: d, isLoading, isError: isErrorFinanzas, refetch: refetchFinanzas } = useQuery({
     queryKey: ['finanzas-cliente', cliente, anio, mes],
     queryFn: () => api.get(`/dashboard/cliente/${encodeURIComponent(cliente)}`, { params }).then(r => r.data),
     enabled: !!cliente,
@@ -289,7 +289,9 @@ function ModalCliente({ cliente, onClose }) {
         <div className="flex-1 overflow-y-auto min-h-0">
           <div className="p-6 flex flex-col gap-5">
             {/* KPIs */}
-            {isLoading
+            {isErrorFinanzas
+              ? <ErrorMsg message="Error al cargar datos financieros" onRetry={refetchFinanzas} />
+              : isLoading
               ? <div className="grid grid-cols-3 gap-3">{[1,2,3].map(i=><SkeletonCard key={i} height={84}/>)}</div>
               : (
                 <div className="grid grid-cols-3 gap-3">

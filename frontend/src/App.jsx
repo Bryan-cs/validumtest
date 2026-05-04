@@ -27,7 +27,7 @@ const Finanzas            = lazy(() => import('./pages/Finanzas'));
 
 const qc = new QueryClient({
   defaultOptions: {
-    queries: { retry: 1, staleTime: 0, refetchOnWindowFocus: true },
+    queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
     mutations: {
       onError: (err) => {
         const msg = err?.response?.data?.detail || err?.message || 'Error inesperado';
@@ -38,7 +38,12 @@ const qc = new QueryClient({
 });
 
 function PrivateRoute({ children, adminOnly = false }) {
-  const { token, user } = useAuthStore();
+  const { token, user, _hasHydrated } = useAuthStore();
+  if (!_hasHydrated) return (
+    <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#888', fontSize:14 }}>
+      Cargando...
+    </div>
+  );
   if (!token) return <Navigate to="/login" replace />;
   // Clientes solo pueden acceder al portal
   if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
@@ -47,7 +52,12 @@ function PrivateRoute({ children, adminOnly = false }) {
 }
 
 function ClienteOnlyRoute({ children }) {
-  const { token, user } = useAuthStore();
+  const { token, user, _hasHydrated } = useAuthStore();
+  if (!_hasHydrated) return (
+    <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#888', fontSize:14 }}>
+      Cargando...
+    </div>
+  );
   if (!token) return <Navigate to="/login" replace />;
   if (user?.rol !== 'cliente' && user?.rol !== 'admin') return <Navigate to="/" replace />;
   return children;
@@ -57,6 +67,10 @@ function DefaultRedirect() {
   const { user } = useAuthStore();
   if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
   return <Dashboard />;
+}
+
+function Page({ children }) {
+  return <ErrorBoundary>{children}</ErrorBoundary>;
 }
 
 export default function App() {
@@ -71,25 +85,25 @@ export default function App() {
           <Route path="/login" element={<Login />} />
 
           {/* Portal de Cliente — layout propio */}
-          <Route path="/portal" element={<ClienteOnlyRoute><PortalCliente /></ClienteOnlyRoute>} />
+          <Route path="/portal" element={<ClienteOnlyRoute><Page><PortalCliente /></Page></ClienteOnlyRoute>} />
 
           <Route path="/" element={<PrivateRoute><Layout /></PrivateRoute>}>
-            <Route index element={<DefaultRedirect />} />
-            <Route path="afiliados"   element={<Afiliados />} />
-            <Route path="retiros"     element={<Retiros />} />
-            <Route path="tareas"      element={<Tareas />} />
-            <Route path="facturacion" element={<Facturacion />} />
-            <Route path="cobro"       element={<Cobro />} />
-            <Route path="planillas-ss" element={<PlanillasSS />} />
+            <Route index element={<Page><DefaultRedirect /></Page>} />
+            <Route path="afiliados"   element={<Page><Afiliados /></Page>} />
+            <Route path="retiros"     element={<Page><Retiros /></Page>} />
+            <Route path="tareas"      element={<Page><Tareas /></Page>} />
+            <Route path="facturacion" element={<Page><Facturacion /></Page>} />
+            <Route path="cobro"       element={<Page><Cobro /></Page>} />
+            <Route path="planillas-ss" element={<Page><PlanillasSS /></Page>} />
 
             {/* Admin only */}
-            <Route path="finanzas"    element={<PrivateRoute adminOnly><Finanzas /></PrivateRoute>} />
-            <Route path="empleados"   element={<PrivateRoute adminOnly><Empleados /></PrivateRoute>} />
-            <Route path="usuarios"    element={<PrivateRoute adminOnly><Usuarios /></PrivateRoute>} />
-            <Route path="listas"      element={<PrivateRoute adminOnly><Listas /></PrivateRoute>} />
-            <Route path="calculadora" element={<PrivateRoute adminOnly><Calculadora /></PrivateRoute>} />
-            <Route path="actividad"        element={<PrivateRoute adminOnly><Actividad /></PrivateRoute>} />
-            <Route path="novedades-clientes" element={<PrivateRoute><NovedadesClientes /></PrivateRoute>} />
+            <Route path="finanzas"    element={<PrivateRoute adminOnly><Page><Finanzas /></Page></PrivateRoute>} />
+            <Route path="empleados"   element={<PrivateRoute adminOnly><Page><Empleados /></Page></PrivateRoute>} />
+            <Route path="usuarios"    element={<PrivateRoute adminOnly><Page><Usuarios /></Page></PrivateRoute>} />
+            <Route path="listas"      element={<PrivateRoute adminOnly><Page><Listas /></Page></PrivateRoute>} />
+            <Route path="calculadora" element={<PrivateRoute adminOnly><Page><Calculadora /></Page></PrivateRoute>} />
+            <Route path="actividad"        element={<PrivateRoute adminOnly><Page><Actividad /></Page></PrivateRoute>} />
+            <Route path="novedades-clientes" element={<PrivateRoute><Page><NovedadesClientes /></Page></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

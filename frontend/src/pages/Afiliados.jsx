@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api, { buildUploadForm } from '../utils/api';
 import { empresaStyle } from '../utils/colors';
-import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge } from '../components/UI';
+import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge, ErrorMsg } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 import useAuthStore from '../hooks/useAuth';
 import {
@@ -38,7 +38,8 @@ async function dlExcel(url, filename) {
     URL.revokeObjectURL(objUrl);
   } catch (e) {
     const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
-    alert(typeof msg === 'string' ? msg : 'Error generando reporte');
+    const { toast: _toast } = await import('sonner');
+    _toast.error(typeof msg === 'string' ? msg : 'Error generando reporte');
   }
 }
 const ESTADOS_SRV = ['ACTIVO','SUSPENDIDO','DOBLE AFILIACION','EN ESPERA DE ACTIVACION',
@@ -168,7 +169,7 @@ export default function Afiliados() {
   }, [busquedaDefer, filtros, fechaDesde, fechaHasta]);
 
   // Query ÚNICA paginada — filtros van al backend como CSV
-  const { data: resp={total:0,items:[]}, isLoading } = useQuery({
+  const { data: resp={total:0,items:[]}, isLoading, isError: isErrorAfiliados, refetch: refetchAfiliados } = useQuery({
     queryKey:['afiliados', pagina, tablePagination.pageSize, filterParams],
     queryFn:()=>api.get('/afiliados', { params:{ ...filterParams, skip:(pagina-1)*tablePagination.pageSize, limit:tablePagination.pageSize } }).then(r=>r.data),
     placeholderData: (prev) => prev,
@@ -709,6 +710,7 @@ export default function Afiliados() {
                 ))}
               </thead>
               <tbody>
+                {isErrorAfiliados && <tr><td colSpan={columns.length}><ErrorMsg message="Error al cargar afiliados" onRetry={refetchAfiliados} /></td></tr>}
                 {isLoading && <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Cargando...</td></tr>}
                 {!isLoading && table.getRowModel().rows.length === 0 && (
                   <tr><td colSpan={columns.length} style={{ padding: 20, textAlign: 'center', color: C.text2 }}>Sin registros</td></tr>
@@ -1541,6 +1543,7 @@ const btnPag = {
 
 // ─── TAB DOCUMENTOS ─────────────────────────────────────────────────────────
 function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, setDocDocSel, uploading, setUploading }) {
+  const [docConfirm, setDocConfirm] = React.useState({ open: false, title: '', message: '', onConfirm: null });
   const sugerencias = docBusqDoc.length >= 2 && !docDocSel
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(docBusqDoc.toLowerCase())).slice(0,8)
     : [];
@@ -1568,17 +1571,24 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
     const errores = resultados
       .map((r, i) => r.status === 'rejected' ? `${files[i].name}: ${r.reason?.response?.data?.detail || 'Error'}` : null)
       .filter(Boolean);
-    if (errores.length) alert(`Error al subir:\n${errores.join('\n')}`);
+    if (errores.length) toast.error(`Error al subir ${errores.length} archivo(s)`);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('¿Eliminar este documento?')) return;
-    try {
-      await api.delete(`/documentos/${id}`);
-      qc.invalidateQueries({ queryKey: ['documentos', docDocSel] });
-    } catch (e) {
-      alert(e.response?.data?.detail || 'Error eliminando');
-    }
+  const handleDelete = (id) => {
+    setDocConfirm({
+      open: true,
+      title: 'Eliminar documento',
+      message: '¿Eliminar este documento? Esta acción no se puede deshacer.',
+      onConfirm: async () => {
+        setDocConfirm(s => ({ ...s, open: false }));
+        try {
+          await api.delete(`/documentos/${id}`);
+          qc.invalidateQueries({ queryKey: ['documentos', docDocSel] });
+        } catch (e) {
+          toast.error(e.response?.data?.detail || 'Error eliminando documento');
+        }
+      },
+    });
   };
 
   const handleDownload = async (doc) => {
@@ -1597,7 +1607,7 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
       a.click();
       URL.revokeObjectURL(objUrl);
     } catch (e) {
-      alert('Error descargando archivo');
+      toast.error('Error descargando archivo');
     }
   };
 
@@ -1719,6 +1729,13 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
           )}
         </>
       )}
+      <ConfirmModal
+        open={docConfirm.open}
+        title={docConfirm.title}
+        message={docConfirm.message}
+        onConfirm={docConfirm.onConfirm}
+        onCancel={() => setDocConfirm(s => ({ ...s, open: false }))}
+      />
     </div>
   );
 }

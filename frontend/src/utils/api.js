@@ -7,7 +7,12 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token');
+  // Leer token desde Zustand persist store (fuente única de verdad)
+  let token = null;
+  try {
+    const stored = localStorage.getItem('bbc-auth');
+    if (stored) token = JSON.parse(stored)?.state?.token;
+  } catch { /* ignorar */ }
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -40,8 +45,7 @@ api.interceptors.response.use(
       try {
         const resp = await _refreshPromise;
         const newToken = resp.data.access_token;
-        localStorage.setItem('token', newToken);
-        // Actualizar Zustand store si está disponible
+        // Actualizar Zustand store (fuente única de verdad — persist escribe en 'bbc-auth')
         try {
           const mod = await import('../hooks/useAuth');
           mod.default.getState().setToken(newToken);
@@ -51,8 +55,7 @@ api.interceptors.response.use(
       } catch {
         // Refresh falló — redirigir a login
         _redirigiendo = true;
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
+        localStorage.removeItem('bbc-auth');
         window.location.href = '/login';
       }
     }

@@ -1,16 +1,16 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
-import { StatCard, SkeletonCard, C } from '../components/UI';
+import { StatCard, SkeletonCard, ErrorMsg, C } from '../components/UI';
 
 export default function Dashboard() {
-  const { data: d, isLoading } = useQuery({
-    queryKey: ['dashboard', '', ''],
+  const { data: d, isLoading, isError, refetch } = useQuery({
+    queryKey: ['dashboard'],
     queryFn: () => api.get('/dashboard').then(r => r.data),
     refetchInterval: 300_000,
   });
 
-  const { data: recientes = [] } = useQuery({
+  const { data: recientes = [], isError: isErrorRecientes, refetch: refetchRecientes } = useQuery({
     queryKey: ['afiliados-recientes'],
     queryFn: () => api.get('/afiliados/recientes').then(r => r.data),
     refetchInterval: 30_000,
@@ -32,6 +32,8 @@ export default function Dashboard() {
       <div style={{ display:'flex', gap:10, marginBottom:20, flexWrap:'wrap' }}>
         {isLoading
           ? [1,2,3,4,5,6].map(i => <div key={i} style={{ flex:1, minWidth:120 }}><SkeletonCard height={88} /></div>)
+          : isError
+          ? <ErrorMsg message="Error al cargar métricas" onRetry={refetch} />
           : <>
             <StatCard label="Activos"            value={d?.activos          ?? '—'} color={C.green}   icon="👥" />
             <StatCard label="Suspendidos"        value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
@@ -48,7 +50,9 @@ export default function Dashboard() {
         <div style={{ fontSize: 12, fontWeight: 700, color: C.text2, letterSpacing: '.08em', textTransform: 'uppercase', marginBottom: 14 }}>
           👥 Últimos afiliados
         </div>
-        {recientes.length === 0 ? (
+        {isErrorRecientes ? (
+          <ErrorMsg message="Error al cargar afiliados recientes" onRetry={refetchRecientes} />
+        ) : recientes.length === 0 ? (
           <p style={{ color: C.text2, fontSize: 13, margin: 0 }}>Sin datos</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>

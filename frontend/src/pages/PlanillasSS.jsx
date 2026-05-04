@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
-import { C, PageHeader, Card, Btn, ConfirmModal } from '../components/UI';
+import { C, PageHeader, Card, Btn, ConfirmModal, ErrorMsg } from '../components/UI';
 import useAuthStore from '../hooks/useAuth';
 
 const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
@@ -24,7 +24,7 @@ export default function PlanillasSS() {
   const [showModal, setShowModal] = useState(false);
   const [confirmDel, setConfirmDel] = useState(null);
 
-  const { data: planillas = [], isLoading } = useQuery({
+  const { data: planillas = [], isLoading, isError: isErrorPlanillas, refetch: refetchPlanillas } = useQuery({
     queryKey: ['planillas', filtroCliente, filtroMes, filtroAnio],
     queryFn: () => api.get('/planillas', { params: { cliente: filtroCliente, mes: filtroMes, anio: filtroAnio } }).then(r => r.data.items || []),
   });
@@ -107,7 +107,8 @@ export default function PlanillasSS() {
       </Card>
 
       {/* Lista */}
-      {planillas.length === 0 && !isLoading ? (
+      {isErrorPlanillas && <ErrorMsg message="Error al cargar planillas" onRetry={refetchPlanillas} />}
+      {!isErrorPlanillas && planillas.length === 0 && !isLoading ? (
         <Card style={{ textAlign: 'center', padding: 40, color: C.text2 }}>
           <div style={{ fontSize: 36, marginBottom: 8 }}>📋</div>
           No hay planillas para los filtros seleccionados

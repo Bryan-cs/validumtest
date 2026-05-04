@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../utils/api';
-import { C, Btn, PageHeader, StatCard, fmt } from '../components/UI';
+import { C, Btn, PageHeader, StatCard, fmt, ErrorMsg } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 
 async function dlExcel(url, filename) {
@@ -15,7 +15,8 @@ async function dlExcel(url, filename) {
     URL.revokeObjectURL(objUrl);
   } catch (e) {
     const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
-    alert(typeof msg === 'string' ? msg : 'Error generando reporte');
+    const { toast: _toast } = await import('sonner');
+    _toast.error(typeof msg === 'string' ? msg : 'Error generando reporte');
   }
 }
 
@@ -56,7 +57,7 @@ export default function Cobro() {
   const { data: listas = {} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   const { data: config = {} } = useQuery({ queryKey:['config'], queryFn:()=>api.get('/config').then(r=>r.data) });
   const qc = useQueryClient();
-  const { data: rows = [], isLoading } = useQuery({
+  const { data: rows = [], isLoading, isError: isErrorCobro, refetch: refetchCobro } = useQuery({
     queryKey: ['cobro', mesFiltro, anioFiltro, docFiltro],
     queryFn: () => api.get('/cobro', { params:{ empresa:'', cliente:'', tipo:'', mes: mesFiltro, anio: anioFiltro, doc: docFiltro } }).then(r=>r.data),
     refetchInterval: 60_000,
@@ -96,6 +97,7 @@ export default function Cobro() {
         subtitle={`${rowsFiltrados.length} afiliados — ${new Date().toLocaleDateString('es-CO',{weekday:'long',day:'numeric',month:'long'})}`}
         action={<Btn variant="secondary" onClick={()=>dlExcel('/reportes/cobro','cobro_afiliacion.xlsx')}>⬇ Excel</Btn>} />
 
+      {isErrorCobro && <ErrorMsg message="Error al cargar datos de cobro" onRetry={refetchCobro} />}
       <div style={{ display:'flex', gap:10, marginBottom:16, flexWrap:'wrap' }}>
         <StatCard label="Cobrar hoy"       value={nHoy}          color={C.green} />
         <StatCard label="Vencidos"         value={nVenc}         color={C.red} />

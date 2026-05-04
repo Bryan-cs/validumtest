@@ -65,7 +65,7 @@ export default function Actividad() {
   const [actSorting, setActSorting] = useState([]);
   const [actPagination, setActPagination] = useState({ pageIndex: 0, pageSize: PER_PAGE });
 
-  const { data: actRaw = { total: 0, items: [] }, isLoading } = useQuery({
+  const { data: actRaw = { total: 0, items: [] }, isLoading, isError: isErrorAct, refetch: refetchAct } = useQuery({
     queryKey: ['actividad', desde, hasta, modulo, usuario],
     queryFn: () => api.get('/actividad', { params: { desde, hasta, modulo, usuario, limit: 500 } }).then(r => r.data),
     refetchInterval: 120_000,
@@ -237,7 +237,11 @@ export default function Actividad() {
               ))}
             </thead>
             <tbody>
-              {isLoading ? (
+              {isErrorAct ? (
+                <tr><td colSpan={actColumns.length} style={{ padding: 24, textAlign: 'center', color: C.red }}>
+                  Error al cargar actividad. <button onClick={refetchAct} style={{ marginLeft:8, color:C.primary, textDecoration:'underline', background:'none', border:'none', cursor:'pointer', fontSize:13 }}>Reintentar</button>
+                </td></tr>
+              ) : isLoading ? (
                 <tr><td colSpan={actColumns.length} style={{ padding: 24, textAlign: 'center', color: C.text2 }}>Cargando...</td></tr>
               ) : actTable.getRowModel().rows.length === 0 ? (
                 <tr><td colSpan={actColumns.length} style={{ padding: 24, textAlign: 'center', color: C.text2 }}>Sin registros para los filtros seleccionados</td></tr>

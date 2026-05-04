@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
-import { C, Btn, Modal, PageHeader, StatCard, fmt, SkeletonRow } from '../components/UI';
+import { C, Btn, Modal, PageHeader, StatCard, fmt, SkeletonRow, ErrorMsg, ConfirmModal } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
 
 const UP = v => (v||'').toUpperCase();
@@ -18,7 +18,8 @@ async function dlExcel(url, filename) {
     URL.revokeObjectURL(objUrl);
   } catch (e) {
     const msg = e.response?.data?.detail || e.message || 'Error generando reporte';
-    alert(typeof msg === 'string' ? msg : 'Error generando reporte');
+    const { toast: _toast } = await import('sonner');
+    _toast.error(typeof msg === 'string' ? msg : 'Error generando reporte');
   }
 }
 
@@ -85,6 +86,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   const [afiliado, setAfiliado] = useState(null);
   const [errorBusq, setErrorBusq] = useState('');
   const [dias, setDias] = useState(30);
+  const searchIdRef = React.useRef(0);
   const [mes, setMes] = useState(() => MESES[new Date().getMonth()]);
   const [anio, setAnio] = useState(() => String(new Date().getFullYear()));
   const [estado, setEstado] = useState('pendiente');
@@ -128,12 +130,17 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
 
   const buscar = async () => {
     if (!cedula.trim()) return;
+    const reqId = ++searchIdRef.current;
     try {
       const r = await api.get('/afiliados', { params: { q: cedula.trim() } });
+      if (reqId !== searchIdRef.current) return; // respuesta obsoleta — ignorar
       const found = (r.data.items||[]).find(a => a.doc === cedula.trim()) || r.data.items?.[0];
       if (!found) { setErrorBusq(`No se encontró afiliado con cédula "${cedula}"`); setAfiliado(null); return; }
       setAfiliado(found); setErrorBusq('');
-    } catch { setErrorBusq('Error buscando afiliado'); }
+    } catch {
+      if (reqId !== searchIdRef.current) return;
+      setErrorBusq('Error buscando afiliado');
+    }
   };
 
   const planillaSS = planilla.reduce((s, p) => s + (marcados[p.servicio] ? p.valor : 0), 0);
@@ -518,6 +525,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const [seleccionadas, setSeleccionadas] = useState(new Set());
   const [modalBulkPagar, setModalBulkPagar] = useState(false);
   const [bancoBulk, setBancoBulk] = useState('');
+  const [confirmState, setConfirmState] = useState({ open: false, title: '', message: '', onConfirm: null });
   useEffect(() => {
     if (prefillAfiliado) { setPrefill(prefillAfiliado); setModalNueva(true); }
   }, [prefillAfiliado]);
@@ -539,7 +547,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   // Con mes seleccionado O búsqueda activa: traer todos y filtrar localmente
   // Sin mes ni búsqueda: paginar en servidor
   const hayMes = !!mesB;
-  const { data: respF={total:0,items:[]}, isLoading } = useQuery({
+  const { data: respF={total:0,items:[]}, isLoading, isError: isErrorFacturas, refetch: refetchFacturas } = useQuery({
     queryKey: ['facturas', paginaF, anioB, mesB, clienteB, estadoB, busqueda, hayFiltros],
     queryFn: () => api.get('/facturas', { params: hayFiltros && (hayMes || busqueda)
       ? { anio: anioB, mes: mesB, cliente: clienteB, estado: estadoB, limit: 0, exclude_planilla: true }
@@ -685,6 +693,10 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
       qc.invalidateQueries({ queryKey: ['finanzas-cliente'] });
       setSeleccionadas(new Set()); setModalBulkPagar(false); setBancoBulk('');
     },
+    onError: () => {
+      setModalBulkPagar(false);
+      toast.error('Error al procesar pagos en lote');
+    },
   });
 
   const planillaBulk = useMutation({
@@ -799,7 +811,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                           <Btn size="sm" variant="secondary"
                             onClick={()=>setEditIngAd(i)}>✏️</Btn>
                           <Btn size="sm" variant="danger" disabled={elimIngAd.isPending}
-                            onClick={()=>{ if(window.confirm('¿Eliminar este ingreso?')) elimIngAd.mutate(i.id); }}>
+                            onClick={()=>setConfirmState({ open:true, title:'Eliminar ingreso', message:'¿Eliminar este ingreso adicional?', onConfirm:()=>{ elimIngAd.mutate(i.id); setConfirmState(s=>({...s,open:false})); } })}>
                             🗑️
                           </Btn>
                         </div>
@@ -884,6 +896,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
             </tr>
           </thead>
           <tbody>
+            {isErrorFacturas && <tr><td colSpan={12}><ErrorMsg message="Error al cargar facturas" onRetry={refetchFacturas} /></td></tr>}
             {isLoading && [1,2,3,4,5].map(i => <SkeletonRow key={i} cols={11} />)}
             {rowsFiltradas.map(f => {
               const isHuerfana = f.afiliado_eliminado && f.estado==='pendiente';
@@ -929,7 +942,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       <Btn size="sm" variant="secondary" onClick={(e)=>{
                         e.stopPropagation();
                         const tel = (f.tel||'').replace(/\D/g,'');
-                        if (!tel) { alert('El afiliado no tiene teléfono registrado'); return; }
+                        if (!tel) { toast.error('El afiliado no tiene teléfono registrado'); return; }
                         const phone = tel.startsWith('57') ? tel : `57${tel}`;
                         const horaActual = new Date().getHours();
                         const saludo = horaActual < 12 ? 'Buenos días' : horaActual < 18 ? 'Buenas tardes' : 'Buenas noches';
@@ -952,7 +965,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                       <Btn size="sm" variant="secondary"
                         onClick={(e)=>{e.stopPropagation();dlExcel(`/facturas/${f.id}/pdf`, `factura_${f.nombre_afiliado?.replace(/ /g,'_')}_${f.codigo}.pdf`);}}>📄 PDF</Btn>
                       <Btn size="sm" variant="danger"
-                        onClick={(e)=>{ e.stopPropagation(); if(window.confirm('¿Eliminar factura?')) eliminar.mutate(f.id); }}>×</Btn>
+                        onClick={(e)=>{ e.stopPropagation(); setConfirmState({ open:true, title:'Eliminar factura', message:'¿Eliminar esta factura? Esta acción no se puede deshacer.', onConfirm:()=>{ eliminar.mutate(f.id); setConfirmState(s=>({...s,open:false})); } }); }}>×</Btn>
                     </div>
                   </td>
                 </tr>
@@ -1070,6 +1083,14 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           </div>
         </div>
       </Modal>
+
+      <ConfirmModal
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        onConfirm={confirmState.onConfirm}
+        onCancel={() => setConfirmState(s => ({ ...s, open: false }))}
+      />
 
       {/* Mini modal: registrar pago */}
       <Modal open={!!modalPagar} onClose={()=>{ setModalPagar(null); setBancoPago(''); }} width={420} title="✓ Registrar pago">

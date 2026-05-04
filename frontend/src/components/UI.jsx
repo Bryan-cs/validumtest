@@ -99,7 +99,7 @@ export function Badge({ label, color, bg }) {
   );
 }
 
-export function Btn({ children, onClick, variant = 'primary', size = 'md', disabled, style }) {
+export function Btn({ type = 'button', children, onClick, variant = 'primary', size = 'md', disabled, style }) {
   const variantMap = {
     primary:   'default',
     secondary: 'outline',
@@ -111,6 +111,7 @@ export function Btn({ children, onClick, variant = 'primary', size = 'md', disab
   const sizeMap = { sm: 'sm', md: 'default' };
   return (
     <Button
+      type={type}
       onClick={onClick}
       disabled={disabled}
       variant={variantMap[variant] || 'default'}
@@ -276,7 +277,11 @@ export function statusBadge(estado) {
   );
 }
 
-export const fmt = (n) => n == null ? '$ 0' : '$ ' + Math.round(n).toLocaleString('es-CO');
+export const fmt = (n) => {
+  if (n == null) return '$ 0';
+  const abs = Math.round(Math.abs(n)).toLocaleString('es-CO');
+  return (n < 0 ? '-' : '') + '$ ' + abs;
+};
 
 export function ConfirmModal({ open, title, message, confirmLabel = 'Eliminar', variant = 'danger', onConfirm, onCancel }) {
   return (

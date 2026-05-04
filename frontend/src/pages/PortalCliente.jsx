@@ -478,8 +478,21 @@ function DocsNovedad({ novedadId, contexto = 'novedad_resp' }) {
             <span style={{ color:C.blue, cursor:'pointer', textDecoration:'underline' }}
               onClick={async () => {
                 try {
-                  const res = await api.get(`/documentos/${d.id}/descargar`, { responseType:'blob' });
-                  const u = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = u; a.download = d.nombre; a.click(); URL.revokeObjectURL(u);
+                  const res = await api.get(`/documentos/${d.id}/descargar`);
+                  if (res.data?.url) {
+                    // URL presignada R2 — descarga directa desde Cloudflare
+                    const a = document.createElement('a');
+                    a.href = res.data.url;
+                    a.download = res.data.nombre || d.nombre;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                  } else {
+                    // Fallback blob (dev local)
+                    const blobRes = await api.get(`/documentos/${d.id}/descargar`, { responseType: 'blob' });
+                    const u = URL.createObjectURL(blobRes.data);
+                    const a = document.createElement('a'); a.href = u; a.download = d.nombre; a.click(); URL.revokeObjectURL(u);
+                  }
                 } catch { toast.error('Error al descargar archivo'); }
               }}>
               📄 {d.nombre}
@@ -981,7 +994,7 @@ export default function PortalCliente() {
   const POR_PAGINA = 50;
 
 
-  const { data: afiliados = [], isLoading } = useQuery({
+  const { data: afiliados = [], isLoading, isError: isErrorPortal, refetch: refetchPortal } = useQuery({
     queryKey: ['portal-afiliados'],
     queryFn: () => api.get('/portal/afiliados').then(r => r.data),
     refetchInterval: 120_000,
@@ -1157,7 +1170,12 @@ export default function PortalCliente() {
           </div>
 
           {/* Cards de afiliados */}
-          {isLoading ? (
+          {isErrorPortal ? (
+            <div style={{ padding:40, textAlign:'center' }}>
+              <p style={{ color:C.red, fontSize:14, margin:'0 0 12px' }}>Error al cargar afiliados</p>
+              <button onClick={refetchPortal} style={{ padding:'6px 16px', border:`1px solid ${C.border}`, borderRadius:7, cursor:'pointer', fontSize:13, background:C.surface2 }}>Reintentar</button>
+            </div>
+          ) : isLoading ? (
             <p style={{ textAlign:'center', color:C.text2, padding:40 }}>Cargando afiliados...</p>
           ) : filtrados.length === 0 ? (
             <div style={{ textAlign:'center', padding:40, color:C.text2 }}>
