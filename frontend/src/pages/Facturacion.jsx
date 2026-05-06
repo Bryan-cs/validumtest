@@ -569,7 +569,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
   const { data: todosClientes=[] } = useQuery({ queryKey:['clientes'], queryFn:()=>api.get('/clientes').then(r=>r.data), staleTime: 300_000 });
 
-  const clientesUnicos = todosClientes.map(c=>c.cliente).filter(Boolean).sort();
+  const clientesUnicos = todosClientes.filter(Boolean);
   const MESES_ORDER    = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
   const anioActual     = new Date().getFullYear();
   const aniosUnicos    = Array.from({length: 4}, (_, i) => String(anioActual - i));
@@ -940,7 +940,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   </td>
                   <td style={{ ...tdc, maxWidth:200 }}>
                     {f.novedades
-                      ? <span title={f.novedades} style={{ display:'inline-block', background:C.amberBg, color:C.amber,
+                      ? <span title={f.novedades} style={{ display:'inline-block', background:C.blueBg, color:C.blue,
                           borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600,
                           maxWidth:190, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', cursor:'default' }}>
                           {f.novedades}

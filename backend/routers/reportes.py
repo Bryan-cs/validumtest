@@ -307,3 +307,46 @@ def reporte_consolidado(
         ws3.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
 
     return _xlsx_response(wb, f"consolidado_bbcfile{'_'+anio if anio else ''}.xlsx")
+
+
+@router.get("/eliminados")
+def reporte_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Excel con todos los afiliados eliminados."""
+    import json as _json
+
+    def _parse(datos):
+        try:
+            return _json.loads(datos or "{}")
+        except Exception:
+            return {}
+
+    rows = db.query(models.Eliminado).order_by(models.Eliminado.fecha_eliminacion.desc()).all()
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Eliminados"
+    cols = ["#", "Nombre", "Empresa", "Documento", "EPS", "CCF", "Fecha afiliación",
+            "Mes", "Fecha eliminación", "Eliminado por", "Estado planilla"]
+    _hdr_style(ws, cols)
+    ESTADOS = {
+        "retiro_pendiente": "Retiro pendiente",
+        "planilla_hecha": "Planilla hecha",
+        "planilla_pagada": "Planilla pagada",
+    }
+    for i, r in enumerate(rows, 1):
+        d = _parse(r.datos_completos)
+        ws.append([
+            i,
+            r.nombre or "",
+            r.empresa or "",
+            r.doc or "",
+            d.get("eps", "") or "",
+            d.get("ccf", "") or "",
+            d.get("fecha_afiliacion", "") or "",
+            r.mes or "",
+            r.fecha_eliminacion or "",
+            r.eliminado_por or "",
+            ESTADOS.get(r.estado_planilla or "", "—"),
+        ])
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
+    return _xlsx_response(wb, "eliminados.xlsx")

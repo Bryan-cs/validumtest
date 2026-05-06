@@ -813,6 +813,9 @@ export default function Afiliados() {
                   style={{ padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:8,
                     background:C.surface2, cursor:'pointer', fontSize:12, color:C.text2 }}>✕</button>
               )}
+              <Btn size="sm" variant="secondary" onClick={() => dlExcel('/reportes/eliminados', 'eliminados.xlsx')}>
+                ⬇ Excel
+              </Btn>
             </div>
           </div>
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
@@ -842,8 +845,12 @@ export default function Afiliados() {
                   if (elimDia && (e.fecha_eliminacion||'').slice(8,10) !== elimDia) return false;
                   return true;
                 }).map(e=>(
-                  <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`, background:C.redBg }}>
-                    <td style={{ ...tdc,fontWeight:600,color:C.red }}>{e.nombre}</td>
+                  <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`,
+                    background: e.estado_planilla === 'retiro_pendiente' ? C.amberBg
+                      : e.estado_planilla === 'planilla_hecha' ? C.blueBg
+                      : e.estado_planilla === 'planilla_pagada' ? '#DCFCE7'
+                      : C.redBg }}>
+                    <td style={{ ...tdc, fontWeight:600, color: e.estado_planilla === 'retiro_pendiente' ? C.amber : e.estado_planilla === 'planilla_hecha' ? C.blue : e.estado_planilla === 'planilla_pagada' ? '#166534' : C.red }}>{e.nombre}</td>
                     <td style={tdc}>{e.empresa||'—'}</td>
                     <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{e.doc}</td>
                     <td style={{ ...tdc,fontSize:12 }}>{e.eps||'—'}</td>
