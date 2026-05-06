@@ -588,6 +588,9 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
     return true;
   }), [rows, busqueda, filtros]);
 
+  const rowsPaginaF = rowsFiltradas.slice((paginaF-1)*POR_PAG_F, paginaF*POR_PAG_F);
+  const totalPagsF2 = Math.max(1, Math.ceil(rowsFiltradas.length / POR_PAG_F));
+
   const [modalPagar, setModalPagar] = useState(null);
   const [bancoPago, setBancoPago] = useState('');
 
@@ -902,7 +905,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           <tbody>
             {isErrorFacturas && <tr><td colSpan={12}><ErrorMsg message="Error al cargar facturas" onRetry={refetchFacturas} /></td></tr>}
             {isLoading && [1,2,3,4,5].map(i => <SkeletonRow key={i} cols={11} />)}
-            {rowsFiltradas.map(f => {
+            {rowsPaginaF.map(f => {
               const isHuerfana = f.afiliado_eliminado && f.estado==='pendiente';
               const isExpanded = expandedRow === f.id;
               const ai = f.afil_info || {};
@@ -935,8 +938,14 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                         'Pendiente'}
                     </span>
                   </td>
-                  <td style={{ ...tdc,fontSize:11,color:C.text2,maxWidth:200,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis' }}>
-                    {f.novedades||'—'}
+                  <td style={{ ...tdc, maxWidth:200 }}>
+                    {f.novedades
+                      ? <span title={f.novedades} style={{ display:'inline-block', background:C.amberBg, color:C.amber,
+                          borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600,
+                          maxWidth:190, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', cursor:'default' }}>
+                          {f.novedades}
+                        </span>
+                      : <span style={{ fontSize:11, color:C.text2 }}>—</span>}
                   </td>
                   <td style={tdc}>
                     <div style={{ display:'flex',gap:5,flexWrap:'wrap' }}>
@@ -1002,6 +1011,28 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
           </tbody>
         </table>
       </div>
+
+      {totalPagsF2 > 1 && (
+        <div style={{ display:'flex', justifyContent:'center', alignItems:'center', gap:6, marginTop:14, flexWrap:'wrap' }}>
+          <button onClick={()=>setPaginaF(1)} disabled={paginaF===1}
+            style={{ padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:'pointer', fontSize:13, color:C.text }}>«</button>
+          <button onClick={()=>setPaginaF(p=>Math.max(1,p-1))} disabled={paginaF===1}
+            style={{ padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:'pointer', fontSize:13, color:C.text }}>‹</button>
+          {[...Array(Math.min(5, totalPagsF2))].map((_,i) => {
+            const p = paginaF <= 3 ? i+1 : paginaF - 2 + i;
+            if (p < 1 || p > totalPagsF2) return null;
+            return <button key={p} onClick={()=>setPaginaF(p)}
+              style={{ padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`,
+                fontWeight: p===paginaF?700:400, background: p===paginaF ? C.primary : C.surface2,
+                color: p===paginaF ? '#fff' : C.text, cursor:'pointer', fontSize:13 }}>{p}</button>;
+          })}
+          <button onClick={()=>setPaginaF(p=>Math.min(totalPagsF2,p+1))} disabled={paginaF===totalPagsF2}
+            style={{ padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:'pointer', fontSize:13, color:C.text }}>›</button>
+          <button onClick={()=>setPaginaF(totalPagsF2)} disabled={paginaF===totalPagsF2}
+            style={{ padding:'5px 10px', borderRadius:6, border:`1px solid ${C.border}`, background:C.surface2, cursor:'pointer', fontSize:13, color:C.text }}>»</button>
+          <span style={{ fontSize:12, color:C.text2, marginLeft:4 }}>Pág {paginaF}/{totalPagsF2} · {rowsFiltradas.length} total</span>
+        </div>
+      )}
       </div>)}
 
       <NuevaFacturaModal open={modalNueva} onClose={()=>{setModalNueva(false);setPrefill(null);}}

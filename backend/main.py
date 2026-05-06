@@ -308,10 +308,28 @@ app.include_router(seguimiento_arl_router.router)
 # ─── ELIMINADOS ───────────────────────────────────────────────────────────────
 @app.get("/eliminados")
 def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
+    import json as _json
+    def _parse_datos(datos_completos):
+        try:
+            return _json.loads(datos_completos or "{}")
+        except Exception:
+            return {}
+
     rows = db.query(models.Eliminado).order_by(models.Eliminado.id.desc()).all()
-    return [{"id":r.id,"nombre":r.nombre,"doc":r.doc,"empresa":r.empresa,
-             "fecha_eliminacion":r.fecha_eliminacion,"mes":r.mes,
-             "eliminado_por":r.eliminado_por} for r in rows]
+    return [
+        {
+            "id": r.id,
+            "nombre": r.nombre,
+            "doc": r.doc,
+            "empresa": r.empresa,
+            "fecha_eliminacion": r.fecha_eliminacion,
+            "mes": r.mes,
+            "eliminado_por": r.eliminado_por,
+            "estado_planilla": r.estado_planilla,
+            **{k: _parse_datos(r.datos_completos).get(k, "") for k in ("eps", "ccf", "fecha_afiliacion")},
+        }
+        for r in rows
+    ]
 
 
 @app.get("/eliminados/{id}/preview")
@@ -359,6 +377,20 @@ def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verif
         db.rollback()
         raise HTTPException(500, "Error al eliminar")
     return {"ok": True}
+
+
+@app.patch("/eliminados/{id}/estado-planilla")
+def set_estado_planilla(id: int, estado: str, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Actualiza el estado de planilla de un eliminado: retiro_pendiente | planilla_hecha | planilla_pagada | null"""
+    ESTADOS_VALIDOS = {"retiro_pendiente", "planilla_hecha", "planilla_pagada", ""}
+    if estado not in ESTADOS_VALIDOS:
+        raise HTTPException(400, f"Estado inválido. Valores: {', '.join(s for s in ESTADOS_VALIDOS if s)}")
+    e = db.query(models.Eliminado).filter_by(id=id).first()
+    if not e:
+        raise HTTPException(404, "No encontrado")
+    e.estado_planilla = estado or None
+    db.commit()
+    return {"ok": True, "estado_planilla": e.estado_planilla}
 
 
 @app.post("/eliminados/{id}/restaurar")

@@ -463,6 +463,16 @@ export default function Afiliados() {
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const actualizarEstadoPlanilla = useMutation({
+    mutationFn: ({ id, estado }) => api.patch(`/eliminados/${id}/estado-planilla`, null, { params: { estado } }),
+    onSuccess: (res, variables) => {
+      qc.setQueryData(['eliminados'], prev =>
+        prev?.map(e => e.id === variables.id ? { ...e, estado_planilla: res.data.estado_planilla } : e)
+      );
+    },
+    onError: e => { const d = e.response?.data?.detail; toast.error(typeof d === 'string' ? d : 'Error al actualizar estado'); },
+  });
+
   const confirmarBorradoPermanente = async (e) => {
     try {
       const preview = await api.get(`/eliminados/${e.id}/preview`).then(r => r.data);
@@ -809,16 +819,16 @@ export default function Afiliados() {
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
-                  {['Nombre','Empresa','Documento','Mes','Fecha eliminación','Eliminado por','Acciones'].map(h=>(
+                  {['Nombre','Empresa','Documento','EPS','CCF','Fecha afiliación','Mes','Fecha eliminación','Eliminado por','Estado planilla','Acciones'].map(h=>(
                     <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                       color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {loadElim && <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+                {loadElim && <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
                 {!loadElim && eliminados.length===0 && (
-                  <tr><td colSpan={7} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros eliminados</td></tr>
+                  <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros eliminados</td></tr>
                 )}
                 {eliminados.filter(e => {
                   if (buscarElim) {
@@ -836,9 +846,39 @@ export default function Afiliados() {
                     <td style={{ ...tdc,fontWeight:600,color:C.red }}>{e.nombre}</td>
                     <td style={tdc}>{e.empresa||'—'}</td>
                     <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{e.doc}</td>
+                    <td style={{ ...tdc,fontSize:12 }}>{e.eps||'—'}</td>
+                    <td style={{ ...tdc,fontSize:12 }}>{e.ccf||'—'}</td>
+                    <td style={{ ...tdc,fontSize:12 }}>{e.fecha_afiliacion||'—'}</td>
                     <td style={tdc}>{e.mes||'—'}</td>
                     <td style={tdc}>{e.fecha_eliminacion||'—'}</td>
                     <td style={tdc}>{e.eliminado_por||'—'}</td>
+                    <td style={tdc}>
+                      {(() => {
+                        const ESTADOS_PLANILLA = [
+                          { value: '',                  label: '—',                  bg: 'transparent', fg: C.text2, border: C.border },
+                          { value: 'retiro_pendiente',  label: 'Retiro pendiente',   bg: C.amberBg,     fg: C.amber,  border: C.amber },
+                          { value: 'planilla_hecha',    label: 'Planilla hecha',     bg: C.blueBg,      fg: C.blue,   border: C.blue },
+                          { value: 'planilla_pagada',   label: 'Planilla pagada',    bg: '#DCFCE7',     fg: '#166534', border: '#16a34a' },
+                        ];
+                        const actual = ESTADOS_PLANILLA.find(s => s.value === (e.estado_planilla || '')) || ESTADOS_PLANILLA[0];
+                        return (
+                          <select
+                            value={e.estado_planilla || ''}
+                            onChange={ev => actualizarEstadoPlanilla.mutate({ id: e.id, estado: ev.target.value })}
+                            style={{
+                              padding: '3px 8px', borderRadius: 8, fontSize: 11, fontWeight: 600,
+                              border: `1px solid ${actual.border}`, background: actual.bg, color: actual.fg,
+                              cursor: 'pointer', outline: 'none',
+                            }}
+                            onClick={ev => ev.stopPropagation()}
+                          >
+                            {ESTADOS_PLANILLA.map(s => (
+                              <option key={s.value} value={s.value}>{s.label}</option>
+                            ))}
+                          </select>
+                        );
+                      })()}
+                    </td>
                     <td style={tdc}>
                       <div style={{ display:'flex', gap:6 }}>
                         <Btn size="sm" variant="success"

@@ -68,14 +68,26 @@ export default function Cobro() {
   const subtiposUnicos = useMemo(() => [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort(), [rows]);
   const estadosOpts    = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
 
+  const hoy = new Date();
+  const mesActualNombre = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][hoy.getMonth()];
+  const anioActualStr = String(hoy.getFullYear());
+
   const rowsFiltrados = useMemo(() => rows.filter(r => {
     const labelEstado = ESTADO_CONFIG[r.estado]?.label || r.estado;
+    // Ocultar COBRADO de meses anteriores a menos que el usuario filtre explícitamente por COBRADO
+    if (r.estado === 'COBRADO') {
+      const filtrandoPorCobrado = filtros.estado.includes('COBRADO');
+      if (!filtrandoPorCobrado) return false; // ocultar todos los cobrados por defecto
+      // si filtra por COBRADO: solo mostrar mes actual
+      const esMesActual = r.mes === mesActualNombre && r.anio === anioActualStr;
+      if (!esMesActual) return false;
+    }
     if (filtros.empresa.length  && !filtros.empresa.includes(r.empresa))    return false;
     if (filtros.cliente.length  && !filtros.cliente.includes(r.cliente))    return false;
     if (filtros.estado.length   && !filtros.estado.includes(labelEstado))   return false;
     if (filtros.subtipo.length  && !filtros.subtipo.includes(r.subtipo))    return false;
     return true;
-  }), [rows, filtros]);
+  }), [rows, filtros, mesActualNombre, anioActualStr]);
 
   const totalPags   = Math.max(1, Math.ceil(rowsFiltrados.length / POR_PAG));
   const rowsPagina  = rowsFiltrados.slice((pagina - 1) * POR_PAG, pagina * POR_PAG);
@@ -205,16 +217,16 @@ export default function Cobro() {
                       <span style={{ fontSize:12, color:C.text2 }}>{isExp?'▼':'▶'}</span>
                     </td>
                     <td style={tdc}>
-                      <div style={{ fontWeight:700, color:C.text, fontSize:13 }}>{r.nombre}</div>
+                      <div style={{ fontWeight:700, color:C.text, fontSize:14 }}>{r.nombre}</div>
                       <div style={{ fontSize:11, color:C.text2, marginTop:1 }}>{r.empresa}</div>
                     </td>
-                    <td style={{ ...tdc, fontFamily:'monospace', fontSize:12, color:C.text2 }}>{r.doc}</td>
+                    <td style={{ ...tdc, fontFamily:'monospace', fontSize:13, color:C.text, fontWeight:600 }}>{r.doc}</td>
                     <td style={tdc}>
                       {r.subtipo
                         ? <span style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:5,padding:'2px 8px',fontSize:11,fontWeight:600 }}>{r.subtipo}</span>
                         : <span style={{ color:C.text2 }}>—</span>}
                     </td>
-                    <td style={{ ...tdc, color:C.text2, fontSize:12 }}>{r.cliente||'—'}</td>
+                    <td style={{ ...tdc, color:C.text, fontSize:13, fontWeight:600 }}>{r.cliente||'—'}</td>
                     <td style={{ ...tdc, fontWeight:700, color:C.primary, whiteSpace:'nowrap' }}>{r.mes} {r.anio}</td>
                     <td style={{ ...tdc, whiteSpace:'nowrap' }}>
                       <span style={{ background:C.blueBg, color:C.blue, borderRadius:6, padding:'2px 9px', fontSize:11, fontWeight:700 }}>

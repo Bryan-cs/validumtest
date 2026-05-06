@@ -122,6 +122,7 @@ class Eliminado(Base):
     fecha_eliminacion   = Column(String(10))
     mes                 = Column(String(20))
     eliminado_por       = Column(String(60))
+    estado_planilla     = Column(String(30), nullable=True)  # retiro_pendiente / planilla_hecha / planilla_pagada
     creado              = Column(DateTime, default=_utcnow)
 
 class Empleado(Base):
