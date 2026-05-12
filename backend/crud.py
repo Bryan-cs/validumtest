@@ -285,6 +285,8 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
     # Si se reactiva a ACTIVO (transición real, no rutinaria) → limpiar solicitudes de retiro del portal
     if data.estado_srv == "ACTIVO" and a.estado_srv != "ACTIVO":
         db.query(models.SolicitudRetiro).filter_by(afiliado_doc=a.doc).delete()
+    nombre_anterior  = a.nombre
+    cliente_anterior = a.cliente_txt
     for field, val in [
         ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
         ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
@@ -296,6 +298,19 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
         setattr(a, field, val)
+    # Sincronizar facturas pendientes si cambió nombre o cliente
+    nombre_cambio  = data.nombre      != nombre_anterior
+    cliente_cambio = data.cliente_txt != cliente_anterior
+    if nombre_cambio or cliente_cambio:
+        q_fact = db.query(models.Factura).filter(
+            models.Factura.doc == a.doc,
+            models.Factura.estado != "pagado",
+        )
+        upd = {}
+        if nombre_cambio:  upd["nombre_afiliado"] = data.nombre
+        if cliente_cambio: upd["cliente"]         = data.cliente_txt or ""
+        if upd:
+            q_fact.update(upd, synchronize_session=False)
     _log(db, editor, "editó un afiliado", "Afiliados", data.nombre)
     try:
         db.commit()
