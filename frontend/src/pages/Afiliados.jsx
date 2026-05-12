@@ -294,7 +294,7 @@ export default function Afiliados() {
     },
     {
       accessorKey: 'eps',
-      header: 'EPS / Afiliación / Caja',
+      header: 'EPS / Afiliación',
       cell: ({ row }) => {
         const a = row.original;
         return (
@@ -303,9 +303,18 @@ export default function Afiliados() {
             {a.fecha_afiliacion && (
               <span style={{ fontSize:11, color:C.blue, fontWeight:600 }}>📅 {a.fecha_afiliacion}</span>
             )}
-            {a.ccf && (
-              <span style={{ fontSize:11, color:C.text2 }}>🏦 {a.ccf}</span>
-            )}
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'ccf',
+      header: 'Caja',
+      cell: ({ row }) => {
+        const a = row.original;
+        return (
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            <span style={{ fontSize:13, color:C.text, fontWeight:700 }}>{a.ccf || '—'}</span>
           </div>
         );
       },
