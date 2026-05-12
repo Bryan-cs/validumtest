@@ -81,7 +81,7 @@ export default function Afiliados() {
     try { return localStorage.getItem('bbc_afil_busqueda') || ''; } catch { return ''; }
   });
   const [filtros,  setFiltros]  = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bbc_afil_filtros')) || { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[] }; } catch { return { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[] }; }
+    try { return JSON.parse(localStorage.getItem('bbc_afil_filtros')) || { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }; } catch { return { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }; }
   });
   const [modal,    setModal]    = useState(null);
   const [confirm,  setConfirm]  = useState(null);  // { title, message, onConfirm }
@@ -121,7 +121,7 @@ export default function Afiliados() {
   });
 
   const setFiltro = (key,vals) => { setFiltros(f=>({...f,[key]:vals})); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
-  const limpiar = () => { setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[] }); setBusqueda(''); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
+  const limpiar = () => { setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }); setBusqueda(''); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
 
   useEffect(() => { try { localStorage.setItem('bbc_afil_filtros', JSON.stringify(filtros)); } catch {} }, [filtros]);
   useEffect(() => { try { localStorage.setItem('bbc_afil_busqueda', busqueda); } catch {} }, [busqueda]);
@@ -164,6 +164,7 @@ export default function Afiliados() {
     if (filtros.subtipo.length)  p.subtipo  = filtros.subtipo.join(',');
     if (filtros.tipo_doc.length) p.tipo_doc = filtros.tipo_doc.join(',');
     if (filtros.ccf?.length)     p.ccf      = filtros.ccf.join(',');
+    if (filtros.eps?.length)     p.eps      = filtros.eps.join(',');
     if (fechaDesde) p.fecha_desde = fechaDesde;
     if (fechaHasta) p.fecha_hasta = fechaHasta;
     return p;
@@ -233,6 +234,7 @@ export default function Afiliados() {
   const clientesUnicos = filterOpts.clientes || [];
   const subtiposUnicos = filterOpts.subtipos || [];
   const estadosOpts    = filterOpts.estados  || [];
+  const epsOpts        = filterOpts.eps      || [];
 
   const hayFiltrosActivos = busquedaDefer || Object.values(filtros).some(v => v.length > 0) || fechaDesde || fechaHasta;
   // Filtrado completamente server-side — `data` ya viene filtrada incluyendo fechas.
@@ -292,8 +294,21 @@ export default function Afiliados() {
     },
     {
       accessorKey: 'eps',
-      header: 'EPS',
-      cell: ({ row }) => <span style={{ fontSize: 13, color: C.text, fontWeight: 700 }}>{row.original.eps || '—'}</span>,
+      header: 'EPS / Afiliación / Caja',
+      cell: ({ row }) => {
+        const a = row.original;
+        return (
+          <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+            <span style={{ fontSize:13, color:C.text, fontWeight:700 }}>{a.eps || '—'}</span>
+            {a.fecha_afiliacion && (
+              <span style={{ fontSize:11, color:C.blue, fontWeight:600 }}>📅 {a.fecha_afiliacion}</span>
+            )}
+            {a.ccf && (
+              <span style={{ fontSize:11, color:C.text2 }}>🏦 {a.ccf}</span>
+            )}
+          </div>
+        );
+      },
     },
     {
       accessorKey: 'arl',
@@ -690,6 +705,7 @@ export default function Afiliados() {
               { key:'subtipo',  label:'Subtipo',   icon:'🔢', options: subtiposUnicos },
               { key:'tipo_doc', label:'Tipo doc',  icon:'🪪', options: ['CC','CE','PT','PA','NIT'] },
               { key:'ccf',      label:'CCF',       icon:'🏦', options: listas.ccf||[] },
+              { key:'eps',      label:'EPS',       icon:'🏥', options: epsOpts },
             ]}
             valores={filtros} onChange={setFiltro} onLimpiar={() => { limpiar(); setFechaDesde(''); setFechaHasta(''); }}
           />

@@ -180,7 +180,7 @@ def get_afiliados_filter_options(db):
         return cached
     A = models.Afiliado
     rows = db.query(
-        A.empresa, A.cliente_txt, A.subtipo, A.estado_srv, A.tipo_doc, A.ccf
+        A.empresa, A.cliente_txt, A.subtipo, A.estado_srv, A.tipo_doc, A.ccf, A.eps
     ).filter_by(activo=True).distinct().all()
     result = {
         "empresas":  sorted({r.empresa     for r in rows if r.empresa}),
@@ -189,20 +189,21 @@ def get_afiliados_filter_options(db):
         "estados":   sorted({r.estado_srv  for r in rows if r.estado_srv}),
         "tipos_doc": sorted({r.tipo_doc    for r in rows if r.tipo_doc}),
         "ccfs":      sorted({r.ccf         for r in rows if r.ccf}),
+        "eps":       sorted({r.eps         for r in rows if r.eps}),
     }
     _cache_set("afiliados:filtros", result, ttl=120)
     return result
 
 
 def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
-                  tipo_doc="", ccf="", fecha_desde="", fecha_hasta="",
+                  tipo_doc="", ccf="", eps="", fecha_desde="", fecha_hasta="",
                   skip: int = 0, limit: int = 0):
     """Lista afiliados con filtros opcionales y paginación (skip/limit).
     Si limit=0 devuelve todos (para compatibilidad con exportaciones Excel).
     Cada filtro acepta múltiples valores separados por coma (CSV).
     Sin filtros ni paginación → devuelve resultado cacheado (TTL_AFILIADOS).
     """
-    sin_filtros = not any([q, estado, empresa, cliente, subtipo, tipo_doc, ccf, fecha_desde, fecha_hasta])
+    sin_filtros = not any([q, estado, empresa, cliente, subtipo, tipo_doc, ccf, eps, fecha_desde, fecha_hasta])
     if sin_filtros and skip == 0 and limit == 0:
         cached = _cache_get("afiliados:all")
         if cached is not None:
@@ -233,6 +234,8 @@ def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
     if tipos_doc: query = query.filter(models.Afiliado.tipo_doc.in_(tipos_doc))
     ccfs = _split_csv(ccf)
     if ccfs: query = query.filter(models.Afiliado.ccf.in_(ccfs))
+    epss = _split_csv(eps)
+    if epss: query = query.filter(models.Afiliado.eps.in_(epss))
     if fecha_desde: query = query.filter(models.Afiliado.fecha_afiliacion >= fecha_desde)
     if fecha_hasta: query = query.filter(models.Afiliado.fecha_afiliacion <= fecha_hasta)
     total = query.count()
