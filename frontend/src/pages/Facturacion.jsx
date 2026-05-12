@@ -173,7 +173,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
 
   return (
     <Modal open={open} onClose={onClose} width={820} title="Nueva factura por afiliado">
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', gap:10, marginBottom:10 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:10, marginBottom:10 }}>
         <div>
           <label style={lbl}>Cédula del afiliado *</label>
           <div style={{ display:'flex', gap:6 }}>
@@ -195,9 +195,6 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
               <option key={a}>{a}</option>
             ))}
           </select></div>
-        <div><label style={lbl}>Estado</label>
-          <select style={inp} value={estado} onChange={e => setEstado(e.target.value)}>
-            <option value="pendiente">Pendiente</option><option value="pagado">Pagado</option></select></div>
       </div>
 
       {errorBusq && <div style={{ background:C.redBg,color:C.red,borderRadius:7,padding:'8px 12px',fontSize:12,marginBottom:10 }}>{errorBusq}</div>}
@@ -216,15 +213,16 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
       </div>
 
       {afiliado?.detalle && (
-        <div style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:7,
-          padding:'8px 12px',marginBottom:10,fontSize:12,color:C.text2 }}>
-          <span style={{ fontWeight:600,color:C.text }}>ℹ️ Detalle del afiliado:</span>{' '}
+        <div style={{ background:C.amberBg,border:`1px solid ${C.amber}`,borderRadius:7,
+          padding:'8px 12px',marginBottom:10,fontSize:12,color:C.text,fontWeight:500 }}>
+          <span style={{ fontWeight:700,color:C.amber }}>⚠️ Detalle del afiliado:</span>{' '}
           {afiliado.detalle}
         </div>
       )}
 
       <SrvTable planilla={planilla} marcados={marcados} setMarcados={setMarcados} dias={dias}
-        sinAfiliado={!afiliado} cargoAdicional={cargoAdicional} setCargoAdicional={setCargoAdicional} />
+        sinAfiliado={!afiliado} cargoAdicional={cargoAdicional} setCargoAdicional={setCargoAdicional}
+        fechaAfiliacion={afiliado?.fecha_afiliacion} />
 
       <div style={{ marginBottom:10 }}>
         <label style={lbl}>Ingreso cobrado al cliente ($)</label>
@@ -352,12 +350,19 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
 }
 
 // ─── COMPONENTES COMPARTIDOS ─────────────────────────────────────────────────
-function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado, cargoAdicional, setCargoAdicional }) {
+function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado, cargoAdicional, setCargoAdicional, fechaAfiliacion }) {
   return (
     <div style={{ marginBottom:10 }}>
-      <div style={{ fontSize:13,fontWeight:700,color:C.primary,borderBottom:`2px solid ${C.primary}`,paddingBottom:4,marginBottom:6 }}>
-        Servicios contratados del afiliado
-        <span style={{ fontSize:11,fontWeight:400,color:C.text2,marginLeft:8 }}>Desmarca los que no aplican (ej: primer mes)</span>
+      <div style={{ fontSize:13,fontWeight:700,color:C.primary,borderBottom:`2px solid ${C.primary}`,paddingBottom:4,marginBottom:6,display:'flex',alignItems:'center',gap:10 }}>
+        <span>Servicios contratados del afiliado</span>
+        <span style={{ fontSize:11,fontWeight:400,color:C.text2 }}>Desmarca los que no aplican (ej: primer mes)</span>
+        {fechaAfiliacion && (
+          <span style={{ marginLeft:'auto',fontSize:11,fontWeight:700,
+            background:C.blueBg,color:C.blue,border:`1px solid ${C.blue}`,
+            borderRadius:5,padding:'2px 8px',whiteSpace:'nowrap' }}>
+            📅 Afiliado desde: {fechaAfiliacion}
+          </span>
+        )}
       </div>
       {planilla.length === 0
         ? <div style={{ color:C.text2,fontSize:12,padding:'8px 0' }}>{sinAfiliado ? 'Busca el afiliado por cédula para cargar servicios.' : 'Sin servicios registrados.'}</div>
