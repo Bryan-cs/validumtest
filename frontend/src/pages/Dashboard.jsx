@@ -60,13 +60,13 @@ export default function Dashboard() {
             <ClickableCard onClick={() => irAAfiliados('SUSPENDIDO')}>
               <StatCard label="Suspendidos"        value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
             </ClickableCard>
-            <ClickableCard onClick={() => irAAfiliados('DOBLE_AFILIACION')}>
+            <ClickableCard onClick={() => irAAfiliados('DOBLE AFILIACION')}>
               <StatCard label="Doble afiliación"   value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
             </ClickableCard>
-            <ClickableCard onClick={() => irAAfiliados('NO_ENCONTRADO')}>
+            <ClickableCard onClick={() => irAAfiliados('NO SE ENCUENTRA')}>
               <StatCard label="No se encuentra"    value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
             </ClickableCard>
-            <ClickableCard onClick={() => irAAfiliados('EN_ESPERA')}>
+            <ClickableCard onClick={() => irAAfiliados('EN ESPERA DE ACTIVACION')}>
               <StatCard label="En espera activac." value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" />
             </ClickableCard>
             <div style={{ flex:1, minWidth:130 }}>
