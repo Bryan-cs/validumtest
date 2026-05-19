@@ -1525,6 +1525,27 @@ def create_tarea(db, data: schemas.TareaCreate):
         db.commit()
     return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
 
+def update_tarea(db, tarea_id: int, data: schemas.TareaUpdate, username: str, rol: str):
+    t = db.query(models.Tarea).filter_by(id=tarea_id).first()
+    if not t:
+        return None
+    if t.estado == "finalizada":
+        return {"error": "no_editar_finalizada"}
+    es_admin = rol == "admin"
+    if not es_admin:
+        if t.creado_por != username:
+            return {"error": "unauthorized"}
+        if t.estado != "pendiente":
+            return {"error": "solo_pendiente"}
+    patch = data.model_dump(exclude_none=True)
+    if not es_admin:
+        patch.pop("asignado_a", None)
+    for k, v in patch.items():
+        setattr(t, k, v)
+    db.commit()
+    db.refresh(t)
+    return _tarea_to_dict(t, _load_comments_map(db, [t.id]))
+
 def get_tareas(db, username: str, rol: str, skip: int = 0, limit: int = 200):
     q = db.query(models.Tarea)
     if rol != "admin":

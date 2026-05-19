@@ -298,6 +298,12 @@ class TareaCreate(BaseModel):
     fecha_limite: str = ""
     privada: bool = False
 
+class TareaUpdate(BaseModel):
+    titulo: Optional[str] = None
+    descripcion: Optional[str] = None
+    fecha_limite: Optional[str] = None
+    asignado_a: Optional[str] = None
+
 class RefreshTokenRequest(BaseModel):
     refresh_token: Optional[str] = None
 

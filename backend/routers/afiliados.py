@@ -22,12 +22,12 @@ def filter_options(db: Session = Depends(get_db), token=Depends(verify_token)):
 
 @router.get("/recientes")
 def afiliados_recientes(db: Session = Depends(get_db), token=Depends(verify_token)):
-    """Últimos 5 afiliados activos por fecha de creación."""
+    """Últimos 10 afiliados activos por fecha de creación."""
     rows = (
         db.query(models.Afiliado)
         .filter(models.Afiliado.activo == True)
         .order_by(models.Afiliado.creado.desc())
-        .limit(5)
+        .limit(10)
         .all()
     )
     return [

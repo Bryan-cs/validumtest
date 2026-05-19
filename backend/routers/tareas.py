@@ -63,6 +63,23 @@ def finalizar_lote(body: dict, db: Session = Depends(get_db), token=Depends(requ
 
 # ── Rutas dinámicas ───────────────────────────────────────────────────────────
 
+@router.put("/{id}")
+def editar_tarea(id: int, data: schemas.TareaUpdate, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Edita título, descripción, fecha_límite o asignado_a. Admin: cualquier tarea no finalizada. Empleado: solo sus pendientes."""
+    t = crud.update_tarea(db, id, data, token["sub"], token.get("rol", ""))
+    if t is None:
+        raise HTTPException(404, "Tarea no encontrada")
+    if isinstance(t, dict) and "error" in t:
+        if t["error"] == "unauthorized":
+            raise HTTPException(403, "No tienes permiso para editar esta tarea")
+        if t["error"] == "solo_pendiente":
+            raise HTTPException(400, "Solo puedes editar tareas en estado pendiente")
+        if t["error"] == "no_editar_finalizada":
+            raise HTTPException(400, "No se puede editar una tarea finalizada")
+        raise HTTPException(400, t["error"])
+    return t
+
+
 @router.put("/{id}/estado")
 def cambiar_estado(id: int, body: dict = None, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Empleado cambia estado: pendiente → en_proceso → completada."""

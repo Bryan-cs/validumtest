@@ -114,6 +114,8 @@ export default function Afiliados() {
   const [arlFiltroCliente, setArlFiltroCliente] = useState('');
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
   const [arlBulkEstado, setArlBulkEstado] = useState('activo');
+  const [segPagina, setSegPagina] = useState(1);
+  const [arlPagina, setArlPagina] = useState(1);
   const [arlModal, setArlModal] = useState(null);
   const [arlForm, setArlForm] = useState({
     nombre:'', documento:'', cliente:'', empresa:'',
@@ -591,6 +593,12 @@ export default function Afiliados() {
     () => arlFiltroCliente ? segArlData.filter(r => r.cliente === arlFiltroCliente) : segArlData,
     [segArlData, arlFiltroCliente]
   );
+
+  const SEG_PAGE_SIZE = 50;
+  const totalSegPags = Math.ceil(enSeguimientoFiltrado.length / SEG_PAGE_SIZE) || 1;
+  const totalArlPags = Math.ceil(segArlFiltrado.length / SEG_PAGE_SIZE) || 1;
+  const enSeguimientoPaginado = enSeguimientoFiltrado.slice((segPagina - 1) * SEG_PAGE_SIZE, segPagina * SEG_PAGE_SIZE);
+  const segArlPaginado = segArlFiltrado.slice((arlPagina - 1) * SEG_PAGE_SIZE, arlPagina * SEG_PAGE_SIZE);
   const todosArlSel = arlSeleccionados.length > 0 && arlSeleccionados.length === segArlFiltrado.length;
   function diasDesdeArl(fechaStr) {
     if (!fechaStr) return 0;
@@ -1118,7 +1126,7 @@ export default function Afiliados() {
             )}
           </div>
           <input placeholder="🔍 Buscar nombre, documento, empresa, cliente..."
-            value={segBusqueda} onChange={e=>setSegBusqueda(e.target.value)}
+            value={segBusqueda} onChange={e=>{ setSegBusqueda(e.target.value); setSegPagina(1); }}
             style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
               fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
           <BarraFiltros
@@ -1127,8 +1135,8 @@ export default function Afiliados() {
               { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
             ]}
             valores={segFiltros}
-            onChange={(key,vals) => setSegFiltros(f=>({...f,[key]:vals}))}
-            onLimpiar={() => setSegFiltros({ empresa:[], cliente:[] })}
+            onChange={(key,vals) => { setSegFiltros(f=>({...f,[key]:vals})); setSegPagina(1); }}
+            onLimpiar={() => { setSegFiltros({ empresa:[], cliente:[] }); setSegPagina(1); }}
           />
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
@@ -1146,7 +1154,7 @@ export default function Afiliados() {
                     No hay afiliados en espera de activación
                   </td></tr>
                 )}
-                {enSeguimientoFiltrado.map(a=>{
+                {enSeguimientoPaginado.map(a=>{
                   const dias = diasEnEspera(a);
                   const urg  = urgenciaEspera(dias);
                   const rowBg = urg?.nivel==='critico' ? C.redBg : urg?.nivel==='urgente' ? C.amberBg : C.surface;
@@ -1214,6 +1222,17 @@ export default function Afiliados() {
               </tbody>
             </table>
           </div>
+          {totalSegPags > 1 && (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:10, gap:8 }}>
+              <span style={{ fontSize:12, color:C.text2 }}>
+                Página {segPagina} de {totalSegPags} — {enSeguimientoFiltrado.length} registros
+              </span>
+              <div style={{ display:'flex', gap:4 }}>
+                <Btn size="sm" variant="secondary" onClick={() => setSegPagina(p => Math.max(1, p - 1))} disabled={segPagina <= 1}>← Ant.</Btn>
+                <Btn size="sm" variant="secondary" onClick={() => setSegPagina(p => Math.min(totalSegPags, p + 1))} disabled={segPagina >= totalSegPags}>Sig. →</Btn>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1223,7 +1242,7 @@ export default function Afiliados() {
           {/* Barra superior */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-              <select value={arlFiltroCliente} onChange={e => { setArlFiltroCliente(e.target.value); setArlSeleccionados([]); }}
+              <select value={arlFiltroCliente} onChange={e => { setArlFiltroCliente(e.target.value); setArlSeleccionados([]); setArlPagina(1); }}
                 style={{ padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', color:C.text, background:C.surface }}>
                 <option value="">👤 Todos los clientes</option>
                 {clientesUnicos.map(c => <option key={c} value={c}>{c}</option>)}
@@ -1266,7 +1285,7 @@ export default function Afiliados() {
                     No hay registros de seguimiento ARL
                   </td></tr>
                 )}
-                {segArlFiltrado.map(row => {
+                {segArlPaginado.map(row => {
                   const alerta = arlAlerta(row);
                   const restantes = diasRestantesArl(row);
                   const restColor = restantes === null ? C.text2
@@ -1315,7 +1334,17 @@ export default function Afiliados() {
               </tbody>
             </table>
           </div>
-
+          {totalArlPags > 1 && (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginTop:10, gap:8 }}>
+              <span style={{ fontSize:12, color:C.text2 }}>
+                Página {arlPagina} de {totalArlPags} — {segArlFiltrado.length} registros
+              </span>
+              <div style={{ display:'flex', gap:4 }}>
+                <Btn size="sm" variant="secondary" onClick={() => setArlPagina(p => Math.max(1, p - 1))} disabled={arlPagina <= 1}>← Ant.</Btn>
+                <Btn size="sm" variant="secondary" onClick={() => setArlPagina(p => Math.min(totalArlPags, p + 1))} disabled={arlPagina >= totalArlPags}>Sig. →</Btn>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
