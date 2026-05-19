@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '../components/ui/tooltip';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -74,6 +75,8 @@ const Sel = ({ label, value, onChange, options=[], style }) => (
 export default function Afiliados() {
   const qc = useQueryClient();
   const { user } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
   const esAdmin   = user?.rol === 'admin';
   const esEmpleado = user?.rol === 'empleado';
   const [tab, setTab]           = useState('activos');
@@ -85,6 +88,13 @@ export default function Afiliados() {
   });
   const [modal,    setModal]    = useState(null);
   const [confirm,  setConfirm]  = useState(null);  // { title, message, onConfirm }
+
+  useEffect(() => {
+    const estadoFiltro = location.state?.estadoFiltro;
+    if (!estadoFiltro) return;
+    setFiltros(f => ({ ...f, estado: [estadoFiltro] }));
+    navigate(location.pathname, { replace: true, state: {} });
+  }, []);
   const [form,     setForm]     = useState({});
 
   // Pagos tab state
