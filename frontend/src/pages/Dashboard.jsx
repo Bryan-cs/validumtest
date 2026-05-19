@@ -63,7 +63,7 @@ export default function Dashboard() {
             <ClickableCard onClick={() => irAAfiliados('DOBLE AFILIACION')}>
               <StatCard label="Doble afiliación"   value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
             </ClickableCard>
-            <ClickableCard onClick={() => irAAfiliados('NO SE ENCUENTRA')}>
+            <ClickableCard onClick={() => irAAfiliados('NO SE ENCUENTRA AFILIADO')}>
               <StatCard label="No se encuentra"    value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
             </ClickableCard>
             <ClickableCard onClick={() => irAAfiliados('EN ESPERA DE ACTIVACION')}>
