@@ -38,6 +38,8 @@ def afiliados_recientes(db: Session = Depends(get_db), token=Depends(verify_toke
             "empresa": a.empresa,
             "eps": a.eps,
             "creado": a.creado.isoformat() if a.creado else None,
+            "fecha_afiliacion": a.fecha_afiliacion,
+            "servicios": json.loads(a.servicios or "[]"),
         }
         for a in rows
     ]

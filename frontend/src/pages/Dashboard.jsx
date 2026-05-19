@@ -55,14 +55,14 @@ export default function Dashboard() {
         ) : recientes.length === 0 ? (
           <p style={{ color: C.text2, fontSize: 13, margin: 0 }}>Sin datos</p>
         ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {recientes.map(a => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+            {recientes.map((a, idx) => (
+              <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: idx < recientes.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                 <div style={{
                   width: 34, height: 34, borderRadius: '50%',
                   background: C.surface2, border: `1px solid ${C.border}`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 13, fontWeight: 700, color: C.primary, flexShrink: 0,
+                  fontSize: 13, fontWeight: 700, color: C.primary, flexShrink: 0, marginTop: 2,
                 }}>
                   {a.nombre?.charAt(0)?.toUpperCase() ?? '?'}
                 </div>
@@ -70,11 +70,23 @@ export default function Dashboard() {
                   <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {a.nombre}
                   </div>
-                  <div style={{ fontSize: 11, color: C.text2 }}>
+                  <div style={{ fontSize: 11, color: C.text2, marginBottom: 4 }}>
                     {a.doc}{a.empresa ? ` · ${a.empresa}` : ''}
+                    {a.fecha_afiliacion ? <span style={{ marginLeft: 6, color: C.blue }}>📅 {a.fecha_afiliacion}</span> : null}
                   </div>
+                  {a.servicios?.length > 0 && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                      {a.servicios.map(s => (
+                        <span key={s} style={{
+                          fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                          background: C.blueBg, color: C.blue,
+                          fontWeight: 600, letterSpacing: '.02em',
+                        }}>{s}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div style={{ fontSize: 11, color: C.text2, flexShrink: 0 }}>
+                <div style={{ fontSize: 11, color: C.text2, flexShrink: 0, marginTop: 2 }}>
                   {a.creado ? new Date(a.creado).toLocaleDateString('es-CO', { day:'2-digit', month:'short' }) : ''}
                 </div>
               </div>
