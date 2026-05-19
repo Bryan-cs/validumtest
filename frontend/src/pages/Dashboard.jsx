@@ -1,9 +1,31 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import api from '../utils/api';
-import { StatCard, SkeletonCard, ErrorMsg, C } from '../components/UI';
+import { StatCard, SkeletonCard, ErrorMsg, Modal, C } from '../components/UI';
+
+const ESTADO_LABELS = {
+  SUSPENDIDO:       'Suspendidos',
+  DOBLE_AFILIACION: 'Doble afiliación',
+  NO_ENCONTRADO:    'No se encuentra',
+  EN_ESPERA:        'En espera de activación',
+};
+
+function ClickableCard({ onClick, children }) {
+  return (
+    <div
+      onClick={onClick}
+      style={{ flex: 1, minWidth: 130, cursor: 'pointer', borderRadius: 12, transition: 'opacity .15s' }}
+      onMouseEnter={e => e.currentTarget.style.opacity = '.8'}
+      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+    >
+      {children}
+    </div>
+  );
+}
 
 export default function Dashboard() {
+  const [modalEstado, setModalEstado] = useState(null);
+
   const { data: d, isLoading, isError, refetch } = useQuery({
     queryKey: ['dashboard'],
     queryFn: () => api.get('/dashboard').then(r => r.data),
@@ -14,6 +36,12 @@ export default function Dashboard() {
     queryKey: ['afiliados-recientes'],
     queryFn: () => api.get('/afiliados/recientes').then(r => r.data),
     refetchInterval: 30_000,
+  });
+
+  const { data: porEstado = [], isLoading: isLoadingEstado } = useQuery({
+    queryKey: ['afiliados-por-estado', modalEstado],
+    queryFn: () => api.get(`/afiliados?estado=${modalEstado}`).then(r => r.data?.items ?? []),
+    enabled: !!modalEstado,
   });
 
   return (
@@ -35,15 +63,73 @@ export default function Dashboard() {
           : isError
           ? <ErrorMsg message="Error al cargar métricas" onRetry={refetch} />
           : <>
-            <StatCard label="Activos"            value={d?.activos          ?? '—'} color={C.green}   icon="👥" />
-            <StatCard label="Suspendidos"        value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
-            <StatCard label="Doble afiliación"   value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
-            <StatCard label="No se encuentra"    value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
-            <StatCard label="En espera activac." value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" />
-            <StatCard label="Total afiliados"    value={d?.total_afiliados  ?? '—'} color={C.primary} icon="📊" />
+            <div style={{ flex:1, minWidth:130 }}>
+              <StatCard label="Activos"            value={d?.activos          ?? '—'} color={C.green}   icon="👥" />
+            </div>
+            <ClickableCard onClick={() => setModalEstado('SUSPENDIDO')}>
+              <StatCard label="Suspendidos"        value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
+            </ClickableCard>
+            <ClickableCard onClick={() => setModalEstado('DOBLE_AFILIACION')}>
+              <StatCard label="Doble afiliación"   value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
+            </ClickableCard>
+            <ClickableCard onClick={() => setModalEstado('NO_ENCONTRADO')}>
+              <StatCard label="No se encuentra"    value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
+            </ClickableCard>
+            <ClickableCard onClick={() => setModalEstado('EN_ESPERA')}>
+              <StatCard label="En espera activac." value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" />
+            </ClickableCard>
+            <div style={{ flex:1, minWidth:130 }}>
+              <StatCard label="Total afiliados"    value={d?.total_afiliados  ?? '—'} color={C.primary} icon="📊" />
+            </div>
           </>
         }
       </div>
+
+      {/* Modal afiliados por estado */}
+      <Modal
+        open={!!modalEstado}
+        onClose={() => setModalEstado(null)}
+        title={`${ESTADO_LABELS[modalEstado] ?? modalEstado} (${porEstado.length})`}
+        width={560}
+      >
+        {isLoadingEstado ? (
+          <p style={{ color: C.text2, fontSize: 13 }}>Cargando...</p>
+        ) : porEstado.length === 0 ? (
+          <p style={{ color: C.text2, fontSize: 13 }}>Sin afiliados en este estado.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 0, maxHeight: 420, overflowY: 'auto' }}>
+            {porEstado.map((a, idx) => (
+              <div key={a.id} style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '10px 0',
+                borderBottom: idx < porEstado.length - 1 ? `1px solid ${C.border}` : 'none',
+              }}>
+                <div style={{
+                  width: 32, height: 32, borderRadius: '50%',
+                  background: C.surface2, border: `1px solid ${C.border}`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 12, fontWeight: 700, color: C.primary, flexShrink: 0,
+                }}>
+                  {a.nombre?.charAt(0)?.toUpperCase() ?? '?'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: C.text, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {a.nombre}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.text2 }}>
+                    {a.doc}{a.empresa ? ` · ${a.empresa}` : ''}{a.cliente_txt ? ` · ${a.cliente_txt}` : ''}
+                  </div>
+                </div>
+                {a.eps && (
+                  <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: C.blueBg, color: C.blue, fontWeight: 600, flexShrink: 0 }}>
+                    {a.eps}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </Modal>
 
       {/* Últimos afiliados */}
       <div style={{ background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, padding: '16px 20px' }}>
@@ -74,17 +160,25 @@ export default function Dashboard() {
                     {a.doc}{a.empresa ? ` · ${a.empresa}` : ''}
                     {a.fecha_afiliacion ? <span style={{ marginLeft: 6, color: C.blue }}>📅 {a.fecha_afiliacion}</span> : null}
                   </div>
-                  {a.servicios?.length > 0 && (
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {a.servicios.map(s => (
-                        <span key={s} style={{
-                          fontSize: 10, padding: '2px 6px', borderRadius: 4,
-                          background: C.blueBg, color: C.blue,
-                          fontWeight: 600, letterSpacing: '.02em',
-                        }}>{s}</span>
-                      ))}
-                    </div>
-                  )}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                    {a.eps && (
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: C.greenBg, color: C.green, fontWeight: 600 }}>
+                        EPS: {a.eps}
+                      </span>
+                    )}
+                    {a.ccf && (
+                      <span style={{ fontSize: 10, padding: '2px 6px', borderRadius: 4, background: C.amberBg, color: C.amber, fontWeight: 600 }}>
+                        CCF: {a.ccf}
+                      </span>
+                    )}
+                    {a.servicios?.map(s => (
+                      <span key={s} style={{
+                        fontSize: 10, padding: '2px 6px', borderRadius: 4,
+                        background: C.blueBg, color: C.blue,
+                        fontWeight: 600, letterSpacing: '.02em',
+                      }}>{s}</span>
+                    ))}
+                  </div>
                 </div>
                 <div style={{ fontSize: 11, color: C.text2, flexShrink: 0, marginTop: 2 }}>
                   {a.creado ? new Date(a.creado).toLocaleDateString('es-CO', { day:'2-digit', month:'short' }) : ''}
