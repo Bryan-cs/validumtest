@@ -992,6 +992,12 @@ export default function PortalCliente() {
   const [showNovedadModal, setShowNovedadModal] = useState(false);
   const [pagina, setPagina] = useState(1);
   const POR_PAGINA = 50;
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const fn = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
 
 
   const { data: afiliados = [], isLoading, isError: isErrorPortal, refetch: refetchPortal } = useQuery({
@@ -1071,16 +1077,16 @@ export default function PortalCliente() {
   return (
     <div style={{ minHeight:'100vh', background:'var(--c-bg)', fontFamily:'Inter, system-ui, sans-serif' }}>
       {/* Header único */}
-      <div style={{ background:'var(--c-sidebar)', padding:'0 24px' }}>
+      <div style={{ background:'var(--c-sidebar)', padding: isMobile ? '0 12px' : '0 24px' }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           {/* Barra top */}
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'14px 0 10px' }}>
             <span style={{ color:'#fff', fontSize:18, fontWeight:700 }}>
               BBC <span style={{ color:C.accent }}>File</span>
-              <span style={{ color:'rgba(255,255,255,.5)', fontSize:12, fontWeight:400, marginLeft:10 }}>Portal del Cliente</span>
+              {!isMobile && <span style={{ color:'rgba(255,255,255,.5)', fontSize:12, fontWeight:400, marginLeft:10 }}>Portal del Cliente</span>}
             </span>
-            <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-              <span style={{ color:'rgba(255,255,255,.75)', fontSize:13 }}>👤 {user?.nombre}</span>
+            <div style={{ display:'flex', alignItems:'center', gap: isMobile ? 8 : 12 }}>
+              {!isMobile && <span style={{ color:'rgba(255,255,255,.75)', fontSize:13 }}>👤 {user?.nombre}</span>}
               <CampanaNotif />
               <button onClick={() => setDark(d => !d)} title={dark ? 'Modo claro' : 'Modo oscuro'} style={{ padding:'5px 10px', background:'rgba(255,255,255,.15)', border:'1px solid rgba(255,255,255,.25)', borderRadius:6, color:'#fff', fontSize:15, cursor:'pointer' }}>
                 {dark ? '☀️' : '🌙'}
@@ -1091,7 +1097,7 @@ export default function PortalCliente() {
             </div>
           </div>
           {/* Stats en header */}
-          <div style={{ display:'flex', gap:24, padding:'10px 0 16px', borderTop:'1px solid rgba(255,255,255,.15)' }}>
+          <div style={{ display:'flex', flexWrap:'wrap', gap: isMobile ? 14 : 24, padding:'10px 0 16px', borderTop:'1px solid rgba(255,255,255,.15)' }}>
             {[
               ['Total', afiliados.length, C.accent],
               ['Activos', activos, '#4ade80'],
@@ -1107,12 +1113,13 @@ export default function PortalCliente() {
         </div>
       </div>
 
-    <div style={{ maxWidth:1100, margin:'0 auto', padding:24 }}>
+    <div style={{ maxWidth:1100, margin:'0 auto', padding: isMobile ? 12 : 24 }}>
       {/* Tabs */}
-      <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0 }}>
-        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas Pagadas'],['reportes','📊 Reportes'],['avisos','📩 Novedades']].map(([id, label]) => (
+      <div style={{ display:'flex', gap:4, marginBottom:20, borderBottom:`2px solid ${C.border}`, paddingBottom:0, overflowX:'auto', flexWrap:'nowrap', WebkitOverflowScrolling:'touch' }}>
+        {[['afiliados','👥 Mis Afiliados'],['historial','📋 Historial'],['planillas','📋 Planillas'],['reportes','📊 Reportes'],['avisos','📩 Novedades']].map(([id, label]) => (
           <button key={id} onClick={() => setTab(id)} style={{
-            padding:'9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
+            padding: isMobile ? '9px 12px' : '9px 20px', borderRadius:'8px 8px 0 0', border:`1px solid ${tab===id?C.border:'transparent'}`,
+            whiteSpace:'nowrap', flexShrink:0,
             borderBottom: tab===id?`2px solid ${C.primary}`:'none',
             fontSize:13, fontWeight:600, cursor:'pointer',
             background: tab===id ? C.surface : 'transparent',
@@ -1134,36 +1141,39 @@ export default function PortalCliente() {
         <>
           {/* Filtros */}
           <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:'12px 16px', marginBottom:16 }}>
-            <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
-              <div>
+            <div style={{ display:'flex', flexDirection: isMobile ? 'column' : 'row', gap:12, flexWrap:'wrap', alignItems: isMobile ? 'stretch' : 'flex-end' }}>
+              <div style={{ flex: isMobile ? undefined : undefined }}>
                 <label style={lbl}>Buscar</label>
                 <input type="text" placeholder="Nombre o cédula..." value={q} onChange={e => setQ(e.target.value)}
-                  style={{ ...inp, width:220 }} />
+                  style={{ ...inp, width: isMobile ? '100%' : 220 }} />
               </div>
-              <div>
-                <label style={lbl}>Estado</label>
-                <select style={{ ...inp, width:160 }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
-                  <option value="">Todos</option>
-                  {estadosUnicos.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
+              <div style={{ display:'flex', gap:8 }}>
+                <div style={{ flex:1 }}>
+                  <label style={lbl}>Estado</label>
+                  <select style={{ ...inp, width:'100%' }} value={filtroEstado} onChange={e => setFiltroEstado(e.target.value)}>
+                    <option value="">Todos</option>
+                    {estadosUnicos.map(e => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </div>
+                <div style={{ flex:1 }}>
+                  <label style={lbl}>Empresa</label>
+                  <select style={{ ...inp, width:'100%' }} value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
+                    <option value="">Todas</option>
+                    {empresasUnicas.map(e => <option key={e} value={e}>{e}</option>)}
+                  </select>
+                </div>
               </div>
-              <div>
-                <label style={lbl}>Empresa</label>
-                <select style={{ ...inp, width:200 }} value={filtroEmpresa} onChange={e => setFiltroEmpresa(e.target.value)}>
-                  <option value="">Todas</option>
-                  {empresasUnicas.map(e => <option key={e} value={e}>{e}</option>)}
-                </select>
+              <div style={{ display:'flex', gap:8, flexWrap:'wrap', alignItems:'center' }}>
+                {(q || filtroEstado || filtroEmpresa) && (
+                  <Btn variant="secondary" onClick={limpiarFiltros}>Limpiar filtros</Btn>
+                )}
+                <Btn variant="secondary" onClick={descargarExcel}>↓ Excel</Btn>
               </div>
-              {(q || filtroEstado || filtroEmpresa) && (
-                <Btn variant="secondary" onClick={limpiarFiltros}>Limpiar filtros</Btn>
-              )}
-              <div style={{ flex:1 }} />
-              <Btn variant="secondary" onClick={descargarExcel}>Exportar Excel</Btn>
               {seleccionados.length > 0 && (
-                <div style={{ display:'flex', gap:8, alignItems:'center' }}>
+                <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                   <span style={{ fontSize:13, color:C.text2 }}>{seleccionados.length} seleccionado(s)</span>
                   <Btn variant="success" onClick={() => setShowNovedadModal(true)}>Reportar novedad de pago</Btn>
-                  <Btn variant="secondary" onClick={() => setSeleccionados([])}>Limpiar selección</Btn>
+                  <Btn variant="secondary" onClick={() => setSeleccionados([])}>Limpiar</Btn>
                 </div>
               )}
             </div>
@@ -1190,8 +1200,11 @@ export default function PortalCliente() {
                     <th style={{ padding:'10px 12px', borderBottom:`1px solid ${C.border}` }}>
                       <input type="checkbox" checked={seleccionados.length===filtrados.length&&filtrados.length>0} onChange={toggleTodos} />
                     </th>
-                    {['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle','Acciones'].map(h => (
-                      <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+                    {(isMobile
+                      ? ['Nombre','Empresa','EPS','Estado','Acciones']
+                      : ['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle','Acciones']
+                    ).map(h => (
+                      <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -1202,23 +1215,23 @@ export default function PortalCliente() {
                     return (
                       <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}`, background:sel?C.blueBg:'transparent' }}>
                         <td style={tdc}><input type="checkbox" checked={sel} onChange={() => toggleSel(a.doc)} /></td>
-                        <td style={tdc}><span style={{ fontWeight:600 }}>{a.nombre}</span></td>
-                        <td style={tdc}><span style={{ color:C.text2 }}>{a.tipo_doc} {a.doc}</span></td>
+                        <td style={{ ...tdc, maxWidth: isMobile ? 120 : undefined }}><span style={{ fontWeight:600, fontSize: isMobile ? 12 : 13, whiteSpace: isMobile ? 'nowrap' : undefined, overflow:'hidden', textOverflow:'ellipsis', display:'block' }}>{a.nombre}</span></td>
+                        {!isMobile && <td style={tdc}><span style={{ color:C.text2 }}>{a.tipo_doc} {a.doc}</span></td>}
                         <td style={tdc}><EmpresaBadge nombre={a.empresa} /></td>
                         <td style={tdc}>{a.eps||'—'}</td>
-                        <td style={tdc}>{a.afp||'—'}</td>
-                        <td style={tdc}>{a.ccf||'—'}</td>
+                        {!isMobile && <td style={tdc}>{a.afp||'—'}</td>}
+                        {!isMobile && <td style={tdc}>{a.ccf||'—'}</td>}
                         <td style={tdc}><Badge color={ec.color} bg={ec.bg}>{a.estado}</Badge></td>
-                        <td style={{ ...tdc, maxWidth:200 }}>
+                        {!isMobile && <td style={{ ...tdc, maxWidth:200 }}>
                           {a.detalle
                             ? <span style={{ color:C.blue, fontSize:12 }}>{a.detalle}</span>
                             : <span style={{ color:C.text2, fontSize:12 }}>—</span>}
-                        </td>
+                        </td>}
                         <td style={tdc}>
                           <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                             <Btn size="sm" onClick={() => setResumenDoc(a.doc)}>Ver</Btn>
-                            <Btn size="sm" variant="accent" onClick={() => setNovedadAfil(a)}>Novedad</Btn>
-                            <Btn size="sm" variant="danger" onClick={() => setRetiroAfil(a)}>Retiro</Btn>
+                            {!isMobile && <Btn size="sm" variant="accent" onClick={() => setNovedadAfil(a)}>Novedad</Btn>}
+                            {!isMobile && <Btn size="sm" variant="danger" onClick={() => setRetiroAfil(a)}>Retiro</Btn>}
                           </div>
                         </td>
                       </tr>
@@ -1232,7 +1245,7 @@ export default function PortalCliente() {
           {totalPaginas > 1 && (
             <div style={{ display:'flex', gap:8, justifyContent:'center', alignItems:'center', padding:'12px 0' }}>
               <Btn variant="secondary" size="sm" onClick={() => setPagina(p => Math.max(1, p-1))} disabled={pagina===1}>← Anterior</Btn>
-              <span style={{ fontSize:13, color:C.text2 }}>Página {pagina} de {totalPaginas} ({filtrados.length} afiliados)</span>
+              <span style={{ fontSize:13, color:C.text2 }}>{isMobile ? `${pagina}/${totalPaginas}` : `Página ${pagina} de ${totalPaginas} (${filtrados.length} afiliados)`}</span>
               <Btn variant="secondary" size="sm" onClick={() => setPagina(p => Math.min(totalPaginas, p+1))} disabled={pagina===totalPaginas}>Siguiente →</Btn>
             </div>
           )}
