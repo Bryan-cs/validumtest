@@ -969,6 +969,93 @@ function CampanaNotif() {
   );
 }
 
+// ─── PANEL DETALLE ─────────────────────────────────────────────────────────────
+function DetailPanel({ afiliado, onClose, onResumen, onNovedad, onRetiro }) {
+  const { data: resumen, isLoading: loadingResumen } = useQuery({
+    queryKey: ['portal-resumen', afiliado?.doc],
+    queryFn: () => api.get(`/portal/afiliados/${afiliado.doc}/resumen`).then(r => r.data),
+    enabled: !!afiliado,
+  });
+
+  const ec = {
+    bg:    afiliado.estado === 'ACTIVO' ? C.greenBg : C.redBg,
+    color: afiliado.estado === 'ACTIVO' ? C.green   : C.red,
+  };
+  const ext = resumen?.afiliado ?? {};
+
+  return (
+    <div style={{
+      width: 360, flexShrink: 0, background: C.surface,
+      border: `1px solid ${C.border}`, borderRadius: 12, padding: 20,
+      position: 'sticky', top: 20, alignSelf: 'flex-start',
+      maxHeight: 'calc(100vh - 180px)', overflowY: 'auto',
+      boxShadow: '0 4px 24px rgba(0,0,0,.08)',
+    }}>
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontWeight: 700, fontSize: 15, color: C.text, marginBottom: 4, lineHeight: 1.3 }}>{afiliado.nombre}</div>
+          <div style={{ fontSize: 12, color: C.text2, marginBottom: 8 }}>{afiliado.tipo_doc} {afiliado.doc}</div>
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            <Badge color={ec.color} bg={ec.bg}>{afiliado.estado}</Badge>
+            {afiliado.empresa && <EmpresaBadge nombre={afiliado.empresa} />}
+          </div>
+        </div>
+        <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: 20, cursor: 'pointer', color: C.text2, flexShrink: 0, marginLeft: 8, lineHeight: 1 }}>×</button>
+      </div>
+
+      {/* Resumen financiero */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+        {loadingResumen ? (
+          <>
+            <div style={{ background: C.surface2, borderRadius: 8, height: 56 }} />
+            <div style={{ background: C.surface2, borderRadius: 8, height: 56 }} />
+          </>
+        ) : resumen ? (
+          <>
+            <div style={{ background: C.greenBg, borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: C.green, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Pagado</div>
+              <div style={{ fontSize: 16, color: C.green, fontWeight: 700, marginTop: 2 }}>{money(resumen.total_pagado)}</div>
+            </div>
+            <div style={{ background: C.redBg, borderRadius: 8, padding: '10px 12px', textAlign: 'center' }}>
+              <div style={{ fontSize: 10, color: C.red, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em' }}>Pendiente</div>
+              <div style={{ fontSize: 16, color: C.red, fontWeight: 700, marginTop: 2 }}>{money(resumen.total_pendiente)}</div>
+            </div>
+          </>
+        ) : null}
+      </div>
+
+      {/* Campos */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 20, paddingTop: 14, paddingBottom: 14, borderTop: `1px solid ${C.border}`, borderBottom: `1px solid ${C.border}` }}>
+        {[
+          ['EPS',           afiliado.eps || ext.eps],
+          ['AFP',           afiliado.afp || ext.afp],
+          ['CCF',           afiliado.ccf || ext.ccf],
+          ['ARL',           ext.arl],
+          ['Cargo',         ext.cargo],
+          ['F. afiliación', ext.fecha_afiliacion],
+          ['F. ingreso',    ext.fecha_ingreso],
+          ['Teléfono',      ext.tel],
+          ['Email',         ext.email],
+          ['Detalle',       afiliado.detalle || ext.detalle],
+        ].filter(([, v]) => v).map(([k, v]) => (
+          <div key={k} style={{ display: 'flex', gap: 8, fontSize: 12, alignItems: 'flex-start' }}>
+            <span style={{ color: C.text2, fontWeight: 600, minWidth: 90, flexShrink: 0 }}>{k}</span>
+            <span style={{ color: C.text, wordBreak: 'break-word', lineHeight: 1.4 }}>{v}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* Acciones */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Btn onClick={onResumen}>Ver resumen completo</Btn>
+        <Btn variant="accent" onClick={onNovedad}>Reportar novedad</Btn>
+        <Btn variant="danger" onClick={onRetiro}>Solicitar retiro</Btn>
+      </div>
+    </div>
+  );
+}
+
 // ─── PORTAL PRINCIPAL ──────────────────────────────────────────────────────────
 export default function PortalCliente() {
   const { user, logout, token } = useAuthStore();
@@ -987,6 +1074,7 @@ export default function PortalCliente() {
   const [tab, setTab] = useState('afiliados');
   const [seleccionados, setSeleccionados] = useState([]);
   const [resumenDoc, setResumenDoc] = useState(null);
+  const [panelAfil, setPanelAfil] = useState(null);
   const [retiroAfil, setRetiroAfil] = useState(null);
   const [novedadAfil, setNovedadAfil] = useState(null);
   const [showNovedadModal, setShowNovedadModal] = useState(false);
@@ -1131,7 +1219,8 @@ export default function PortalCliente() {
       </div>
 
       {tab === 'afiliados' && (
-        <>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
           {/* Filtros */}
           <div style={{ background:C.surface, borderRadius:10, border:`1px solid ${C.border}`, padding:'12px 16px', marginBottom:16 }}>
             <div style={{ display:'flex', gap:12, flexWrap:'wrap', alignItems:'flex-end' }}>
@@ -1190,7 +1279,7 @@ export default function PortalCliente() {
                     <th style={{ padding:'10px 12px', borderBottom:`1px solid ${C.border}` }}>
                       <input type="checkbox" checked={seleccionados.length===filtrados.length&&filtrados.length>0} onChange={toggleTodos} />
                     </th>
-                    {['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle','Acciones'].map(h => (
+                    {['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle'].map(h => (
                       <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
                     ))}
                   </tr>
@@ -1198,10 +1287,19 @@ export default function PortalCliente() {
                 <tbody>
                   {paginados.map(a => {
                     const sel = seleccionados.includes(a.doc);
+                    const activo = panelAfil?.doc === a.doc;
                     const ec = estadoColor(a.estado);
                     return (
-                      <tr key={a.id} style={{ borderBottom:`1px solid ${C.border}`, background:sel?C.blueBg:'transparent' }}>
-                        <td style={tdc}><input type="checkbox" checked={sel} onChange={() => toggleSel(a.doc)} /></td>
+                      <tr
+                        key={a.id}
+                        onClick={() => setPanelAfil(prev => prev?.doc === a.doc ? null : a)}
+                        style={{ borderBottom:`1px solid ${C.border}`, background: activo ? C.blueBg : sel ? C.blueBg : 'transparent', cursor:'pointer' }}
+                        onMouseEnter={e => { if (!activo && !sel) e.currentTarget.style.background = C.surface2; }}
+                        onMouseLeave={e => { if (!activo && !sel) e.currentTarget.style.background = 'transparent'; }}
+                      >
+                        <td style={tdc} onClick={e => e.stopPropagation()}>
+                          <input type="checkbox" checked={sel} onChange={() => toggleSel(a.doc)} />
+                        </td>
                         <td style={tdc}><span style={{ fontWeight:600 }}>{a.nombre}</span></td>
                         <td style={tdc}><span style={{ color:C.text2 }}>{a.tipo_doc} {a.doc}</span></td>
                         <td style={tdc}><EmpresaBadge nombre={a.empresa} /></td>
@@ -1209,17 +1307,10 @@ export default function PortalCliente() {
                         <td style={tdc}>{a.afp||'—'}</td>
                         <td style={tdc}>{a.ccf||'—'}</td>
                         <td style={tdc}><Badge color={ec.color} bg={ec.bg}>{a.estado}</Badge></td>
-                        <td style={{ ...tdc, maxWidth:200 }}>
+                        <td style={{ ...tdc, maxWidth:180 }}>
                           {a.detalle
                             ? <span style={{ color:C.blue, fontSize:12 }}>{a.detalle}</span>
                             : <span style={{ color:C.text2, fontSize:12 }}>—</span>}
-                        </td>
-                        <td style={tdc}>
-                          <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
-                            <Btn size="sm" onClick={() => setResumenDoc(a.doc)}>Ver</Btn>
-                            <Btn size="sm" variant="accent" onClick={() => setNovedadAfil(a)}>Novedad</Btn>
-                            <Btn size="sm" variant="danger" onClick={() => setRetiroAfil(a)}>Retiro</Btn>
-                          </div>
                         </td>
                       </tr>
                     );
@@ -1236,7 +1327,17 @@ export default function PortalCliente() {
               <Btn variant="secondary" size="sm" onClick={() => setPagina(p => Math.min(totalPaginas, p+1))} disabled={pagina===totalPaginas}>Siguiente →</Btn>
             </div>
           )}
-        </>
+        </div>
+        {panelAfil && (
+          <DetailPanel
+            afiliado={panelAfil}
+            onClose={() => setPanelAfil(null)}
+            onResumen={() => setResumenDoc(panelAfil.doc)}
+            onNovedad={() => setNovedadAfil(panelAfil)}
+            onRetiro={() => setRetiroAfil(panelAfil)}
+          />
+        )}
+        </div>
       )}
 
       {tab === 'historial' && <TabHistorial />}
