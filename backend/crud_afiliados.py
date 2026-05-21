@@ -1,0 +1,176 @@
+"""CRUD de afiliados."""
+import json
+from datetime import datetime
+from sqlalchemy import or_
+import models, schemas
+from models import COL_TZ
+from const import MESES
+from crud_cache import _cache_get, _cache_set, cache_invalidar, TTL_AFILIADOS
+from crud_helpers import _afiliado_to_dict, _log
+
+
+def _split_csv(val: str) -> list:
+    return [v.strip() for v in val.split(",") if v.strip()] if val else []
+
+
+def get_afiliados_filter_options(db):
+    cached = _cache_get("afiliados:filtros")
+    if cached is not None:
+        return cached
+    A = models.Afiliado
+    rows = db.query(
+        A.empresa, A.cliente_txt, A.subtipo, A.estado_srv, A.tipo_doc, A.ccf, A.eps
+    ).filter_by(activo=True).distinct().all()
+    result = {
+        "empresas":  sorted({r.empresa     for r in rows if r.empresa}),
+        "clientes":  sorted({r.cliente_txt for r in rows if r.cliente_txt}),
+        "subtipos":  sorted({r.subtipo     for r in rows if r.subtipo}),
+        "estados":   sorted({r.estado_srv  for r in rows if r.estado_srv}),
+        "tipos_doc": sorted({r.tipo_doc    for r in rows if r.tipo_doc}),
+        "ccfs":      sorted({r.ccf         for r in rows if r.ccf}),
+        "eps":       sorted({r.eps         for r in rows if r.eps}),
+    }
+    _cache_set("afiliados:filtros", result, ttl=120)
+    return result
+
+
+def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
+                  tipo_doc="", ccf="", eps="", fecha_desde="", fecha_hasta="",
+                  skip: int = 0, limit: int = 0):
+    sin_filtros = not any([q, estado, empresa, cliente, subtipo, tipo_doc, ccf, eps, fecha_desde, fecha_hasta])
+    if sin_filtros and skip == 0 and limit == 0:
+        cached = _cache_get("afiliados:all")
+        if cached is not None:
+            return cached
+
+    query = db.query(models.Afiliado).filter_by(activo=True)
+    if q:
+        query = query.filter(or_(
+            models.Afiliado.nombre.ilike(f"%{q}%"),
+            models.Afiliado.doc.ilike(f"%{q}%"),
+            models.Afiliado.empresa.ilike(f"%{q}%"),
+            models.Afiliado.cliente_txt.ilike(f"%{q}%"),
+        ))
+    estados = _split_csv(estado)
+    if estados:
+        query = query.filter(or_(
+            models.Afiliado.estado_srv.in_(estados),
+            models.Afiliado.estado.in_(estados),
+        ))
+    empresas = _split_csv(empresa)
+    if empresas: query = query.filter(models.Afiliado.empresa.in_(empresas))
+    clientes = _split_csv(cliente)
+    if clientes: query = query.filter(models.Afiliado.cliente_txt.in_(clientes))
+    subtipos = _split_csv(subtipo)
+    if subtipos: query = query.filter(models.Afiliado.subtipo.in_(subtipos))
+    tipos_doc = _split_csv(tipo_doc)
+    if tipos_doc: query = query.filter(models.Afiliado.tipo_doc.in_(tipos_doc))
+    ccfs = _split_csv(ccf)
+    if ccfs: query = query.filter(models.Afiliado.ccf.in_(ccfs))
+    epss = _split_csv(eps)
+    if epss: query = query.filter(models.Afiliado.eps.in_(epss))
+    if fecha_desde: query = query.filter(models.Afiliado.fecha_afiliacion >= fecha_desde)
+    if fecha_hasta: query = query.filter(models.Afiliado.fecha_afiliacion <= fecha_hasta)
+    total = query.count()
+    query = query.order_by(models.Afiliado.nombre)
+    if limit > 0:
+        query = query.offset(skip).limit(limit)
+    else:
+        query = query.limit(50_000)
+    result = {"total": total, "items": [_afiliado_to_dict(a) for a in query.all()]}
+    if sin_filtros and skip == 0 and limit == 0:
+        _cache_set("afiliados:all", result, ttl=TTL_AFILIADOS)
+    return result
+
+def get_afiliado(db, id):
+    a = db.query(models.Afiliado).filter_by(id=id, activo=True).first()
+    return _afiliado_to_dict(a) if a else None
+
+def get_afiliado_by_doc(db, doc):
+    return db.query(models.Afiliado).filter_by(doc=doc, activo=True).first()
+
+def create_afiliado(db, data: schemas.AfiliadoCreate):
+    from sqlalchemy.exc import IntegrityError
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:"); cache_invalidar("afiliados:")
+    a = models.Afiliado(**{
+        "nombre":data.nombre,"tipo_doc":data.tipo_doc,"doc":data.doc,"empresa":data.empresa,
+        "cargo":data.cargo,"cliente_txt":data.cliente_txt,
+        "eps":data.eps,"arl":data.arl,"ccf":data.ccf,"afp":data.afp,
+        "subtipo":data.subtipo,"estado":data.estado,"estado_srv":data.estado_srv,
+        "servicios":json.dumps(data.servicios),"tel":data.tel,
+        "email":data.email,"dir":data.dir,"ciudad":data.ciudad,"novedades":data.novedades,"detalle":data.detalle,
+        "ibc":data.ibc,"fecha_ingreso":data.fecha_ingreso,
+        "fecha_afiliacion":data.fecha_afiliacion,"registrado_por":data.registrado_por,
+    })
+    db.add(a); _log(db, data.registrado_por, "agregó un afiliado nuevo", "Afiliados", data.nombre)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        from fastapi import HTTPException
+        raise HTTPException(400, f"Ya existe un afiliado con documento {data.doc}")
+    db.refresh(a); return _afiliado_to_dict(a)
+
+def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
+    from sqlalchemy.exc import IntegrityError
+    from fastapi import HTTPException
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:"); cache_invalidar("afiliados:")
+    a = db.query(models.Afiliado).filter_by(id=id, activo=True).with_for_update().first()
+    if not a:
+        raise HTTPException(404, "Afiliado no encontrado o fue eliminado por otro usuario")
+    if data.estado_srv == "ACTIVO" and a.estado_srv != "ACTIVO":
+        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=a.doc).delete()
+    nombre_anterior  = a.nombre
+    cliente_anterior = a.cliente_txt
+    for field, val in [
+        ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
+        ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
+        ("eps",data.eps),("arl",data.arl),("ccf",data.ccf),("afp",data.afp),
+        ("subtipo",data.subtipo),("estado",data.estado),("estado_srv",data.estado_srv),
+        ("servicios",json.dumps(data.servicios)),("tel",data.tel),
+        ("email",data.email),("dir",data.dir),("ciudad",data.ciudad),("novedades",data.novedades),("detalle",data.detalle),
+        ("ibc",data.ibc),("fecha_ingreso",data.fecha_ingreso),
+        ("fecha_afiliacion",data.fecha_afiliacion),
+    ]:
+        setattr(a, field, val)
+    nombre_cambio  = data.nombre      != nombre_anterior
+    cliente_cambio = data.cliente_txt != cliente_anterior
+    if nombre_cambio or cliente_cambio:
+        q_fact = db.query(models.Factura).filter(
+            models.Factura.doc == a.doc,
+            models.Factura.estado != "pagado",
+        )
+        upd = {}
+        if nombre_cambio:  upd["nombre_afiliado"] = data.nombre
+        if cliente_cambio: upd["cliente"]         = data.cliente_txt or ""
+        if upd:
+            q_fact.update(upd, synchronize_session=False)
+    _log(db, editor, "editó un afiliado", "Afiliados", data.nombre)
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(400, f"Ya existe otro afiliado con documento {data.doc}")
+    db.refresh(a); return _afiliado_to_dict(a)
+
+def delete_afiliado(db, id, deleted_by=""):
+    cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:"); cache_invalidar("afiliados:")
+    a = db.query(models.Afiliado).filter_by(id=id).first()
+    if not a: return
+    try:
+        nombre = a.nombre
+        elim = models.Eliminado(
+            nombre=a.nombre, doc=a.doc, empresa=a.empresa,
+            datos_completos=json.dumps(_afiliado_to_dict(a)),
+            fecha_eliminacion=datetime.now(COL_TZ).strftime("%Y-%m-%d"),
+            mes=MESES[datetime.now(COL_TZ).month-1], eliminado_por=deleted_by,
+        )
+        db.add(elim)
+        db.query(models.Factura).filter_by(doc=a.doc).update(
+            {"afiliado_eliminado": True})
+        a.activo = False
+        db.commit()
+        _log(db, deleted_by, "eliminó un afiliado", "Afiliados", nombre)
+    except Exception:
+        db.rollback()
+        raise
