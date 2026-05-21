@@ -81,10 +81,10 @@ export default function Afiliados() {
   const esEmpleado = user?.rol === 'empleado';
   const [tab, setTab]           = useState('activos');
   const [busqueda, setBusqueda] = useState(() => {
-    try { return localStorage.getItem('bbc_afil_busqueda') || ''; } catch { return ''; }
+    try { return localStorage.getItem('bbc_afil_busqueda_v1') || ''; } catch { return ''; }
   });
   const [filtros,  setFiltros]  = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bbc_afil_filtros')) || { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }; } catch { return { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }; }
+    try { return JSON.parse(localStorage.getItem('bbc_afil_filtros_v1')) || { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }; } catch { return { estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }; }
   });
   const [modal,    setModal]    = useState(null);
   const [confirm,  setConfirm]  = useState(null);  // { title, message, onConfirm }
@@ -135,8 +135,8 @@ export default function Afiliados() {
   const setFiltro = (key,vals) => { setFiltros(f=>({...f,[key]:vals})); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
   const limpiar = () => { setFiltros({ estado:[], empresa:[], cliente:[], subtipo:[], tipo_doc:[], ccf:[], eps:[] }); setBusqueda(''); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
 
-  useEffect(() => { try { localStorage.setItem('bbc_afil_filtros', JSON.stringify(filtros)); } catch {} }, [filtros]);
-  useEffect(() => { try { localStorage.setItem('bbc_afil_busqueda', busqueda); } catch {} }, [busqueda]);
+  useEffect(() => { try { localStorage.setItem('bbc_afil_filtros_v1', JSON.stringify(filtros)); } catch {} }, [filtros]);
+  useEffect(() => { try { localStorage.setItem('bbc_afil_busqueda_v1', busqueda); } catch {} }, [busqueda]);
 
   const [pagina, setPagina] = useState(1);
   const [sorting, setSorting] = useState([]);
