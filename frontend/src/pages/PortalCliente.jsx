@@ -5,23 +5,11 @@ import { toast } from 'sonner';
 import api, { buildUploadForm } from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 import { empresaStyle } from '../utils/colors';
+import { C, Btn } from '../components/UI';
 
 const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 const anioActual = new Date().getFullYear();
 const ANIOS = [anioActual-1, anioActual, anioActual+1].map(String);
-
-const C = {
-  primary:  'var(--c-primary)',  accent:   'var(--c-accent)',
-  green:    'var(--c-green)',    greenBg:  'var(--c-green-bg)',
-  red:      'var(--c-red)',      redBg:    'var(--c-red-bg)',
-  amber:    'var(--c-amber)',    amberBg:  'var(--c-amber-bg)',
-  blue:     'var(--c-blue)',     blueBg:   'var(--c-blue-bg)',
-  yellow:   'var(--c-amber)',    yellowBg: 'var(--c-amber-bg)',
-  border:   'var(--c-border)',
-  surface:  'var(--c-surface)',  surface2: 'var(--c-surface2)',
-  bg:       'var(--c-bg)',
-  text:     'var(--c-text)',     text2:    'var(--c-text2)',
-};
 
 const _moneyFmt = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
 const money = (v) => _moneyFmt.format(v || 0);
@@ -41,30 +29,11 @@ function EmpresaBadge({ nombre }) {
   );
 }
 
-function Badge({ color, bg, children }) {
+function ColorBadge({ color, bg, children }) {
   return (
     <span style={{ background:bg, color, borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600, whiteSpace:'nowrap' }}>
       {children}
     </span>
-  );
-}
-
-function Btn({ children, onClick, disabled, variant='primary', size='md' }) {
-  const styles = {
-    primary:   { background:C.primary,   color:'#fff',  border:'none' },
-    accent:    { background:C.accent,    color:'#fff',  border:'none' },
-    secondary: { background:C.surface,      color:C.text,  border:`1px solid ${C.border}` },
-    danger:    { background:C.red,       color:'#fff',  border:'none' },
-    success:   { background:C.green,     color:'#fff',  border:'none' },
-  };
-  const pad = size === 'sm' ? '5px 10px' : '8px 16px';
-  return (
-    <button onClick={onClick} disabled={disabled} style={{
-      ...styles[variant], padding:pad, borderRadius:7, fontSize:size==='sm'?12:13,
-      cursor:disabled?'not-allowed':'pointer', opacity:disabled?.6:1, fontWeight:600,
-    }}>
-      {children}
-    </button>
   );
 }
 
@@ -127,9 +96,9 @@ function ModalResumen({ doc, onClose }) {
                 ) : null)}
               </div>
               <div style={{ marginTop:10,display:'flex',gap:10,alignItems:'center',flexWrap:'wrap' }}>
-                <Badge color={data.afiliado.estado==='ACTIVO'?C.green:C.red} bg={data.afiliado.estado==='ACTIVO'?C.greenBg:C.redBg}>
+                <ColorBadge color={data.afiliado.estado==='ACTIVO'?C.green:C.red} bg={data.afiliado.estado==='ACTIVO'?C.greenBg:C.redBg}>
                   {data.afiliado.estado}
-                </Badge>
+                </ColorBadge>
               </div>
             </div>
 
@@ -163,9 +132,9 @@ function ModalResumen({ doc, onClose }) {
                           {(() => {
                             const pagado = f.estado === 'pagado' || f.estado === 'planilla_pagada';
                             return (
-                              <Badge color={pagado ? C.green : C.red} bg={pagado ? C.greenBg : C.redBg}>
+                              <ColorBadge color={pagado ? C.green : C.red} bg={pagado ? C.greenBg : C.redBg}>
                                 {pagado ? 'PAGADA' : (f.estado?.toUpperCase() ?? '—')}
-                              </Badge>
+                              </ColorBadge>
                             );
                           })()}
                         </td>
@@ -594,7 +563,7 @@ function TabHistorial() {
                   <div style={{ fontWeight:600, fontSize:13, color:C.text }}>
                     {subtab === 'novedades' ? `${item.mes} ${item.anio}` : item.afiliado_nombre}
                   </div>
-                  <Badge color={color} bg={bg}>{item.estado}</Badge>
+                  <ColorBadge color={color} bg={bg}>{item.estado}</ColorBadge>
                 </div>
                 {subtab === 'novedades' && (
                   <div style={{ fontSize:12, color:C.text2 }}>
@@ -1221,7 +1190,7 @@ export default function PortalCliente() {
                         <td style={tdc}>{a.eps||'—'}</td>
                         {!isMobile && <td style={tdc}>{a.afp||'—'}</td>}
                         {!isMobile && <td style={tdc}>{a.ccf||'—'}</td>}
-                        <td style={tdc}><Badge color={ec.color} bg={ec.bg}>{a.estado}</Badge></td>
+                        <td style={tdc}><ColorBadge color={ec.color} bg={ec.bg}>{a.estado}</ColorBadge></td>
                         {!isMobile && <td style={{ ...tdc, maxWidth:200 }}>
                           {a.detalle
                             ? <span style={{ color:C.blue, fontSize:12 }}>{a.detalle}</span>
