@@ -20,6 +20,7 @@ export default function Usuarios() {
   const [pwModal,setPwModal]=useState(null);
   const [pwForm,setPwForm]=useState({});
   const [pwErr,setPwErr]=useState('');
+  const [showPw,setShowPw]=useState(false);
   const [confirmState, setConfirmState] = useState({ open: false, title: '', message: '', onConfirm: null });
 
   const { data: users=[], isError: isErrorUsers, refetch: refetchUsers } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data), staleTime: 300_000 });
@@ -105,7 +106,7 @@ export default function Usuarios() {
         const u = row.original;
         return (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-            <Btn size="sm" variant="secondary" onClick={() => { setPwModal({ id: u.id, nombre: u.nombre }); setPwForm({}); setPwErr(''); }}>Contraseña</Btn>
+            <Btn size="sm" variant="secondary" onClick={() => { setPwModal({ id: u.id, nombre: u.nombre }); setPwForm({}); setPwErr(''); setShowPw(false); }}>Contraseña</Btn>
             {u.username !== 'admin' && <Btn size="sm" variant="danger" onClick={() => setConfirmState({ open:true, title:'Eliminar usuario', message:`¿Eliminar al usuario "${u.nombre}"? Esta acción no se puede deshacer.`, onConfirm:()=>{ eliminar.mutate(u.id); setConfirmState(s=>({...s,open:false})); } })}>Eliminar</Btn>}
           </div>
         );
@@ -133,7 +134,7 @@ export default function Usuarios() {
             {userTable.getHeaderGroups().map(hg => (
               <tr key={hg.id} style={{ background: C.surface2 }}>
                 {hg.headers.map(header => (
-                  <th key={header.id} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>
+                  <th key={header.id} style={{ padding: '11px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: C.text, background: C.surface2, borderBottom: `2px solid ${C.border}`, whiteSpace: 'nowrap', letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -161,7 +162,13 @@ export default function Usuarios() {
             {[['Nueva contraseña *','password'],['Confirmar contraseña *','password2']].map(([l,k])=>(
               <div key={k} style={{ marginBottom:10 }}>
                 <label style={lbl}>{l}</label>
-                <input type="password" style={inp} value={pwForm[k]||''} onChange={e=>setPwForm(f=>({...f,[k]:e.target.value}))} />
+                <div style={{ position:'relative' }}>
+                  <input type={showPw?'text':'password'} style={{ ...inp, paddingRight:40 }} value={pwForm[k]||''} onChange={e=>setPwForm(f=>({...f,[k]:e.target.value}))} />
+                  <button type="button" onClick={()=>setShowPw(v=>!v)}
+                    style={{ position:'absolute', right:10, top:'50%', transform:'translateY(-50%)', background:'none', border:'none', cursor:'pointer', fontSize:16, color:C.text2, padding:0, lineHeight:1 }}>
+                    {showPw ? '🙈' : '👁️'}
+                  </button>
+                </div>
               </div>
             ))}
             {pwErr&&<p style={{ color:C.red,fontSize:12,margin:'8px 0 0' }}>{pwErr}</p>}

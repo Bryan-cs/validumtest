@@ -302,10 +302,11 @@ class PlanillaPago(Base):
         Index('ix_planilla_cliente_anio_mes', 'cliente_ref', 'anio', 'mes'),
     )
     id           = Column(Integer, primary_key=True, index=True)
-    cliente_ref  = Column(String(150), index=True)     # cliente_txt del afiliado
-    mes          = Column(String(20))                   # "Enero", "Febrero"...
-    anio         = Column(String(4))                    # "2026"
+    cliente_ref  = Column(String(150), index=True)
+    mes          = Column(String(20))
+    anio         = Column(String(4))
     observaciones= Column(Text, default="")
+
     subido_por   = Column(String(60))
     creado       = Column(DateTime, default=_utcnow)
 

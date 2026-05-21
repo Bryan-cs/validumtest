@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
@@ -42,16 +42,20 @@ export default function Retiros() {
 
   const { data: listas={} } = useQuery({ queryKey:['listas'], queryFn:()=>api.get('/listas').then(r=>r.data), staleTime: 300_000 });
 
-  const { isLoading: loadBuscandoAfil } = useQuery({
+  const { data: _buscadorData, isFetching: loadBuscandoAfil } = useQuery({
     queryKey: ['afiliado_retiro_buscar', modalDocQuery],
-    queryFn: () => api.get('/afiliados', { params: { q: modalDocQuery, limit: 20 } }).then(r => {
-      const exact = (r.data.items || []).find(a => a.doc === modalDocQuery);
-      setAfiliadoRetiro(exact || false);
-      if (exact) setDoc(exact.doc);
-      return r.data;
-    }),
+    queryFn: () => api.get('/afiliados', { params: { q: modalDocQuery, limit: 20 } }).then(r => r.data),
     enabled: !!modalDocQuery,
+    staleTime: 0,
+    gcTime: 0,
   });
+
+  useEffect(() => {
+    if (!modalDocQuery || !_buscadorData) return;
+    const exact = (_buscadorData.items || []).find(a => a.doc === modalDocQuery);
+    setAfiliadoRetiro(exact || false);
+    if (exact) setDoc(exact.doc);
+  }, [_buscadorData, modalDocQuery]);
 
   const aplicar = useMutation({
     mutationFn: ()=>api.post('/retiros',{doc,fecha,motivo,obs}),
@@ -170,7 +174,7 @@ export default function Retiros() {
             <label style={lbl}>Cédula del afiliado *</label>
             <div style={{ display:'flex', gap:8, marginBottom:14 }}>
               <input style={{ ...inp, flex:1, margin:0 }} value={modalDocBuscar}
-                onChange={e=>{ setModalDocBuscar(e.target.value); setAfiliadoRetiro(null); }}
+                onChange={e=>{ setModalDocBuscar(e.target.value); setAfiliadoRetiro(null); setModalDocQuery(''); }}
                 onKeyDown={e=>{ if(e.key==='Enter' && modalDocBuscar.trim()) setModalDocQuery(modalDocBuscar.trim()); }}
                 placeholder="Número de documento" />
               <Btn onClick={()=>{ if(modalDocBuscar.trim()) setModalDocQuery(modalDocBuscar.trim()); }}

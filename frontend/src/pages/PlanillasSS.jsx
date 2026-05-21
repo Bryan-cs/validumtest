@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
@@ -10,19 +10,59 @@ const MESES = ['','Enero','Febrero','Marzo','Abril','Mayo','Junio',
 const anioActual = new Date().getFullYear();
 const ANIOS = ['', String(anioActual - 1), String(anioActual), String(anioActual + 1)];
 
+
+const SORT_OPTS = [
+  { value: 'fecha_desc', label: 'Más recientes' },
+  { value: 'fecha_asc',  label: 'Más antiguos' },
+  { value: 'cliente',    label: 'Cliente A-Z' },
+];
+
 const sel = { padding: '8px 12px', border: `1px solid ${C.border}`, borderRadius: 7,
   fontSize: 13, outline: 'none', background: C.surface, color: C.text };
+
+function fileIcon(nombre) {
+  const ext = (nombre || '').split('.').pop().toLowerCase();
+  if (['pdf'].includes(ext)) return '📕';
+  if (['jpg','jpeg','png','gif','webp','bmp'].includes(ext)) return '🖼️';
+  if (['xls','xlsx','csv'].includes(ext)) return '📊';
+  if (['doc','docx'].includes(ext)) return '📝';
+  return '📄';
+}
+
+function isImagen(nombre) {
+  const ext = (nombre || '').split('.').pop().toLowerCase();
+  return ['jpg','jpeg','png','gif','webp'].includes(ext);
+}
+
+function fmtTam(bytes) {
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / 1024).toFixed(0)} KB`;
+}
 
 export default function PlanillasSS() {
   const qc = useQueryClient();
   const rol = useAuthStore(s => s.user?.rol);
-  const [filtroCliente, setFiltroCliente] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroCliente ?? ''; } catch { return ''; } });
-  const [filtroMes, setFiltroMes] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroMes ?? ''; } catch { return ''; } });
-  const [filtroAnio, setFiltroAnio] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroAnio ?? ''; } catch { return ''; } });
 
-  useEffect(() => { try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente, filtroMes, filtroAnio })); } catch {} }, [filtroCliente, filtroMes, filtroAnio]);
+  const [filtroCliente, setFiltroCliente] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroCliente ?? ''; } catch { return ''; }
+  });
+  const [filtroMes, setFiltroMes] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroMes ?? ''; } catch { return ''; }
+  });
+  const [filtroAnio, setFiltroAnio] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroAnio ?? ''; } catch { return ''; }
+  });
+  const [sortBy, setSortBy] = useState('fecha_desc');
+
+  useEffect(() => {
+    try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente, filtroMes, filtroAnio })); } catch {}
+  }, [filtroCliente, filtroMes, filtroAnio]);
+
   const [showModal, setShowModal] = useState(false);
-  const [confirmDel, setConfirmDel] = useState(null);
+  const [adjuntarPlanillaId, setAdjuntarPlanillaId] = useState(null);
+  const [confirmDel, setConfirmDel] = useState(null);        // planilla_id
+  const [confirmDelDoc, setConfirmDelDoc] = useState(null);  // { planilla_id, doc_id, nombre }
+  const [previewImg, setPreviewImg] = useState(null);        // { url, nombre }
 
   const { data: planillas = [], isLoading, isError: isErrorPlanillas, refetch: refetchPlanillas } = useQuery({
     queryKey: ['planillas', filtroCliente, filtroMes, filtroAnio],
@@ -35,6 +75,14 @@ export default function PlanillasSS() {
     staleTime: 300_000,
   });
 
+  const planillasOrdenadas = useMemo(() => {
+    const arr = [...planillas];
+    if (sortBy === 'fecha_asc') arr.sort((a, b) => new Date(a.creado) - new Date(b.creado));
+    else if (sortBy === 'cliente') arr.sort((a, b) => (a.cliente_ref || '').localeCompare(b.cliente_ref || ''));
+    else arr.sort((a, b) => new Date(b.creado) - new Date(a.creado));
+    return arr;
+  }, [planillas, sortBy]);
+
   const handleDelete = async () => {
     if (!confirmDel) return;
     try {
@@ -45,27 +93,45 @@ export default function PlanillasSS() {
     setConfirmDel(null);
   };
 
+  const handleDeleteDoc = async () => {
+    if (!confirmDelDoc) return;
+    try {
+      await api.delete(`/planillas/${confirmDelDoc.planilla_id}/archivos/${confirmDelDoc.doc_id}`);
+      qc.invalidateQueries({ queryKey: ['planillas'] });
+      toast.success('Archivo eliminado');
+    } catch { toast.error('Error al eliminar archivo'); }
+    setConfirmDelDoc(null);
+  };
+
+
   const descargarArchivo = async (docId, nombre) => {
     try {
       const res = await api.get(`/documentos/${docId}/descargar`);
       const presigned = res.data?.url;
       if (presigned) {
-        const a = document.createElement('a');
-        a.href = presigned;
-        a.download = nombre;
-        a.click();
+        const a = document.createElement('a'); a.href = presigned; a.download = nombre; a.click();
       } else {
-        // fallback local dev (blob directo)
         const r2 = await api.get(`/documentos/${docId}/descargar`, { responseType: 'blob' });
         const url = URL.createObjectURL(r2.data);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = nombre;
-        a.click();
+        const a = document.createElement('a'); a.href = url; a.download = nombre; a.click();
         URL.revokeObjectURL(url);
       }
     } catch { toast.error('Error al descargar'); }
   };
+
+  const abrirPreview = async (docId, nombre) => {
+    try {
+      const res = await api.get(`/documentos/${docId}/descargar`);
+      const url = res.data?.url;
+      if (url) { setPreviewImg({ url, nombre }); return; }
+      const r2 = await api.get(`/documentos/${docId}/descargar`, { responseType: 'blob' });
+      const blobUrl = URL.createObjectURL(r2.data);
+      setPreviewImg({ url: blobUrl, nombre, isBlob: true });
+    } catch { toast.error('Error al previsualizar'); }
+  };
+
+  const limpiarFiltros = () => { setFiltroCliente(''); setFiltroMes(''); setFiltroAnio(''); };
+  const hayFiltros = filtroCliente || filtroMes || filtroAnio;
 
   return (
     <div>
@@ -75,7 +141,7 @@ export default function PlanillasSS() {
         action={<Btn onClick={() => setShowModal(true)}>+ Subir planilla</Btn>}
       />
 
-      {/* Filtros */}
+      {/* Filtros + ordenamiento */}
       <Card style={{ marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end' }}>
           <div>
@@ -97,8 +163,14 @@ export default function PlanillasSS() {
               {ANIOS.map(a => <option key={a} value={a}>{a || 'Todos'}</option>)}
             </select>
           </div>
-          {(filtroCliente || filtroMes || filtroAnio) && (
-            <Btn variant="secondary" onClick={() => { setFiltroCliente(''); setFiltroMes(''); setFiltroAnio(''); }}>↺ Limpiar</Btn>
+          <div>
+            <label style={{ display: 'block', fontSize: 11, color: C.text2, fontWeight: 600, marginBottom: 4 }}>ORDENAR</label>
+            <select style={sel} value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              {SORT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+          {hayFiltros && (
+            <Btn variant="secondary" onClick={limpiarFiltros}>↺ Limpiar</Btn>
           )}
         </div>
         <div style={{ marginTop: 10, fontSize: 12, color: C.text2 }}>
@@ -114,57 +186,137 @@ export default function PlanillasSS() {
           No hay planillas para los filtros seleccionados
         </Card>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 12 }}>
-          {planillas.map(p => (
-            <Card key={p.id} style={{ padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                <div>
-                  <div style={{ fontWeight: 700, fontSize: 14, color: C.primary }}>{p.cliente_ref}</div>
-                  <div style={{ fontSize: 13, color: C.text, marginTop: 2 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 14 }}>
+          {planillasOrdenadas.map(p => {
+            const totalTam = (p.archivos || []).reduce((s, a) => s + (a.tamano || 0), 0);
+            return (
+              <Card key={p.id} style={{ padding: 16 }}>
+                {/* Header de la card */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: 15, color: C.primary, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.cliente_ref}</div>
                     <span style={{ background: C.blueBg, color: C.blue, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
                       {p.mes} {p.anio}
                     </span>
                   </div>
-                </div>
-                {rol === 'admin' && <Btn variant="danger" size="sm" onClick={() => setConfirmDel(p.id)}>Eliminar</Btn>}
-              </div>
-              {p.observaciones && (
-                <div style={{ fontSize: 12, color: C.text2, marginBottom: 8 }}>{p.observaciones}</div>
-              )}
-              {/* Archivos */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                {(p.archivos || []).map(a => (
-                  <div key={a.id} style={{
-                    display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
-                    background: C.surface2, padding: '6px 10px', borderRadius: 6,
-                  }}>
-                    <span style={{ color: C.blue, cursor: 'pointer', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
-                      onClick={() => descargarArchivo(a.id, a.nombre)}>
-                      📄 {a.nombre}
-                    </span>
-                    <span style={{ color: C.text2, fontSize: 10, flexShrink: 0 }}>{(a.tamano / 1024).toFixed(0)} KB</span>
+                  {/* Acciones */}
+                  <div style={{ display: 'flex', gap: 5, flexShrink: 0, marginLeft: 8 }}>
+                    {rol === 'admin' && (
+                      <Btn variant="secondary" size="sm" onClick={() => setAdjuntarPlanillaId(p.id)} title="Añadir archivos">
+                        + Adjuntar
+                      </Btn>
+                    )}
+                    {rol === 'admin' && (
+                      <Btn variant="danger" size="sm" onClick={() => setConfirmDel(p.id)}>Eliminar</Btn>
+                    )}
                   </div>
-                ))}
-              </div>
-              <div style={{ fontSize: 11, color: C.text2, marginTop: 8 }}>
-                Subido por {p.subido_por} — {new Date(p.creado).toLocaleString('es-CO')}
-              </div>
-            </Card>
-          ))}
+                </div>
+
+                {p.observaciones && (
+                  <div style={{ fontSize: 12, color: C.text2, marginBottom: 8, fontStyle: 'italic' }}>{p.observaciones}</div>
+                )}
+
+                {/* Archivos */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {(p.archivos || []).map(a => (
+                    <div key={a.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
+                      background: C.surface2, padding: '6px 10px', borderRadius: 6,
+                    }}>
+                      {/* Thumbnail si es imagen */}
+                      {isImagen(a.nombre) ? (
+                        <span style={{ fontSize: 15, cursor: 'pointer', flexShrink: 0 }}
+                          onClick={() => abrirPreview(a.id, a.nombre)} title="Ver imagen">
+                          🖼️
+                        </span>
+                      ) : (
+                        <span style={{ fontSize: 15, flexShrink: 0 }}>{fileIcon(a.nombre)}</span>
+                      )}
+                      <span
+                        style={{ color: C.blue, cursor: 'pointer', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}
+                        onClick={() => descargarArchivo(a.id, a.nombre)}
+                        title={a.nombre}>
+                        {a.nombre}
+                      </span>
+                      <span style={{ color: C.text2, fontSize: 10, flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtTam(a.tamano)}</span>
+                      {rol === 'admin' && (
+                        <button
+                          onClick={() => setConfirmDelDoc({ planilla_id: p.id, doc_id: a.id, nombre: a.nombre })}
+                          title="Eliminar archivo"
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: 15, fontWeight: 700, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Footer */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
+                  <div style={{ fontSize: 11, color: C.text2 }}>
+                    {(p.archivos || []).length} archivo{(p.archivos || []).length !== 1 ? 's' : ''} · {fmtTam(totalTam)}
+                  </div>
+                  <div style={{ fontSize: 11, color: C.text2 }}>
+                    {p.subido_por} · {new Date(p.creado).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {showModal && <ModalSubirPlanilla clientes={clientes} onClose={() => setShowModal(false)}
-        onSuccess={() => { qc.invalidateQueries({ queryKey: ['planillas'] }); setShowModal(false); }} />}
+      {/* Modal subir nueva planilla */}
+      {showModal && (
+        <ModalSubirPlanilla
+          clientes={clientes}
+          onClose={() => setShowModal(false)}
+          onSuccess={() => { qc.invalidateQueries({ queryKey: ['planillas'] }); setShowModal(false); }}
+        />
+      )}
+
+      {/* Modal adjuntar archivos a planilla existente */}
+      {adjuntarPlanillaId && (
+        <ModalAdjuntar
+          planillaId={adjuntarPlanillaId}
+          onClose={() => setAdjuntarPlanillaId(null)}
+          onSuccess={() => { qc.invalidateQueries({ queryKey: ['planillas'] }); setAdjuntarPlanillaId(null); }}
+        />
+      )}
+
+      {/* Preview imagen */}
+      {previewImg && (
+        <div
+          onClick={() => { if (previewImg.isBlob) URL.revokeObjectURL(previewImg.url); setPreviewImg(null); }}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.82)', zIndex: 2000, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+          <div style={{ color: '#fff', fontSize: 13, marginBottom: 10, opacity: .7 }}>{previewImg.nombre} — clic para cerrar</div>
+          <img
+            src={previewImg.url}
+            alt={previewImg.nombre}
+            style={{ maxWidth: '90vw', maxHeight: '80vh', borderRadius: 8, boxShadow: '0 8px 40px rgba(0,0,0,.6)', objectFit: 'contain' }}
+            onClick={e => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       <ConfirmModal
         open={!!confirmDel}
         title="Eliminar planilla"
-        message="Se eliminará esta planilla y sus archivos adjuntos. Esta acción no se puede deshacer."
+        message="Se eliminará esta planilla y todos sus archivos. No se puede deshacer."
         confirmLabel="Eliminar"
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setConfirmDel(null)}
+      />
+
+      <ConfirmModal
+        open={!!confirmDelDoc}
+        title="Eliminar archivo"
+        message={`¿Eliminar "${confirmDelDoc?.nombre}"? Esta acción no se puede deshacer.`}
+        confirmLabel="Eliminar"
+        variant="danger"
+        onConfirm={handleDeleteDoc}
+        onCancel={() => setConfirmDelDoc(null)}
       />
     </div>
   );
@@ -180,7 +332,7 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
   const fileRef = useRef(null);
 
   const handleSubmit = async () => {
-    if (subiendo) return;  // guard doble-click / race condition de render
+    if (subiendo) return;
     if (!cliente) { toast.error('Selecciona un cliente'); return; }
     if (archivos.length === 0) { toast.error('Adjunta al menos un archivo'); return; }
     setSubiendo(true);
@@ -194,11 +346,10 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
       const res = await api.post('/planillas', fd);
       const { archivos: guardados = [], omitidos = [] } = res.data;
       if (omitidos.length === 0) {
-        toast.success(`Planilla subida — ${guardados.length} archivo${guardados.length !== 1 ? 's' : ''} guardado${guardados.length !== 1 ? 's' : ''}`);
+        toast.success(`Planilla subida — ${guardados.length} archivo${guardados.length !== 1 ? 's' : ''}`);
       } else if (guardados.length === 0) {
-        toast.error(`No se guardó ningún archivo. ${omitidos.length} omitido${omitidos.length !== 1 ? 's' : ''}: ${omitidos.map(o => o.nombre).join(', ')}`);
-        setSubiendo(false);
-        return;
+        toast.error(`No se guardó ningún archivo. ${omitidos.length} omitido${omitidos.length !== 1 ? 's' : ''}`);
+        setSubiendo(false); return;
       } else {
         toast.success(`${guardados.length} archivo${guardados.length !== 1 ? 's' : ''} guardado${guardados.length !== 1 ? 's' : ''}`);
         toast.error(`${omitidos.length} omitido${omitidos.length !== 1 ? 's' : ''}: ${omitidos.map(o => `${o.nombre} (${o.motivo})`).join(' | ')}`, { duration: 8000 });
@@ -217,7 +368,6 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ background: C.surface, borderRadius: 14, padding: 28, width: 500, boxShadow: '0 20px 60px rgba(0,0,0,.3)', maxHeight: '90vh', overflowY: 'auto' }}>
         <h3 style={{ margin: '0 0 16px', color: C.primary, fontSize: 16 }}>Subir Planilla de Pago SS</h3>
-
         <div style={{ marginBottom: 12 }}>
           <label style={lbl}>Cliente *</label>
           <select style={inp} value={cliente} onChange={e => setCliente(e.target.value)}>
@@ -225,7 +375,6 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
             {clientes.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
-
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 12 }}>
           <div>
             <label style={lbl}>Mes *</label>
@@ -240,44 +389,11 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
             </select>
           </div>
         </div>
-
         <div style={{ marginBottom: 12 }}>
           <label style={lbl}>Observaciones (opcional)</label>
           <textarea style={{ ...inp, resize: 'vertical', minHeight: 60 }} value={obs} onChange={e => setObs(e.target.value)} />
         </div>
-
-        <div style={{ marginBottom: 16 }}>
-          <label style={lbl}>Archivos de planilla *</label>
-          <label htmlFor="planilla-file-input" style={{
-            display: 'block', border: `2px dashed ${C.border}`, borderRadius: 8, padding: 14,
-            textAlign: 'center', background: C.surface2, cursor: 'pointer',
-          }}>
-            <input id="planilla-file-input" ref={fileRef} type="file" multiple
-              accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
-              style={{ display: 'none' }}
-              onChange={e => {
-                const nuevos = Array.from(e.target.files || []);
-                if (nuevos.length) setArchivos(prev => [...prev, ...nuevos]);
-                e.target.value = '';
-              }} />
-            <div style={{ fontSize: 13, color: C.text2 }}>📂 Click para seleccionar archivos</div>
-          </label>
-          {archivos.length > 0 && (
-            <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
-              {archivos.map((f, i) => (
-                <div key={i} style={{
-                  display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.text,
-                  background: C.surface2, padding: '4px 8px', borderRadius: 6,
-                }}>
-                  <span style={{ flex: 1 }}>📄 {f.name} ({(f.size / 1024).toFixed(0)} KB)</span>
-                  <span style={{ cursor: 'pointer', color: C.red, fontWeight: 700 }}
-                    onClick={e => { e.preventDefault(); setArchivos(prev => prev.filter((_, j) => j !== i)); }}>×</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
+        <AreaArchivos archivos={archivos} setArchivos={setArchivos} fileRef={fileRef} lbl={lbl} />
         <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
           <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
           <Btn onClick={handleSubmit} disabled={subiendo || !cliente || archivos.length === 0}>
@@ -285,6 +401,84 @@ function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
           </Btn>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ModalAdjuntar({ planillaId, onClose, onSuccess }) {
+  const [archivos, setArchivos] = useState([]);
+  const [subiendo, setSubiendo] = useState(false);
+  const fileRef = useRef(null);
+  const lbl = { fontSize: 12, fontWeight: 600, color: C.text2, display: 'block', marginBottom: 4 };
+
+  const handleSubmit = async () => {
+    if (subiendo || archivos.length === 0) return;
+    setSubiendo(true);
+    try {
+      const fd = new FormData();
+      archivos.forEach(f => fd.append('files', f));
+      const res = await api.post(`/planillas/${planillaId}/archivos`, fd);
+      const { archivos: guardados = [], omitidos = [] } = res.data;
+      if (guardados.length > 0) toast.success(`${guardados.length} archivo${guardados.length !== 1 ? 's' : ''} adjuntado${guardados.length !== 1 ? 's' : ''}`);
+      if (omitidos.length > 0) toast.error(`${omitidos.length} omitido${omitidos.length !== 1 ? 's' : ''}`, { duration: 6000 });
+      onSuccess();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Error al adjuntar');
+    }
+    setSubiendo(false);
+  };
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: C.surface, borderRadius: 14, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.3)', maxHeight: '90vh', overflowY: 'auto' }}>
+        <h3 style={{ margin: '0 0 16px', color: C.primary, fontSize: 16 }}>Adjuntar archivos a planilla</h3>
+        <AreaArchivos archivos={archivos} setArchivos={setArchivos} fileRef={fileRef} lbl={lbl} />
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <Btn variant="secondary" onClick={onClose}>Cancelar</Btn>
+          <Btn onClick={handleSubmit} disabled={subiendo || archivos.length === 0}>
+            {subiendo ? 'Subiendo...' : 'Adjuntar'}
+          </Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AreaArchivos({ archivos, setArchivos, fileRef, lbl }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <label style={lbl}>Archivos *</label>
+      <label htmlFor="planilla-file-input" style={{
+        display: 'block', border: `2px dashed ${C.border}`, borderRadius: 8, padding: 14,
+        textAlign: 'center', background: C.surface2, cursor: 'pointer',
+      }}>
+        <input id="planilla-file-input" ref={fileRef} type="file" multiple
+          accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
+          style={{ display: 'none' }}
+          onChange={e => {
+            const nuevos = Array.from(e.target.files || []);
+            if (nuevos.length) setArchivos(prev => [...prev, ...nuevos]);
+            e.target.value = '';
+          }} />
+        <div style={{ fontSize: 13, color: C.text2 }}>📂 Clic para seleccionar archivos</div>
+        <div style={{ fontSize: 11, color: C.text2, marginTop: 4 }}>PDF, JPG, PNG, XLS · máx. 10 MB c/u</div>
+      </label>
+      {archivos.length > 0 && (
+        <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {archivos.map((f, i) => (
+            <div key={i} style={{
+              display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: C.text,
+              background: C.surface2, padding: '5px 10px', borderRadius: 6,
+            }}>
+              <span style={{ flexShrink: 0 }}>{fileIcon(f.name)}</span>
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.name}</span>
+              <span style={{ color: C.text2, flexShrink: 0 }}>{fmtTam(f.size)}</span>
+              <span style={{ cursor: 'pointer', color: C.red, fontWeight: 700, flexShrink: 0 }}
+                onClick={e => { e.preventDefault(); setArchivos(prev => prev.filter((_, j) => j !== i)); }}>×</span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

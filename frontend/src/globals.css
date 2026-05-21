@@ -74,3 +74,17 @@
   background: var(--c-surface2, #f3f4f6);
   border-radius: 4px;
 }
+
+/* Notification pulse — sidebar bell & badge */
+@keyframes bbc-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(229,62,62,.7); }
+  70%  { box-shadow: 0 0 0 7px rgba(229,62,62,0); }
+  100% { box-shadow: 0 0 0 0 rgba(229,62,62,0); }
+}
+.bbc-notif-pulse { animation: bbc-pulse-ring 1.6s cubic-bezier(.4,0,.6,1) infinite; }
+
+@keyframes bbc-dot-ping {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%       { transform: scale(1.4); opacity: .6; }
+}
+.bbc-notif-dot { animation: bbc-dot-ping 1.4s ease-in-out infinite; }

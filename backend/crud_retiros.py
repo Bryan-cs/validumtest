@@ -29,13 +29,12 @@ def create_retiro(db, data: schemas.RetiroCreate):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:")
     afil = get_afiliado_by_doc(db, data.doc)
     if not afil: return None
-    retiro_existente = db.query(models.Retiro).filter_by(doc=data.doc).first()
-    if retiro_existente:
-        raise HTTPException(400,
-            f"El afiliado ya tiene un retiro registrado del {retiro_existente.fecha}")
-    afil.estado = "RETIRADO"; afil.estado_srv = "RETIRADO"
     anio_actual = str(datetime.now(COL_TZ).year)
     mes_actual  = MESES[datetime.now(COL_TZ).month-1]
+    retiro_existente = db.query(models.Retiro).filter_by(doc=data.doc).first()
+    if retiro_existente:
+        db.query(models.Retiro).filter_by(id=retiro_existente.id).delete()
+    afil.estado = "RETIRADO"; afil.estado_srv = "RETIRADO"
     r = models.Retiro(
         nombre=afil.nombre, doc=data.doc, empresa=afil.empresa,
         fecha=data.fecha, motivo=data.motivo, obs=data.obs,

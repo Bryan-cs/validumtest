@@ -114,12 +114,12 @@ export default function Empleados() {
           Nombre {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
         </button>
       ),
-      cell: ({ row }) => <span style={{ fontWeight: 500 }}>{row.original.nombre}</span>,
+      cell: ({ row }) => <span style={{ fontWeight: 700, fontSize: 14 }}>{row.original.nombre}</span>,
     },
     {
       accessorKey: 'doc',
       header: 'Documento',
-      cell: ({ row }) => <span style={{ color: C.text2, fontFamily: 'monospace', fontSize: 12 }}>{row.original.doc || '—'}</span>,
+      cell: ({ row }) => <span style={{ fontFamily: 'monospace', fontSize: 13, fontWeight: 600 }}>{row.original.doc || '—'}</span>,
     },
     {
       accessorKey: 'cargo',
@@ -129,13 +129,13 @@ export default function Empleados() {
           Cargo {column.getIsSorted() === 'asc' ? '↑' : column.getIsSorted() === 'desc' ? '↓' : '↕'}
         </button>
       ),
-      cell: ({ row }) => <span style={{ fontSize: 12 }}>{row.original.cargo}</span>,
+      cell: ({ row }) => <span style={{ fontSize: 13, fontWeight: 600 }}>{row.original.cargo}</span>,
     },
     {
       accessorKey: 'tel',
       header: 'Teléfono',
       enableSorting: false,
-      cell: ({ row }) => <span style={{ color: C.text2, fontSize: 12 }}>{row.original.tel || '—'}</span>,
+      cell: ({ row }) => <span style={{ fontSize: 13, fontWeight: 600 }}>{row.original.tel || '—'}</span>,
     },
     {
       accessorKey: 'activo',
@@ -194,7 +194,7 @@ export default function Empleados() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <h3 style={{ margin: 0, color: C.primary }}>Empleados</h3>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff', background: C.primary, borderRadius: 8, padding: '6px 16px', letterSpacing: '0.02em' }}>👔 Empleados</h3>
         <Btn variant="accent" onClick={() => { setForm({ activo: true, nomina: 0 }); setModal('nuevo'); }}>+ Nuevo empleado</Btn>
       </div>
       <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 24 }}>
@@ -203,7 +203,7 @@ export default function Empleados() {
             {empTable.getHeaderGroups().map(hg => (
               <tr key={hg.id} style={{ background: C.surface2 }}>
                 {hg.headers.map(header => (
-                  <th key={header.id} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>
+                  <th key={header.id} style={{ padding: '11px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: C.text, background: C.surface2, borderBottom: `2px solid ${C.border}`, whiteSpace: 'nowrap', letterSpacing: '0.03em', textTransform: 'uppercase' }}>
                     {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                   </th>
                 ))}
@@ -228,14 +228,14 @@ export default function Empleados() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <h3 style={{ margin: 0, color: C.primary }}>Nómina — {MESES_ES[mes - 1]} {anio}</h3>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff', background: C.amber, borderRadius: 8, padding: '6px 16px', letterSpacing: '0.02em' }}>💰 Nómina — {MESES_ES[mes - 1]} {anio}</h3>
         <Btn variant="secondary" onClick={() => copiarNomina.mutate()} disabled={copiarNomina.isPending}>Copiar mes anterior</Btn>
       </div>
       <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}`, marginBottom: 24 }}>
         <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
           <thead><tr style={{ background: C.surface2 }}>
             {['Empleado', 'Cargo', 'Salario base ref.', 'Pago este mes'].map(h => (
-              <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+              <th key={h} style={{ padding: '11px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: C.text, background: C.surface2, borderBottom: `2px solid ${C.border}`, whiteSpace: 'nowrap', letterSpacing: '0.03em', textTransform: 'uppercase' }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
@@ -245,17 +245,17 @@ export default function Empleados() {
               const diff = n.valor - base;
               return (
                 <tr key={n.empleado_id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                  <td style={tdc}>{n.nombre}</td>
-                  <td style={tdc}>{n.cargo}</td>
-                  <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>{base ? fmt(base) : '—'}</td>
+                  <td style={{ ...tdc, fontWeight: 700, fontSize: 14 }}>{n.nombre}</td>
+                  <td style={{ ...tdc, fontWeight: 600 }}>{n.cargo}</td>
+                  <td style={{ ...tdc, fontWeight: 700, fontSize: 14, fontVariantNumeric: 'tabular-nums' }}>{base ? fmt(base) : '—'}</td>
                   <td style={tdc}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                       <input type="number" style={{ ...inp, width: 130 }}
                         defaultValue={n.valor}
                         onBlur={e => updateNomina.mutate({ empleado_id: n.empleado_id, valor: +e.target.value })} />
-                      {base > 0 && diff !== 0 && (
-                        <span style={{ fontSize: 11, color: diff > 0 ? C.green : C.red, fontWeight: 600, whiteSpace: 'nowrap' }}>
-                          {diff > 0 ? '+' : ''}{fmt(diff)}
+                      {base > 0 && diff > 0 && (
+                        <span style={{ fontSize: 11, color: C.green, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                          +{fmt(diff)}
                         </span>
                       )}
                     </div>
@@ -275,7 +275,7 @@ export default function Empleados() {
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-        <h3 style={{ margin: 0, color: C.primary }}>Gastos — {MESES_ES[mes - 1]} {anio}</h3>
+        <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#fff', background: C.red, borderRadius: 8, padding: '6px 16px', letterSpacing: '0.02em' }}>💸 Gastos — {MESES_ES[mes - 1]} {anio}</h3>
         <Btn variant="secondary" onClick={() => copiarGastos.mutate()} disabled={copiarGastos.isPending}>Copiar mes anterior</Btn>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
@@ -287,15 +287,15 @@ export default function Empleados() {
         <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
           <thead><tr style={{ background: C.surface2 }}>
             {['Concepto', 'Valor', 'Fecha', 'Acciones'].map(h => (
-              <th key={h} style={{ padding: '9px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}` }}>{h}</th>
+              <th key={h} style={{ padding: '11px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: C.text, background: C.surface2, borderBottom: `2px solid ${C.border}`, whiteSpace: 'nowrap', letterSpacing: '0.03em', textTransform: 'uppercase' }}>{h}</th>
             ))}
           </tr></thead>
           <tbody>
-            {gastos.map(g => (
+            {[...gastos].sort((a,b)=> new Date(b.creado||0) - new Date(a.creado||0)).map(g => (
               <tr key={g.id} style={{ borderBottom: `1px solid ${C.border}` }}>
-                <td style={tdc}>{g.nombre}</td>
+                <td style={{ ...tdc, fontWeight: 700, fontSize: 14 }}>{g.nombre}</td>
                 <td style={{ ...tdc, textAlign: 'right', fontWeight: 600 }}>{fmt(g.valor)}</td>
-                <td style={{ ...tdc, color: C.text2, fontSize: 12 }}>{g.creado ? new Date(g.creado).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—'}</td>
+                <td style={{ ...tdc, fontSize: 12, fontVariantNumeric: 'tabular-nums' }}>{g.creado ? new Date(g.creado).toLocaleDateString('es-CO', { day:'2-digit', month:'2-digit', year:'numeric' }) : '—'}</td>
                 <td style={tdc}>
                   <Btn size="sm" variant="danger" onClick={() => setConfirmState({ open:true, title:'Eliminar gasto', message:`¿Eliminar el gasto "${g.nombre}"?`, onConfirm:()=>{ delGasto.mutate(g.id); setConfirmState(s=>({...s,open:false})); } })}>Eliminar</Btn>
                 </td>
@@ -323,11 +323,6 @@ export default function Empleados() {
                 <input type={t || 'text'} style={{ ...inp, textTransform: ucase ? 'uppercase' : 'none' }} value={form[k] || ''} onChange={e => sf(k, ucase ? UP(e.target.value) : e.target.value)} />
               </div>
             ))}
-            <label style={lbl}>Usuario asignado</label>
-            <select style={inp} value={form.usuario || ''} onChange={e => sf('usuario', e.target.value)}>
-              <option value="">Sin asignar</option>
-              {usuarios.filter(u => u.rol === 'empleado').map(u => <option key={u.id} value={u.username}>{u.username}</option>)}
-            </select>
             <label style={lbl}>Salario base de referencia ($)</label>
             <input type="number" style={inp} value={form.nomina ?? ''} onChange={e => sf('nomina', +e.target.value)} />
             <div style={{ display: 'flex', gap: 10, marginTop: 16, justifyContent: 'flex-end' }}>

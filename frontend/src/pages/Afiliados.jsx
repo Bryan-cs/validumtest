@@ -655,7 +655,7 @@ export default function Afiliados() {
   return (
     <div>
       <PageHeader title="👥 Afiliados"
-        subtitle={tab==='activos' ? `${totalReg} registros${hayFiltrosActivos ? ' (filtrado)' : ''}` : tab==='eliminados' ? `${eliminados.length} eliminados` : ''}
+        subtitle={tab==='activos' ? `${totalReg} registros${hayFiltrosActivos ? ' (filtrado)' : ''}` : tab==='eliminados' ? `${eliminados.length} retirados` : ''}
         action={tab==='activos' && (
           <div style={{ display:'flex', gap:8 }}>
             <Btn variant="secondary" onClick={() => {
@@ -675,7 +675,7 @@ export default function Afiliados() {
       <div style={{ display:'flex', gap:4, marginBottom:16, borderBottom:`2px solid ${C.border}`, paddingBottom:0, overflowX:'auto', flexWrap:'nowrap' }}>
         {[
           { key:'activos',    label:`👥 Activos (${totalReg})` },
-          { key:'eliminados', label:`🗑️ Eliminados (${eliminados.length || '...'})` },
+          { key:'eliminados', label:`↩️ Retirados (${eliminados.length || '...'})` },
           { key:'pagos',      label:'💳 Historial de pagos' },
           { key:'documentos', label:'📎 Documentos' },
           { key:'seguimiento', label:'📋 En seguimiento' },
@@ -684,10 +684,11 @@ export default function Afiliados() {
           <button key={t.key} onClick={() => { setTab(t.key); if (t.key === 'pagos' || t.key === 'documentos' || t.key === 'seguimiento') setTodosNeeded(true); }} style={{
             padding:'9px 18px', border:'none', borderRadius:'7px 7px 0 0',
             background: tab===t.key ? C.primary : 'transparent',
-            color: tab===t.key ? '#fff' : C.text2,
-            fontWeight: tab===t.key ? 700 : 400, fontSize:13, cursor:'pointer',
+            color: tab===t.key ? '#fff' : C.text,
+            fontWeight: tab===t.key ? 700 : 600, fontSize:13, cursor:'pointer',
             borderBottom: tab===t.key ? `2px solid ${C.primary}` : 'none',
             marginBottom: tab===t.key ? -2 : 0,
+            whiteSpace: 'nowrap',
           }}>{t.label}</button>
         ))}
       </div>
@@ -757,7 +758,7 @@ export default function Afiliados() {
                 {table.getHeaderGroups().map(hg => (
                   <tr key={hg.id} style={{ background: C.surface2 }}>
                     {hg.headers.map(header => (
-                      <th key={header.id} style={{ padding: '10px 12px', textAlign: 'left', fontSize: 11, fontWeight: 600, color: C.text2, borderBottom: `1px solid ${C.border}`, whiteSpace: 'nowrap' }}>
+                      <th key={header.id} style={{ padding: '11px 12px', textAlign: 'left', fontSize: 11, fontWeight: 700, color: C.text, background: C.surface2, borderBottom: `2px solid ${C.border}`, whiteSpace: 'nowrap', textTransform: 'uppercase', letterSpacing: '0.03em' }}>
                         {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
                       </th>
                     ))}
@@ -818,7 +819,7 @@ export default function Afiliados() {
         <div>
           <div style={{ background:C.amberBg, border:`1px solid ${C.amber}`, borderRadius:8,
             padding:'10px 14px', marginBottom:14, fontSize:12, color:C.amber, fontWeight:500 }}>
-            ⚠️ Afiliados eliminados del sistema. Puedes restaurarlos como ACTIVOS con el botón ↩ Restaurar.
+            ⚠️ Afiliados retirados del sistema. Puedes restaurarlos como ACTIVOS con el botón ↩ Restaurar.
           </div>
           <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap', alignItems:'center' }}>
             <input
@@ -856,7 +857,7 @@ export default function Afiliados() {
                   style={{ padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:8,
                     background:C.surface2, cursor:'pointer', fontSize:12, color:C.text2 }}>✕</button>
               )}
-              <Btn size="sm" variant="secondary" onClick={() => dlExcel('/reportes/eliminados', 'eliminados.xlsx')}>
+              <Btn size="sm" variant="secondary" onClick={() => dlExcel('/reportes/eliminados', 'retirados.xlsx')}>
                 ⬇ Excel
               </Btn>
             </div>
@@ -865,16 +866,16 @@ export default function Afiliados() {
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
-                  {['Nombre','Empresa','Documento','EPS','CCF','Fecha afiliación','Mes','Fecha eliminación','Eliminado por','Estado planilla','Acciones'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                      color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                  {['Nombre','Empresa','Documento','EPS','CCF','Fecha afiliación','Mes','Fecha retiro','Retirado por','Estado planilla','Acciones'].map(h=>(
+                    <th key={h} style={{ padding:'11px 12px',textAlign:'left',fontSize:11,fontWeight:700,
+                      color:C.text,background:C.surface2,borderBottom:`2px solid ${C.border}`,whiteSpace:'nowrap',textTransform:'uppercase',letterSpacing:'0.03em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {loadElim && <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
                 {!loadElim && eliminados.length===0 && (
-                  <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros eliminados</td></tr>
+                  <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros retirados</td></tr>
                 )}
                 {eliminados.filter(e => {
                   if (buscarElim) {
@@ -1041,8 +1042,8 @@ export default function Afiliados() {
                   <thead>
                     <tr style={{ background:C.surface2 }}>
                       {['Código','Mes','Año','Total ($)','Estado','Banco','Novedades'].map(h=>(
-                        <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                          color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                        <th key={h} style={{ padding:'11px 12px',textAlign:'left',fontSize:11,fontWeight:700,
+                          color:C.text,background:C.surface2,borderBottom:`2px solid ${C.border}`,whiteSpace:'nowrap',textTransform:'uppercase',letterSpacing:'0.03em' }}>{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1153,8 +1154,8 @@ export default function Afiliados() {
               <thead>
                 <tr style={{ background:C.surface2 }}>
                   {['Nombre','Empresa','Documento','Cliente','EPS','AFP','ARL','CCF','Días','Novedades','Detalle','Acciones'].map(h=>(
-                    <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                      color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                    <th key={h} style={{ padding:'11px 12px',textAlign:'left',fontSize:11,fontWeight:700,
+                      color:C.text,background:C.surface2,borderBottom:`2px solid ${C.border}`,whiteSpace:'nowrap',textTransform:'uppercase',letterSpacing:'0.03em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
@@ -1608,9 +1609,9 @@ export default function Afiliados() {
 
 function Seccion({ title }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:20, marginBottom:12 }}>
-      <div style={{ width:3, height:16, borderRadius:2, background:C.primary, flexShrink:0 }} />
-      <span style={{ fontSize:11, fontWeight:700, color:C.primary, textTransform:'uppercase', letterSpacing:'0.08em' }}>
+    <div style={{ display:'flex', alignItems:'center', gap:10, marginTop:22, marginBottom:14 }}>
+      <span style={{ fontSize:11, fontWeight:800, color:'#fff', background:C.primary, borderRadius:6,
+        padding:'3px 10px', textTransform:'uppercase', letterSpacing:'0.08em', flexShrink:0 }}>
         {title}
       </span>
       <div style={{ flex:1, height:1, background:C.border }} />
@@ -1650,7 +1651,7 @@ function SrvChip({ children }) {
 }
 
 const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };
-const lbl = { display:'block',fontSize:11,color:C.text2,fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em' };
+const lbl = { display:'block',fontSize:12,color:C.text,fontWeight:700,marginBottom:6,textTransform:'uppercase',letterSpacing:'0.06em' };
 const inp2 = { width:'100%',padding:'10px 12px',border:`1.5px solid ${C.border}`,borderRadius:8,fontSize:14,outline:'none',color:C.text,background:C.surface,boxSizing:'border-box',transition:'border-color .15s' };
 const btnPag = {
   padding:'6px 12px', border:`1px solid ${C.border}`, borderRadius:6,

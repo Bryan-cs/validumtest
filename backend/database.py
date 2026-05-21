@@ -87,6 +87,8 @@ def _ensure_columns():
     _check("gastos", "anio", "ALTER TABLE gastos ADD COLUMN anio INTEGER")
     _check("config", "mes_inicio_cobro",  "ALTER TABLE config ADD COLUMN mes_inicio_cobro INTEGER")
     _check("config", "anio_inicio_cobro", "ALTER TABLE config ADD COLUMN anio_inicio_cobro INTEGER")
+    _check("seguimiento_arl", "entidad_arl", "ALTER TABLE seguimiento_arl ADD COLUMN entidad_arl VARCHAR(20) DEFAULT 'SURA'")
+
     if _missing:
         with engine.begin() as conn:
             for table, col, ddl in _missing:

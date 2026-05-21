@@ -150,6 +150,91 @@ async def crear_planilla(
     return {"ok": True, "id": planilla.id, "archivos": subidos, "omitidos": omitidos}
 
 
+
+@router.post("/{planilla_id}/archivos")
+async def agregar_archivos(
+    planilla_id: int,
+    files: List[UploadFile] = File(...),
+    db: Session = Depends(get_db),
+    token=Depends(require_admin_or_empleado),
+):
+    import asyncio
+    from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE, _validar_magic
+    planilla = db.query(models.PlanillaPago).filter_by(id=planilla_id).first()
+    if not planilla:
+        raise HTTPException(404, "Planilla no encontrada")
+    s3 = _get_s3()
+    safe_cliente = re.sub(r'[^\w\-]', '_', planilla.cliente_ref or 'sin_cliente')
+    safe_mes     = re.sub(r'[^\w\-]', '_', planilla.mes or 'sin_mes')
+    safe_anio    = re.sub(r'[^\w\-]', '_', planilla.anio or 'sin_anio')
+    validos, omitidos = [], []
+    for file in files:
+        nombre = file.filename or "archivo"
+        ext = nombre.rsplit(".", 1)[-1].lower() if "." in nombre else ""
+        if ext not in ALLOWED_EXT:
+            omitidos.append({"nombre": nombre, "motivo": f"Formato .{ext} no permitido"}); continue
+        content = await file.read()
+        if len(content) > MAX_SIZE:
+            omitidos.append({"nombre": nombre, "motivo": f"Excede {MAX_SIZE // (1024*1024)} MB"}); continue
+        if not _validar_magic(ext, content):
+            omitidos.append({"nombre": nombre, "motivo": f"Contenido no válido para {ext.upper()}"}); continue
+        safe_name = re.sub(r'[^\w.\-]', '_', nombre)
+        unique_name = f"{uuid.uuid4().hex[:8]}_{safe_name}"
+        ruta = (f"planillas/{safe_cliente}/{safe_anio}/{safe_mes}/{unique_name}" if s3
+                else f"uploads/planillas/{safe_cliente}/{safe_anio}/{safe_mes}/{unique_name}")
+        validos.append({"nombre": nombre, "ext": ext, "ruta": ruta, "tamano": len(content),
+                        "content": content, "content_type": file.content_type or "application/octet-stream"})
+    if not validos:
+        raise HTTPException(400, f"Ningún archivo aceptado: {[o['motivo'] for o in omitidos]}")
+
+    async def _subir(d):
+        try:
+            if s3:
+                await asyncio.to_thread(s3.put_object, Bucket=_R2_BUCKET, Key=d["ruta"],
+                                        Body=d["content"], ContentType=d["content_type"])
+            else:
+                await asyncio.to_thread(os.makedirs, os.path.dirname(d["ruta"]), exist_ok=True)
+                def _w():
+                    with open(d["ruta"], "wb") as fh: fh.write(d["content"])
+                await asyncio.to_thread(_w)
+            return d, None
+        except Exception as e:
+            return d, str(e)
+
+    resultados = await asyncio.gather(*[_subir(d) for d in validos])
+    subidos = []
+    for d, err in resultados:
+        if err:
+            omitidos.append({"nombre": d["nombre"], "motivo": f"Error al guardar: {err}"})
+        else:
+            db.add(models.Documento(
+                afiliado_doc="", nombre=d["nombre"], tipo=d["ext"], ruta=d["ruta"],
+                tamano=d["tamano"], subido_por=token.get("sub", ""),
+                contexto="planilla_pago", contexto_id=planilla_id,
+            ))
+            subidos.append(d["nombre"])
+    db.commit()
+    return {"ok": True, "archivos": subidos, "omitidos": omitidos}
+
+
+@router.delete("/{planilla_id}/archivos/{doc_id}")
+def eliminar_archivo(planilla_id: int, doc_id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+    doc = db.query(models.Documento).filter_by(id=doc_id, contexto="planilla_pago", contexto_id=planilla_id).first()
+    if not doc:
+        raise HTTPException(404, "Archivo no encontrado")
+    from routers.documentos import _get_s3, _R2_BUCKET
+    s3 = _get_s3()
+    if s3 and not doc.ruta.startswith("uploads/"):
+        try: s3.delete_object(Bucket=_R2_BUCKET, Key=doc.ruta)
+        except Exception: pass
+    elif not s3 and os.path.exists(doc.ruta):
+        try: os.remove(doc.ruta)
+        except Exception: pass
+    db.delete(doc)
+    db.commit()
+    return {"ok": True}
+
+
 @router.delete("/{planilla_id}")
 def eliminar_planilla(planilla_id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     planilla = db.query(models.PlanillaPago).filter_by(id=planilla_id).first()

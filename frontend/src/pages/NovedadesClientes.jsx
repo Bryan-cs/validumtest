@@ -5,6 +5,42 @@ import api from '../utils/api';
 import { C, Btn, PageHeader, ErrorMsg, ConfirmModal } from '../components/UI';
 
 const tdc = { padding:'10px 12px', fontSize:13, color:C.text, verticalAlign:'middle' };
+
+function AdjuntosCliente({ novedadId, contexto }) {
+  const [open, setOpen] = useState(false);
+  const { data: docs = [], isLoading, isError } = useQuery({
+    queryKey: ['adj-cliente', contexto, novedadId],
+    queryFn: () => api.get('/documentos', { params: { contexto, contexto_id: novedadId } }).then(r => r.data),
+    enabled: open,
+    retry: 1,
+  });
+
+  if (!open) return (
+    <button onClick={() => setOpen(true)}
+      style={{ fontSize: 11, color: C.blue, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', whiteSpace: 'nowrap' }}>
+      📎 Ver adjuntos
+    </button>
+  );
+
+  if (isLoading) return <span style={{ fontSize: 11, color: C.text2 }}>Cargando...</span>;
+  if (isError) return <span style={{ fontSize: 11, color: C.red }}>Error al cargar adjuntos</span>;
+  if (docs.length === 0) return <span style={{ fontSize: 11, color: C.text2 }}>Sin adjuntos</span>;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {docs.map(d => (
+        <span key={d.id} style={{ fontSize: 11, color: C.blue, cursor: 'pointer', textDecoration: 'underline' }}
+          onClick={async () => {
+            const res = await api.get(`/documentos/${d.id}/descargar`, { responseType: 'blob' });
+            const u = URL.createObjectURL(res.data);
+            const a = document.createElement('a'); a.href = u; a.download = d.nombre; a.click(); URL.revokeObjectURL(u);
+          }}>
+          📄 {d.nombre}
+        </span>
+      ))}
+    </div>
+  );
+}
 const lbl = { display:'block', fontSize:12, color:C.text2, fontWeight:500, marginBottom:4 };
 const inp = { width:'100%', padding:'9px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', boxSizing:'border-box', color:C.text, background:C.surface };
 const sel = { padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', background:C.surface, color:C.text };
@@ -179,16 +215,33 @@ export default function NovedadesClientes() {
       {/* Tabs */}
       <div style={{ display:'flex', gap:4, marginBottom:16, flexWrap:'wrap' }}>
         {[
-          ['novedades',`Novedades de Pago (${novedades.filter(n=>n.estado==='pendiente').length} pendientes)`],
-          ['solicitudes',`Solicitudes de Retiro (${solicitudes.filter(s=>s.estado==='pendiente').length} pendientes)`],
-          ['novedades-afil',`Novedades Afiliados (${novedadesAfil.filter(n=>n.estado==='pendiente').length} pendientes)`],
-          ['avisos','📩 Novedades a Clientes'],
-        ].map(([id,label])=>(
+          ['novedades', 'Novedades de Pago', novedades.filter(n=>n.estado==='pendiente').length],
+          ['solicitudes', 'Solicitudes de Retiro', solicitudes.filter(s=>s.estado==='pendiente').length],
+          ['novedades-afil', 'Novedades Afiliados', novedadesAfil.filter(n=>n.estado==='pendiente').length],
+          ['avisos', '📩 Novedades a Clientes', 0],
+        ].map(([id, label, pendientes])=>(
           <button key={id} onClick={()=>{ setTabNov(id); limpiar(); }}
             style={{ padding:'8px 18px', borderRadius:8, border:'none', fontSize:13, fontWeight:600,
               cursor:'pointer', background:tabNov===id?C.primary:'#fff',
-              color:tabNov===id?'#fff':C.text2, boxShadow:tabNov===id?'none':'0 1px 3px rgba(0,0,0,.1)' }}>
+              color:tabNov===id?'#fff':C.text2, boxShadow:tabNov===id?'none':'0 1px 3px rgba(0,0,0,.1)',
+              display:'flex', alignItems:'center', gap:8, position:'relative' }}>
             {label}
+            {pendientes > 0 && (
+              <span style={{
+                background: tabNov===id ? 'rgba(255,255,255,0.3)' : '#EF4444',
+                color: '#fff',
+                borderRadius: 12,
+                padding: '1px 7px',
+                fontSize: 11,
+                fontWeight: 700,
+                lineHeight: '18px',
+                minWidth: 20,
+                textAlign: 'center',
+                boxShadow: tabNov===id ? 'none' : '0 0 0 2px #FCA5A5',
+              }}>
+                {pendientes}
+              </span>
+            )}
           </button>
         ))}
       </div>
@@ -229,8 +282,8 @@ export default function NovedadesClientes() {
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
           <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead><tr style={{ background:C.surface2 }}>
-              {['Cliente','Período','Afiliados','Observaciones','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+              {['Cliente','Período','Afiliados','Observaciones','Adjuntos','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
+                <th key={h} style={{ padding:'11px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:C.text, background:C.surface2, borderBottom:`2px solid ${C.border}`, whiteSpace:'nowrap', letterSpacing:'0.03em', textTransform:'uppercase' }}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
@@ -262,9 +315,10 @@ export default function NovedadesClientes() {
                     )}
                   </td>
                   <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{n.obs||'—'}</span></td>
+                  <td style={tdc}><AdjuntosCliente novedadId={n.id} contexto="novedad_pago" /></td>
                   <td style={tdc}>{badgeEstado(n.estado)}</td>
                   <td style={tdc}><span style={{ fontSize:11,color:n.respuesta?C.blue:C.text2 }}>{n.respuesta||'—'}</span></td>
-                  <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(n.creado).toLocaleString('es-CO')}</span></td>
+                  <td style={tdc}><span style={{ fontSize:12, color:C.text, fontVariantNumeric:'tabular-nums' }}>{new Date(n.creado).toLocaleString('es-CO')}</span></td>
                   <td style={tdc}>
                     {n.estado==='pendiente'
                       ? <Btn size="sm" variant="success" onClick={()=>{ setModalResp({tipo:'novedad',id:n.id,estado:'procesado',label:`Novedad de pago ${n.mes} ${n.anio}`}); setRespTexto(n.respuesta||''); }}>Marcar procesado</Btn>
@@ -287,7 +341,7 @@ export default function NovedadesClientes() {
           <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead><tr style={{ background:C.surface2 }}>
               {['Cliente','Afiliado','Documento','Motivo','Observaciones','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+                <th key={h} style={{ padding:'11px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:C.text, background:C.surface2, borderBottom:`2px solid ${C.border}`, whiteSpace:'nowrap', letterSpacing:'0.03em', textTransform:'uppercase' }}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
@@ -300,7 +354,7 @@ export default function NovedadesClientes() {
                   <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{s.obs||'—'}</span></td>
                   <td style={tdc}>{badgeEstado(s.estado)}</td>
                   <td style={tdc}><span style={{ fontSize:11,color:s.respuesta?C.blue:C.text2 }}>{s.respuesta||'—'}</span></td>
-                  <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(s.creado).toLocaleString('es-CO')}</span></td>
+                  <td style={tdc}><span style={{ fontSize:12, color:C.text, fontVariantNumeric:'tabular-nums' }}>{new Date(s.creado).toLocaleString('es-CO')}</span></td>
                   <td style={tdc}>
                     {s.estado==='pendiente'&&(
                       <div style={{ display:'flex', gap:6 }}>
@@ -326,8 +380,8 @@ export default function NovedadesClientes() {
         <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
           <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
             <thead><tr style={{ background:C.surface2 }}>
-              {['Cliente','Afiliado','Documento','Tipo','Descripción','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
-                <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+              {['Cliente','Afiliado','Documento','Tipo','Descripción','Adjuntos','Estado','Respuesta admin','Registrado','Acción'].map(h=>(
+                <th key={h} style={{ padding:'11px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:C.text, background:C.surface2, borderBottom:`2px solid ${C.border}`, whiteSpace:'nowrap', letterSpacing:'0.03em', textTransform:'uppercase' }}>{h}</th>
               ))}
             </tr></thead>
             <tbody>
@@ -338,9 +392,10 @@ export default function NovedadesClientes() {
                   <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{n.afiliado_doc}</span></td>
                   <td style={tdc}><span style={{ fontWeight:600, color:C.blue, fontSize:12 }}>{n.tipo}</span></td>
                   <td style={{ ...tdc, maxWidth:220 }}><span style={{ fontSize:12, color:C.text2 }}>{n.descripcion}</span></td>
+                  <td style={tdc}><AdjuntosCliente novedadId={n.id} contexto="novedad_afil" /></td>
                   <td style={tdc}>{badgeEstado(n.estado)}</td>
                   <td style={tdc}><span style={{ fontSize:11,color:n.respuesta?C.blue:C.text2 }}>{n.respuesta||'—'}</span></td>
-                  <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(n.creado).toLocaleString('es-CO')}</span></td>
+                  <td style={tdc}><span style={{ fontSize:12, color:C.text, fontVariantNumeric:'tabular-nums' }}>{new Date(n.creado).toLocaleString('es-CO')}</span></td>
                   <td style={tdc}>
                     {n.estado==='pendiente'
                       ? <Btn size="sm" variant="success" onClick={()=>{ setModalResp({tipo:'novedad-afil',id:n.id,estado:'atendido',label:`Novedad ${n.tipo} — ${n.afiliado_nombre}`}); setRespTexto(n.respuesta||''); }}>Marcar atendido</Btn>
@@ -411,7 +466,7 @@ export default function NovedadesClientes() {
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead><tr style={{ background:C.surface2 }}>
                 {['Cliente','Título','Mensaje','Adjuntos','Estado','Enviado por','Fecha','Acción'].map(h=>(
-                  <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600, color:C.text2, borderBottom:`1px solid ${C.border}` }}>{h}</th>
+                  <th key={h} style={{ padding:'11px 12px', textAlign:'left', fontSize:11, fontWeight:700, color:C.text, background:C.surface2, borderBottom:`2px solid ${C.border}`, whiteSpace:'nowrap', letterSpacing:'0.03em', textTransform:'uppercase' }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
@@ -443,7 +498,7 @@ export default function NovedadesClientes() {
                       }
                     </td>
                     <td style={tdc}><span style={{ fontSize:12, color:C.text2 }}>{a.creado_por}</span></td>
-                    <td style={tdc}><span style={{ fontSize:11, color:C.text2 }}>{new Date(a.creado).toLocaleString('es-CO')}</span></td>
+                    <td style={tdc}><span style={{ fontSize:12, color:C.text, fontVariantNumeric:'tabular-nums' }}>{new Date(a.creado).toLocaleString('es-CO')}</span></td>
                     <td style={tdc}>
                       <Btn size="sm" variant="danger" onClick={()=>setConfirmState({ open:true, title:'Eliminar aviso', message:'¿Eliminar este aviso y sus adjuntos?', onConfirm:()=>{ delAviso.mutate(a.id); setConfirmState(cs=>({...cs,open:false})); } })} disabled={delAviso.isPending}>×</Btn>
                     </td>

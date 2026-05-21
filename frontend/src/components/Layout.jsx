@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import useAuthStore from '../hooks/useAuth';
@@ -6,6 +6,7 @@ import useInactivity from '../hooks/useInactivity';
 import api from '../utils/api';
 import { playBeep } from '../utils/audio';
 import WelcomeModal from './WelcomeModal';
+import useAppBadge from '../hooks/useAppBadge';
 
 
 const SIDEBAR_MIN = 48;
@@ -77,6 +78,33 @@ const navGroups = (rol) => [
   ] : []),
 ];
 
+function tiempoRelativo(fechaStr) {
+  const d = new Date(fechaStr.endsWith('Z') ? fechaStr : fechaStr + 'Z');
+  const diff = Date.now() - d.getTime();
+  const min = Math.floor(diff / 60000);
+  if (min < 1) return 'ahora';
+  if (min < 60) return `hace ${min} min`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `hace ${h}h`;
+  const dias = Math.floor(h / 24);
+  if (dias < 7) return `hace ${dias}d`;
+  return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
+}
+
+function tipoNotif(n) {
+  if (n.tarea_id) return { icon: '🔧', color: '#0EA5E9', bg: 'rgba(14,165,233,.13)', label: 'Tarea', ruta: '/tareas' };
+  const m = (n.mensaje || '').toLowerCase();
+  if (m.includes('novedad ss') || m.includes('novedad de pago'))
+    return { icon: '📋', color: '#10B981', bg: 'rgba(16,185,129,.13)', label: 'Nov. SS', ruta: '/novedades-clientes' };
+  if (m.includes('retiro'))
+    return { icon: '↩️', color: '#F59E0B', bg: 'rgba(245,158,11,.13)', label: 'Retiro', ruta: '/novedades-clientes' };
+  if (m.includes('aviso'))
+    return { icon: '📢', color: '#F59E0B', bg: 'rgba(245,158,11,.13)', label: 'Aviso', ruta: '/novedades-clientes' };
+  if (m.includes('novedad'))
+    return { icon: '👤', color: '#8B5CF6', bg: 'rgba(139,92,246,.13)', label: 'Novedad', ruta: '/novedades-clientes' };
+  return { icon: '🔔', color: '#6366F1', bg: 'rgba(99,102,241,.13)', label: 'Info', ruta: '/novedades-clientes' };
+}
+
 export default function Layout() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
@@ -141,15 +169,39 @@ export default function Layout() {
     prevNoLeidas.current = noLeidas;
   }, [noLeidas]);
 
+  useAppBadge(noLeidas);
 
-  const abrirNotifs = () => {
-    setShowNotifs(v => !v);
-    if (noLeidas > 0) {
-      api.put('/tareas/notificaciones/leer').then(() =>
-        qc.invalidateQueries({ queryKey: ['notificaciones'] })
-      ).catch(() => {});
-    }
+  const abrirNotifs = () => setShowNotifs(v => !v);
+
+  const marcarTodasLeidas = () => {
+    api.put('/tareas/notificaciones/leer').then(() =>
+      qc.invalidateQueries({ queryKey: ['notificaciones'] })
+    ).catch(() => {});
   };
+
+  const marcarUnaLeida = (id) => {
+    qc.setQueryData(['notificaciones'], prev =>
+      (prev || []).map(n => n.id === id ? { ...n, leida: true } : n)
+    );
+    api.put(`/tareas/notificaciones/${id}/leer`).catch(() =>
+      qc.invalidateQueries({ queryKey: ['notificaciones'] })
+    );
+  };
+
+  const gruposNotifs = useMemo(() => {
+    const map = new Map();
+    (notifs || []).forEach(n => {
+      if (map.has(n.mensaje)) {
+        const g = map.get(n.mensaje);
+        g.count++;
+        g.ids.push(n.id);
+        if (!n.leida) g.alguna_no_leida = true;
+      } else {
+        map.set(n.mensaje, { ...n, count: 1, ids: [n.id], alguna_no_leida: !n.leida });
+      }
+    });
+    return [...map.values()];
+  }, [notifs]);
 
   // ── Drag handlers ──────────────────────────────────────────────────────────
   const onMouseDown = useCallback((e) => {
@@ -299,8 +351,8 @@ export default function Layout() {
                     onClick={() => toggleGroup(group.id)}
                     style={{
                       width: '100%', background: 'none', border: 'none', cursor: 'pointer',
-                      fontSize: 9.5, color: '#6B7280', padding: '14px 18px 5px',
-                      fontWeight: 700, letterSpacing: '.15em', whiteSpace: 'nowrap',
+                      fontSize: 11, color: '#6366F1', padding: '16px 18px 5px',
+                      fontWeight: 800, letterSpacing: '.18em', whiteSpace: 'nowrap',
                       display: 'flex', alignItems: 'center', gap: 8, textAlign: 'left',
                     }}
                   >
@@ -314,31 +366,52 @@ export default function Layout() {
                   <div style={{ margin: '6px 10px', borderTop: '1px solid #1F2937' }} />
                 )}
                 {/* Group items */}
-                {!isGroupCollapsed && group.items.map((item) => (
-                  <NavLink key={item.to} to={item.to} end={item.to === '/'}
-                    title={collapsed ? item.label : undefined}
-                    onClick={() => isMobile && setMobileOpen(false)}
-                    className={({ isActive }) => ['sb-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
-                    style={({ isActive }) => ({
-                      display: 'flex', alignItems: 'center', position: 'relative',
-                      padding: collapsed ? '10px 0' : '9px 10px',
-                      margin: '1px 8px', borderRadius: 9, textDecoration: 'none', fontSize: 13,
-                      color: isActive ? '#F9FAFB' : '#9CA3AF',
-                      background: isActive ? '#1F2937' : 'transparent',
-                      fontWeight: isActive ? 600 : 400,
-                      justifyContent: collapsed ? 'center' : 'flex-start',
-                      whiteSpace: 'nowrap', overflow: 'hidden',
-                    })}>
-                    <span style={{ fontSize: collapsed ? 15 : 13, flexShrink: 0 }}>
-                      {item.label.split(' ')[0]}
-                    </span>
-                    {!collapsed && (
-                      <span style={{ marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {item.label.split(' ').slice(1).join(' ')}
+                {!isGroupCollapsed && group.items.map((item) => {
+                  const isNovClientes = item.to === '/novedades-clientes';
+                  const showDot = isNovClientes && noLeidas > 0;
+                  return (
+                    <NavLink key={item.to} to={item.to} end={item.to === '/'}
+                      title={collapsed ? item.label : undefined}
+                      onClick={() => isMobile && setMobileOpen(false)}
+                      className={({ isActive }) => ['sb-item', isActive ? 'active' : ''].filter(Boolean).join(' ')}
+                      style={({ isActive }) => ({
+                        display: 'flex', alignItems: 'center', position: 'relative',
+                        padding: collapsed ? '10px 0' : '9px 10px',
+                        margin: '1px 8px', borderRadius: 9, textDecoration: 'none', fontSize: 13.5,
+                        color: isActive ? '#F9FAFB' : '#D1D5DB',
+                        background: isActive ? '#1F2937' : 'transparent',
+                        fontWeight: isActive ? 700 : 500,
+                        justifyContent: collapsed ? 'center' : 'flex-start',
+                        whiteSpace: 'nowrap', overflow: 'hidden',
+                      })}>
+                      <span style={{ fontSize: collapsed ? 15 : 13, flexShrink: 0, position: 'relative' }}>
+                        {item.label.split(' ')[0]}
+                        {showDot && collapsed && (
+                          <span className="bbc-notif-dot" style={{
+                            position: 'absolute', top: -2, right: -3,
+                            width: 7, height: 7, borderRadius: '50%',
+                            background: '#EF4444', display: 'block',
+                          }} />
+                        )}
                       </span>
-                    )}
-                  </NavLink>
-                ))}
+                      {!collapsed && (
+                        <span style={{ marginLeft: 8, overflow: 'hidden', textOverflow: 'ellipsis', flex: 1 }}>
+                          {item.label.split(' ').slice(1).join(' ')}
+                        </span>
+                      )}
+                      {showDot && !collapsed && (
+                        <span className="bbc-notif-dot" style={{
+                          marginLeft: 'auto', marginRight: 4,
+                          background: '#EF4444', color: '#fff',
+                          borderRadius: 10, padding: '1px 6px',
+                          fontSize: 10, fontWeight: 700, flexShrink: 0,
+                        }}>
+                          {noLeidas}
+                        </span>
+                      )}
+                    </NavLink>
+                  );
+                })}
               </React.Fragment>
             );
           })}
@@ -346,17 +419,24 @@ export default function Layout() {
 
         {/* Notificaciones */}
         <div style={{ position: 'relative', padding: '6px 14px', borderTop: '1px solid #1F2937', display: 'flex', alignItems: 'center', gap: 6 }}>
-          <button onClick={abrirNotifs} style={{
-            background: 'none', border: 'none', color: 'rgba(255,255,255,.8)',
-            cursor: 'pointer', fontSize: 20, position: 'relative', padding: '4px 6px', flexShrink: 0,
-          }}>
+          <button onClick={abrirNotifs}
+            className={noLeidas > 0 ? 'bbc-notif-pulse' : ''}
+            style={{
+              background: noLeidas > 0 ? 'rgba(229,62,62,.15)' : 'none',
+              border: noLeidas > 0 ? '1px solid rgba(229,62,62,.35)' : '1px solid transparent',
+              borderRadius: 8,
+              color: noLeidas > 0 ? '#FCA5A5' : 'rgba(255,255,255,.8)',
+              cursor: 'pointer', fontSize: 22, position: 'relative', padding: '5px 8px', flexShrink: 0,
+              transition: 'all .2s',
+            }}>
             🔔
             {noLeidas > 0 && (
               <span style={{
-                position: 'absolute', top: 0, right: 0,
+                position: 'absolute', top: -2, right: -2,
                 background: '#E53E3E', color: 'white', borderRadius: '50%',
-                width: 17, height: 17, fontSize: 10, fontWeight: 700,
+                width: 18, height: 18, fontSize: 10, fontWeight: 700,
                 display: 'flex', alignItems: 'center', justifyContent: 'center',
+                boxShadow: '0 0 0 2px #111827',
               }}>
                 {noLeidas > 9 ? '9+' : noLeidas}
               </span>
@@ -367,23 +447,28 @@ export default function Layout() {
           {showNotifs && (
             <div style={{
               position: 'fixed', bottom: 70, left: Math.min(width + 8, 16),
-              width: 'clamp(300px, 35vw, 440px)',
+              width: 'clamp(300px, 35vw, 460px)',
               background: 'var(--c-surface)', borderRadius: 12,
               boxShadow: '0 12px 40px rgba(0,0,0,.3)', zIndex: 9999,
-              maxHeight: 'min(480px, 70vh)', display: 'flex', flexDirection: 'column',
+              maxHeight: 'min(520px, 75vh)', display: 'flex', flexDirection: 'column',
               border: '1px solid var(--c-border)',
             }}>
               {/* Header */}
               <div style={{ padding: '12px 16px', fontWeight: 700, fontSize: 14, borderBottom: '1px solid var(--c-border)', color: 'var(--c-text)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexShrink: 0 }}>
-                <span>🔔 Notificaciones {notifs.length > 0 && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--c-text2)' }}>({notifs.length})</span>}</span>
+                <span>🔔 Notificaciones {gruposNotifs.length > 0 && <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--c-text2)' }}>({gruposNotifs.length})</span>}</span>
                 <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  {notifs.length > 0 && (
+                  {noLeidas > 0 && (
+                    <button onClick={marcarTodasLeidas} style={{ background: 'var(--c-green-bg)', border: 'none', cursor: 'pointer', color: 'var(--c-green)', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6 }}>
+                      ✓ Todas leídas
+                    </button>
+                  )}
+                  {gruposNotifs.length > 0 && (
                     <button onClick={() => {
                       api.delete('/tareas/notificaciones').then(() =>
                         qc.invalidateQueries({ queryKey: ['notificaciones'] })
                       ).catch(() => {});
                     }} style={{ background: 'var(--c-red-bg)', border: 'none', cursor: 'pointer', color: 'var(--c-red)', fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6 }}>
-                      Limpiar todo
+                      Limpiar
                     </button>
                   )}
                   <button onClick={() => setShowNotifs(false)} style={{
@@ -395,22 +480,61 @@ export default function Layout() {
               </div>
               {/* Lista */}
               <div style={{ overflowY: 'auto', flex: 1 }}>
-                {notifs.length === 0
+                {gruposNotifs.length === 0
                   ? <p style={{ padding: '24px 16px', color: 'var(--c-text2)', fontSize: 13, margin: 0, textAlign: 'center' }}>Sin notificaciones nuevas</p>
-                  : notifs.map(n => (
-                    <div key={n.id} style={{
-                      padding: '12px 16px', borderBottom: '1px solid var(--c-border)',
-                      background: n.leida ? 'transparent' : 'var(--c-blue-bg)',
-                      display: 'flex', gap: 10, alignItems: 'flex-start',
-                    }}>
-                      <span style={{ fontSize: 18, flexShrink: 0, marginTop: 1 }}>{n.leida ? '📭' : '📬'}</span>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ color: 'var(--c-text)', fontSize: 13, lineHeight: 1.45, wordBreak: 'break-word' }}>{n.mensaje}</div>
-                        <div style={{ color: 'var(--c-text2)', fontSize: 11, marginTop: 4 }}>{new Date(n.creado).toLocaleString('es-CO')}</div>
+                  : gruposNotifs.map(g => {
+                    const tipo = tipoNotif(g);
+                    return (
+                      <div key={g.id} style={{
+                        padding: '11px 14px', borderBottom: '1px solid var(--c-border)',
+                        background: g.alguna_no_leida ? tipo.bg : 'transparent',
+                        display: 'flex', gap: 10, alignItems: 'flex-start',
+                        cursor: 'pointer', transition: 'background .15s',
+                      }}
+                        onClick={() => { navigate(tipo.ruta); setShowNotifs(false); }}
+                      >
+                        {/* Icono tipo */}
+                        <div style={{
+                          width: 34, height: 34, borderRadius: 8, flexShrink: 0,
+                          background: tipo.bg, border: `1px solid ${tipo.color}30`,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16,
+                        }}>
+                          {tipo.icon}
+                        </div>
+                        {/* Contenido */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 2, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: tipo.color, background: tipo.bg, border: `1px solid ${tipo.color}30`, borderRadius: 4, padding: '1px 6px', letterSpacing: '.03em' }}>
+                              {tipo.label}
+                            </span>
+                            {g.count > 1 && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: '#fff', background: '#6366F1', borderRadius: 10, padding: '1px 6px' }}>
+                                ×{g.count}
+                              </span>
+                            )}
+                            {g.alguna_no_leida && (
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', background: tipo.color, display: 'inline-block' }} />
+                            )}
+                          </div>
+                          <div style={{ color: 'var(--c-text)', fontSize: 12.5, lineHeight: 1.45, wordBreak: 'break-word' }}>{g.mensaje}</div>
+                          <div style={{ color: 'var(--c-text2)', fontSize: 11, marginTop: 3 }}>{tiempoRelativo(g.creado)}</div>
+                        </div>
+                        {/* Marcar leída */}
+                        {g.alguna_no_leida && (
+                          <button
+                            onClick={e => { e.stopPropagation(); g.ids.forEach(id => marcarUnaLeida(id)); }}
+                            title="Marcar como leída"
+                            style={{
+                              flexShrink: 0, width: 26, height: 26, borderRadius: 6,
+                              background: 'var(--c-surface2)', border: `1px solid ${tipo.color}40`,
+                              color: tipo.color, fontSize: 13, fontWeight: 700,
+                              cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              marginTop: 2,
+                            }}>✓</button>
+                        )}
                       </div>
-                      {!n.leida && <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--c-blue)', flexShrink: 0, marginTop: 5 }} />}
-                    </div>
-                  ))
+                    );
+                  })
                 }
               </div>
             </div>

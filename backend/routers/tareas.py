@@ -40,6 +40,16 @@ def leer_notificaciones(db: Session = Depends(get_db), token=Depends(verify_toke
     return {"ok": True}
 
 
+@router.put("/notificaciones/{notif_id}/leer")
+def leer_notificacion_individual(notif_id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    n = db.query(models.Notificacion).filter_by(id=notif_id, usuario=token["sub"]).first()
+    if not n:
+        raise HTTPException(404, "Notificación no encontrada")
+    n.leida = True
+    db.commit()
+    return {"ok": True}
+
+
 @router.delete("/notificaciones")
 def limpiar_notificaciones(db: Session = Depends(get_db), token=Depends(verify_token)):
     db.query(models.Notificacion).filter_by(usuario=token["sub"]).delete()
