@@ -155,10 +155,8 @@ def test_estado_planilla_pagada(client, admin_token):
 
     # Marcar planilla_pagada
     r2 = client.patch(f"/facturas/{fid}/planilla-pagada", headers=h)
-    # 200 si existe el endpoint, 404/405 si no — no rompemos el test si el endpoint difiere
-    assert r2.status_code in (200, 404, 405)
-    if r2.status_code == 200:
-        assert r2.json()["estado"] == "planilla_pagada"
+    assert r2.status_code == 200
+    assert r2.json()["estado"] == "planilla_pagada"
 
 
 # ─── AUDIT FIX: get_cobro NO cuenta pendiente como COBRADO ───────────────────
