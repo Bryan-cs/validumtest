@@ -22,17 +22,16 @@ if _sentry_dsn:
         environment=_os.getenv("RAILWAY_ENVIRONMENT", "development"),
     )
 
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
 import os
 from datetime import datetime, timezone
-from database import get_db, init_db, _is_sqlite
+from database import get_db, init_db
 from sqlalchemy.orm import Session
-import models, schemas, crud
-from models import COL_TZ
-from routers.deps import verify_token, require_admin, require_admin_or_empleado
+import models, crud
+from routers.deps import verify_token
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -293,6 +292,16 @@ from routers import portal as portal_router
 from routers.documentos import router as documentos_router
 from routers import planillas as planillas_router
 from routers import seguimiento_arl as seguimiento_arl_router
+from routers import eliminados as eliminados_router
+from routers import retiros as retiros_router
+from routers import empleados as empleados_router
+from routers import nomina as nomina_router
+from routers import gastos as gastos_router
+from routers import usuarios as usuarios_router
+from routers import config as config_router
+from routers import dashboard as dashboard_router
+from routers import cobro as cobro_router
+from routers import actividad as actividad_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
@@ -303,410 +312,16 @@ app.include_router(portal_router.router)
 app.include_router(documentos_router)
 app.include_router(planillas_router.router)
 app.include_router(seguimiento_arl_router.router)
-
-
-# ─── ELIMINADOS ───────────────────────────────────────────────────────────────
-@app.get("/eliminados")
-def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
-    import json as _json
-    def _parse_datos(datos_completos):
-        try:
-            return _json.loads(datos_completos or "{}")
-        except Exception:
-            return {}
-
-    rows = db.query(models.Eliminado).order_by(models.Eliminado.id.desc()).all()
-    return [
-        {
-            "id": r.id,
-            "nombre": r.nombre,
-            "doc": r.doc,
-            "empresa": r.empresa,
-            "fecha_eliminacion": r.fecha_eliminacion,
-            "mes": r.mes,
-            "eliminado_por": r.eliminado_por,
-            "estado_planilla": r.estado_planilla,
-            **{k: _parse_datos(r.datos_completos).get(k, "") for k in ("eps", "ccf", "fecha_afiliacion")},
-        }
-        for r in rows
-    ]
-
-
-@app.get("/eliminados/{id}/preview")
-def preview_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    """Retorna cuántos registros serán borrados junto con el eliminado."""
-    e = db.query(models.Eliminado).filter_by(id=id).first()
-    if not e:
-        raise HTTPException(404, "No encontrado")
-    n_facturas    = db.query(models.Factura).filter_by(doc=e.doc).count()
-    n_documentos  = db.query(models.Documento).filter_by(afiliado_doc=e.doc).count()
-    n_solicitudes = (
-        db.query(models.SolicitudNovedad).filter_by(afiliado_doc=e.doc).count() +
-        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=e.doc).count()
-    )
-    return {
-        "nombre": e.nombre,
-        "doc": e.doc,
-        "facturas": n_facturas,
-        "documentos": n_documentos,
-        "solicitudes": n_solicitudes,
-    }
-
-
-@app.delete("/eliminados/{id}")
-def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    e = db.query(models.Eliminado).filter_by(id=id).first()
-    if not e: raise HTTPException(404, "No encontrado")
-    nombre = e.nombre
-    doc = e.doc
-    try:
-        # Borrar cualquier registro del afiliado (activo o no)
-        db.query(models.Afiliado).filter_by(doc=doc).delete()
-        # Borrar facturas del afiliado
-        db.query(models.Factura).filter_by(doc=doc).delete()
-        # Borrar documentos del afiliado
-        db.query(models.Documento).filter_by(afiliado_doc=doc).delete()
-        # Borrar solicitudes de novedad y retiro del portal
-        db.query(models.SolicitudNovedad).filter_by(afiliado_doc=doc).delete()
-        db.query(models.SolicitudRetiro).filter_by(afiliado_doc=doc).delete()
-        # Borrar el registro de eliminado
-        db.delete(e)
-        crud._log(db, token.get("sub","sistema"), "eliminó permanentemente un afiliado y todos sus registros", "Afiliados", nombre)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise HTTPException(500, "Error al eliminar")
-    return {"ok": True}
-
-
-@app.patch("/eliminados/{id}/estado-planilla")
-def set_estado_planilla(id: int, estado: str, db: Session = Depends(get_db), token=Depends(verify_token)):
-    """Actualiza el estado de planilla de un eliminado: retiro_pendiente | planilla_hecha | planilla_pagada | null"""
-    ESTADOS_VALIDOS = {"retiro_pendiente", "planilla_hecha", "planilla_pagada", ""}
-    if estado not in ESTADOS_VALIDOS:
-        raise HTTPException(400, f"Estado inválido. Valores: {', '.join(s for s in ESTADOS_VALIDOS if s)}")
-    e = db.query(models.Eliminado).filter_by(id=id).first()
-    if not e:
-        raise HTTPException(404, "No encontrado")
-    e.estado_planilla = estado or None
-    db.commit()
-    return {"ok": True, "estado_planilla": e.estado_planilla}
-
-
-@app.post("/eliminados/{id}/restaurar")
-def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    import json as _json
-    e = db.query(models.Eliminado).filter_by(id=id).first()
-    if not e: raise HTTPException(404, "No encontrado")
-    existing = db.query(models.Afiliado).filter_by(doc=e.doc, activo=True).first()
-    if existing: raise HTTPException(400, f"Ya existe un afiliado activo con documento {e.doc}")
-
-    # Validar integridad del snapshot JSON
-    try:
-        datos = _json.loads(e.datos_completos or "{}")
-        if not datos or not datos.get("nombre") or not datos.get("doc"):
-            raise ValueError("Datos incompletos")
-    except (ValueError, _json.JSONDecodeError):
-        raise HTTPException(400, "Los datos del afiliado eliminado están corruptos y no se puede restaurar")
-
-    srvs = datos.get("servicios", [])
-    srvs_str = _json.dumps(srvs) if isinstance(srvs, list) else (srvs or "[]")
-    registrado_original = datos.get("registrado_por", token.get("sub", "sistema"))
-
-    # Buscar afiliado inactivo con mismo doc
-    a = db.query(models.Afiliado).filter_by(doc=e.doc).first()
-    if a:
-        # Restaurar todos los campos desde el snapshot, no solo activo/estado
-        a.activo = True
-        a.estado = "ACTIVO"
-        a.estado_srv = "ACTIVO"
-        a.nombre = datos.get("nombre", a.nombre)
-        a.empresa = datos.get("empresa", a.empresa)
-        a.servicios = srvs_str
-        a.eps = datos.get("eps", "")
-        a.arl = datos.get("arl", "")
-        a.ccf = datos.get("ccf", "")
-        a.afp = datos.get("afp", "")
-        a.subtipo = datos.get("subtipo", "0")
-        a.cliente_txt = datos.get("cliente_txt", "")
-        a.cargo = datos.get("cargo", "")
-        a.tel = datos.get("tel", "")
-        a.email = datos.get("email", "")
-        a.novedades = ""  # limpiar novedades stale del snapshot
-        a.ibc = datos.get("ibc")
-        a.fecha_ingreso = datos.get("fecha_ingreso", "")
-        a.fecha_afiliacion = datos.get("fecha_afiliacion", "")
-        a.registrado_por = registrado_original
-    else:
-        a = models.Afiliado(
-            nombre=datos.get("nombre", e.nombre), doc=e.doc,
-            empresa=datos.get("empresa", e.empresa),
-            estado="ACTIVO", estado_srv="ACTIVO", activo=True,
-            servicios=srvs_str,
-            eps=datos.get("eps",""), arl=datos.get("arl",""),
-            ccf=datos.get("ccf",""), afp=datos.get("afp",""),
-            subtipo=datos.get("subtipo","0"),
-            cliente_txt=datos.get("cliente_txt",""),
-            cargo=datos.get("cargo",""), tel=datos.get("tel",""),
-            email=datos.get("email",""),
-            novedades="",  # limpiar novedades stale del snapshot
-            ibc=datos.get("ibc"), fecha_ingreso=datos.get("fecha_ingreso",""),
-            fecha_afiliacion=datos.get("fecha_afiliacion",""),
-            registrado_por=registrado_original,
-        )
-        db.add(a)
-
-    # Limpiar solicitudes de retiro del afiliado restaurado (bloqueaban nuevos retiros)
-    db.query(models.SolicitudRetiro).filter_by(afiliado_doc=e.doc).delete()
-
-    # Reactivar facturas que fueron marcadas como huérfanas
-    db.query(models.Factura).filter_by(doc=e.doc, afiliado_eliminado=True).update(
-        {"afiliado_eliminado": False})
-
-    db.delete(e)
-    crud._log(db, token.get("sub","sistema"), "restauró un afiliado eliminado", "Afiliados", e.nombre)
-    crud.cache_invalidar("cobro:")
-    crud.cache_invalidar("afiliados:")
-    crud.cache_invalidar("dashboard:")
-    crud.cache_invalidar("dashboard_clientes:")
-    db.commit()
-    # Invalidar caché de usuarios cliente asociados al cliente_txt del afiliado restaurado
-    cliente_txt = datos.get("cliente_txt", "")
-    if cliente_txt:
-        from routers.deps import invalidate_user_cache
-        usuarios_cliente = db.query(models.Usuario).filter_by(cliente_ref=cliente_txt).all()
-        for u in usuarios_cliente:
-            invalidate_user_cache(u.username)
-            crud.cache_invalidar(f"usuario_rol:{u.username}")
-    return {"ok": True, "nombre": e.nombre}
-
-
-# ─── RETIROS ──────────────────────────────────────────────────────────────────
-@app.get("/retiros")
-def list_retiros(anio: str = "", mes: str = "", doc: str = "",
-                 skip: int = 0, limit: int = 500,
-                 db: Session = Depends(get_db), token=Depends(verify_token)):
-    limit = min(limit, 500)
-    return crud.get_retiros(db, anio=anio, mes=mes, doc=doc, skip=skip, limit=limit)
-
-
-@app.post("/retiros", status_code=201)
-def create_retiro(data: schemas.RetiroCreate,
-                  db: Session = Depends(get_db), token=Depends(verify_token)):
-    afil = crud.get_afiliado_by_doc(db, data.doc)
-    if not afil: raise HTTPException(404, "Afiliado no encontrado")
-    mes_actual = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
-                  "Julio","Agosto","Septiembre","Octubre","Noviembre","Diciembre"][datetime.now(COL_TZ).month-1]
-    pendientes = crud.get_facturas_pendientes_by_doc(db, data.doc, mes=mes_actual)
-    data.registrado_por = token.get("sub","sistema")
-    retiro = crud.create_retiro(db, data)
-    return {"retiro": retiro, "facturas_pendientes": len(pendientes),
-            "codigos_pendientes": [f.codigo for f in pendientes]}
-
-
-@app.delete("/retiros/{id}")
-def delete_retiro(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    crud.delete_retiro(db, id, user=token.get("sub","sistema"))
-    return {"ok": True}
-
-
-@app.post("/eliminados/{id}/a-retiros", status_code=201)
-def eliminado_a_retiros(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    return crud.eliminado_a_retiro(db, id, user=token.get("sub","sistema"))
-
-
-# ─── EMPLEADOS ────────────────────────────────────────────────────────────────
-@app.get("/empleados")
-def list_empleados(db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_empleados(db)
-
-
-@app.post("/empleados", status_code=201)
-def create_empleado(data: schemas.EmpleadoCreate,
-                    db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.create_empleado(db, data)
-
-
-@app.put("/empleados/{id}")
-def update_empleado(id: int, data: schemas.EmpleadoCreate,
-                    db: Session = Depends(get_db), token=Depends(require_admin)):
-    result = crud.update_empleado(db, id, data)
-    if not result: raise HTTPException(404, "Empleado no encontrado")
-    return result
-
-
-@app.delete("/empleados/{id}")
-def delete_empleado(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    e = db.query(models.Empleado).filter_by(id=id).first()
-    if not e: raise HTTPException(404, "Empleado no encontrado")
-    crud.delete_empleado(db, id, user=token.get("sub", "sistema"))
-    return {"ok": True}
-
-
-# ─── GASTOS MENSUALES ─────────────────────────────────────────────────────────
-@app.get("/gastos")
-def list_gastos(mes: int, anio: int,
-                db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_gastos(db, mes=mes, anio=anio)
-
-
-@app.post("/gastos", status_code=201)
-def create_gasto(data: schemas.GastoCreate,
-                 db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.create_gasto(db, data)
-
-
-@app.post("/gastos/copiar")
-def copiar_gastos(data: schemas.CopiarMesRequest,
-                  db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.copiar_gastos_mes_anterior(
-        db, data.mes_origen, data.anio_origen, data.mes_destino, data.anio_destino,
-        user=token.get("sub", "sistema"))
-
-
-@app.put("/gastos/{id}")
-def update_gasto(id: int, data: schemas.GastoUpdate,
-                 db: Session = Depends(get_db), token=Depends(require_admin)):
-    result = crud.update_gasto(db, id, data)
-    if not result: raise HTTPException(404, "Gasto no encontrado")
-    return result
-
-
-@app.delete("/gastos/{id}")
-def delete_gasto(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    crud.delete_gasto(db, id, user=token.get("sub", "sistema"))
-    return {"ok": True}
-
-
-# ─── INGRESOS ADICIONALES ────────────────────────────────────────────────────
-
-@app.get("/ingresos-adicionales")
-def list_ingresos_adicionales(mes: int = None, anio: int = None,
-                               db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_ingresos_adicionales(db, mes=mes, anio=anio)
-
-
-@app.post("/ingresos-adicionales", status_code=201)
-def create_ingreso_adicional(data: schemas.IngresoAdicionalCreate,
-                              db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.create_ingreso_adicional(db, data, user=token.get("sub", "sistema"))
-
-
-@app.put("/ingresos-adicionales/{id}")
-def update_ingreso_adicional(id: int, data: schemas.IngresoAdicionalCreate,
-                              db: Session = Depends(get_db), token=Depends(require_admin)):
-    result = crud.update_ingreso_adicional(db, id, data, user=token.get("sub", "sistema"))
-    if not result:
-        raise HTTPException(404, "Ingreso adicional no encontrado")
-    return result
-
-
-@app.delete("/ingresos-adicionales/{id}")
-def delete_ingreso_adicional(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    ok = crud.delete_ingreso_adicional(db, id, user=token.get("sub", "sistema"))
-    if not ok: raise HTTPException(404, "Ingreso adicional no encontrado")
-    return {"ok": True}
-
-
-# ─── NÓMINA MENSUAL ───────────────────────────────────────────────────────────
-@app.get("/nomina")
-def get_nomina(mes: int, anio: int,
-               db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_nomina_mensual(db, mes=mes, anio=anio)
-
-
-@app.post("/nomina/copiar")
-def copiar_nomina(data: schemas.CopiarMesRequest,
-                  db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.copiar_nomina_mes_anterior(
-        db, data.mes_origen, data.anio_origen, data.mes_destino, data.anio_destino,
-        user=token.get("sub", "sistema"))
-
-
-@app.put("/nomina/{empleado_id}")
-def update_nomina_mensual(empleado_id: int, mes: int, anio: int,
-                          data: schemas.NominaItemUpdate,
-                          db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.upsert_nomina_mensual(db, empleado_id, mes, anio, data.valor,
-                                      user=token.get("sub", "sistema"))
-
-
-# ─── USUARIOS ─────────────────────────────────────────────────────────────────
-@app.get("/usuarios")
-def list_usuarios(db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_usuarios(db)
-
-
-@app.post("/usuarios", status_code=201)
-def create_usuario(data: schemas.UsuarioCreate,
-                   db: Session = Depends(get_db), token=Depends(require_admin)):
-    existing = crud.get_user_by_username(db, data.username)
-    if existing:
-        raise HTTPException(400, f"El usuario '{data.username}' ya existe")
-    return crud.create_usuario(db, data)
-
-
-@app.put("/usuarios/{id}/password")
-def change_usuario_password(id: int, data: schemas.UsuarioPasswordUpdate,
-                            db: Session = Depends(get_db), token=Depends(require_admin)):
-    u = crud.update_usuario_password(db, id, data.password, user=token.get("sub", "admin"))
-    if not u:
-        raise HTTPException(404, "Usuario no encontrado")
-    return {"ok": True}
-
-
-@app.delete("/usuarios/{id}")
-def delete_usuario(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    u = crud.get_usuario(db, id)
-    if not u: raise HTTPException(404, "Usuario no encontrado")
-    if u.username == "admin":
-        raise HTTPException(400, "No puedes eliminar el administrador principal")
-    if u.rol == "admin":
-        admins_activos = db.query(models.Usuario).filter_by(rol="admin", activo=True).count()
-        if admins_activos <= 1:
-            raise HTTPException(400, "No puedes eliminar el único admin activo del sistema")
-    crud.delete_usuario(db, id, user=token.get("sub","sistema"))
-    return {"ok": True}
-
-
-# ─── CONFIGURACIÓN ────────────────────────────────────────────────────────────
-@app.get("/config")
-def get_config(db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
-    return crud.get_config(db)
-
-
-@app.put("/config")
-def update_config(data: schemas.ConfigUpdate,
-                  db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.update_config(db, data, user=token.get("sub", "sistema"))
-
-
-# ─── DASHBOARD ────────────────────────────────────────────────────────────────
-@app.get("/dashboard")
-def dashboard(anio: str = "", mes: str = "",
-              db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
-    return crud.get_dashboard(db, anio=anio, mes=mes)
-
-
-@app.get("/dashboard/clientes")
-def dashboard_clientes(anio: str = "", mes: str = "",
-                       db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_resumen_clientes(db, anio=anio, mes=mes)
-
-
-@app.get("/dashboard/cliente/{cliente}")
-def dashboard_cliente(cliente: str, anio: str = "", mes: str = "",
-                      db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.get_dashboard_cliente(db, cliente=cliente, anio=anio, mes=mes)
-
-
-# ─── MÓDULO DE COBRO ──────────────────────────────────────────────────────────
-@app.get("/cobro")
-def cobro(empresa: str = "", cliente: str = "", tipo: str = "",
-          mes: str = "", anio: str = "", doc: str = "",
-          db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
-    return crud.get_cobro(db, empresa=empresa, cliente=cliente, tipo=tipo,
-                          mes=mes, anio=anio, doc=doc)
+app.include_router(eliminados_router.router)
+app.include_router(retiros_router.router)
+app.include_router(empleados_router.router)
+app.include_router(nomina_router.router)
+app.include_router(gastos_router.router)
+app.include_router(usuarios_router.router)
+app.include_router(config_router.router)
+app.include_router(dashboard_router.router)
+app.include_router(cobro_router.router)
+app.include_router(actividad_router.router)
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
@@ -768,48 +383,6 @@ def health_detail(db: Session = Depends(get_db), token=Depends(verify_token)):
         from fastapi.responses import JSONResponse
         return JSONResponse(status_code=503, content=result)
     return result
-
-
-# ─── ACTIVIDAD (solo admin) ───────────────────────────────────────────────────
-@app.get("/actividad")
-def actividad(modulo: str = "", usuario: str = "",
-              desde: str = "", hasta: str = "",
-              skip: int = 0, limit: int = 200,
-              db: Session = Depends(get_db), token=Depends(require_admin)):
-    limit = min(limit, 1000) if limit > 0 else 200
-    return crud.get_actividad(db, modulo=modulo, usuario=usuario, desde=desde, hasta=hasta,
-                              skip=skip, limit=limit)
-
-
-@app.delete("/actividad")
-def clear_actividad(db: Session = Depends(get_db), token=Depends(require_admin)):
-    crud.clear_actividad(db, user=token.get("sub", "sistema"))
-    return {"ok": True}
-
-
-# ─── CLIENTES ÚNICOS ──────────────────────────────────────────────────────────
-@app.get("/clientes")
-def list_clientes(db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
-    """Retorna la lista de clientes únicos (cliente_txt) de afiliados activos."""
-    rows = (db.query(models.Afiliado.cliente_txt)
-              .filter(models.Afiliado.activo == True, models.Afiliado.cliente_txt != None, models.Afiliado.cliente_txt != "")
-              .distinct()
-              .order_by(models.Afiliado.cliente_txt)
-              .all())
-    return [r[0] for r in rows]
-
-
-# ─── LISTAS DE REFERENCIA ─────────────────────────────────────────────────────
-@app.get("/listas")
-def get_listas(db: Session = Depends(get_db), token=Depends(verify_token)):
-    return crud.get_listas(db)
-
-
-@app.put("/listas/{nombre}")
-def update_lista(nombre: str, data: schemas.ListaUpdate,
-                 db: Session = Depends(get_db), token=Depends(require_admin)):
-    return crud.update_lista(db, nombre, data.items, user=token.get("sub", "sistema"))
-
 
 
 if __name__ == "__main__":
