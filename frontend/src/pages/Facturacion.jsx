@@ -802,7 +802,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                 <thead>
                   <tr style={{ background:C.surface2 }}>
                     {['Concepto','Descripción','Valor','Mes','Año','Registrado por','Fecha',''].map(h => (
-                      <th key={h} style={{ padding:'10px 12px', fontSize:12, fontWeight:600, color:C.text2, textAlign:'left', borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                      <th key={h} style={{ padding:'10px 12px', fontSize:13, fontWeight:700, color:C.text, textAlign:'left', borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
