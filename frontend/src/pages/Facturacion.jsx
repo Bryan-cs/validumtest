@@ -902,8 +902,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   onChange={toggleTodos} title="Seleccionar todas las pendientes" />
               </th>
               {['Código','Afiliado','Cliente','Período','Ingreso','Planilla','Utilidad','Banco','Estado','Novedades','Acciones'].map(h=>(
-                <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                  color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:13,fontWeight:700,
+                  color:C.text,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
