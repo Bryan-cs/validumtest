@@ -13,15 +13,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 cd bbcfile/backend
 pip install -r requirements.txt
 uvicorn main:app --reload        # Dev server → http://localhost:8000
-# API docs: http://localhost:8000/docs
+# API docs: http://localhost:8000/docs (solo en dev — deshabilitado en prod)
 ```
 
 ### Frontend
 ```bash
 cd bbcfile/frontend
-npm install
-npm start          # Dev server → http://localhost:3000
-npm run build      # Build de producción
+pnpm install
+pnpm start         # Dev server → http://localhost:5173
+pnpm run build     # Build de producción
 ```
 
 ## Architecture
@@ -29,77 +29,91 @@ npm run build      # Build de producción
 ### Backend (`bbcfile/backend/`)
 
 **Archivos principales:**
-- **`main.py`** — FastAPI app; incluye 9 routers + endpoints directos para eliminados, retiros, empleados, gastos, nómina, usuarios, config, dashboard, cobro, actividad, listas y clientes. Rate limiting con SlowAPI, headers de seguridad, CORS `allow_origins=["*"]`.
-- **`crud.py`** — Toda la lógica de negocio (~1100 líneas). Cálculos de aportes de seguridad social colombiana (EPS, AFP, ARL, CCF, SENA, ICBF). Caché Redis en producción / dict en memoria para dev.
-- **`models.py`** — 17 modelos ORM: `Usuario`, `Afiliado`, `Factura`, `Retiro`, `Eliminado`, `Empleado`, `Gasto`, `NominaMensual`, `Config`, `Lista`, `SolicitudNovedad`, `NovedadPago`, `SolicitudRetiro`, `Actividad`, `Tarea`, `TareaComentario`, `LoginAttempt`, `Notificacion`, `PlanillaPago`, `Documento`.
-- **`schemas.py`** — Pydantic v2 schemas.
-- **`database.py`** — SQLAlchemy; auto-crea tablas con `init_db()`; auto-migra URLs SQLite → PostgreSQL.
-- **`logger.py`** — Logging estructurado.
+- **`main.py`** — FastAPI app; incluye todos los routers + endpoints directos. Rate limiting por usuario autenticado (SlowAPI + middleware propio), headers de seguridad, CORS restringido a orígenes conocidos.
+- **`crud.py`** — Shim de re-exportación. La lógica de negocio está dividida en 14 submódulos:
+  - `crud_afiliados.py` — CRUD afiliados, filtros, opciones
+  - `crud_facturas.py` — Facturas, pagos, ingresos adicionales
+  - `crud_cobro.py` — Cálculo de cobro SS por afiliado
+  - `crud_dashboard.py` — Métricas dashboard y reportes financieros por cliente
+  - `crud_cache.py` — Helpers Redis / dict en memoria
+  - `crud_helpers.py` — Utilidades compartidas (`_log`, `_next_codigo`, `fmt`)
+  - `crud_retiros.py`, `crud_tareas.py`, `crud_usuarios.py`, `crud_empleados.py`
+  - `crud_gastos.py`, `crud_nomina.py`, `crud_actividad.py`, `crud_config.py`
+- **`models.py`** — Modelos ORM SQLAlchemy.
+- **`schemas.py`** — Pydantic v2 schemas con validaciones de negocio SS colombiana.
+- **`database.py`** — SQLAlchemy; `init_db()` + `_ensure_indexes()`. Auto-migra URLs SQLite → PostgreSQL.
+- **`logger.py`** — Logging estructurado JSON (Railway-friendly).
+- **`const.py`** — Constantes compartidas (`MESES`, `SMMLV`).
 
 **Routers (`backend/routers/`):**
-- `auth.py` — Login, JWT, bloqueo por intentos fallidos.
-- `afiliados.py` — CRUD afiliados con paginación y filtros avanzados.
-- `facturas.py` — Facturación, pago, generación PDF.
-- `reportes.py` — Exportaciones Excel y PDF.
-- `tareas.py` — Módulo de tareas internas con comentarios y notificaciones.
-- `portal.py` — Portal del cliente: solicitudes de novedad/retiro, novedades de pago.
-- `documentos.py` — Subida/descarga de archivos; almacenamiento en Cloudflare R2 (producción) o disco local (dev).
-- `backups.py` — Backups de base de datos.
-- `planillas.py` — Planillas de pago de seguridad social por cliente.
+- `auth.py` — Login, JWT (AT 15 min / RT cookie httpOnly), bloqueo brute-force por IP + combo IP:username.
+- `afiliados.py` — CRUD afiliados con paginación server-side y filtros avanzados.
+- `facturas.py` — Facturación, pago, generación PDF, ingresos adicionales.
+- `reportes.py` — Exportaciones Excel y PDF (afiliados, cobro, financiero, consolidado, eliminados).
+- `tareas.py` — Tareas internas con comentarios y notificaciones.
+- `portal.py` — Portal del cliente: solicitudes novedad/retiro, novedades de pago, reportes.
+- `documentos.py` — Subida/descarga archivos; Cloudflare R2 (prod) o disco local (dev). Valida magic bytes.
+- `planillas.py` — Planillas SS por cliente; uploads paralelos a R2.
+- `eliminados.py` — Restaurar, borrar permanente, mover a retiros.
+- `cobro.py`, `dashboard.py`, `actividad.py`, `config.py` — Endpoints de sus dominios.
+- `empleados.py`, `gastos.py`, `nomina.py`, `retiros.py`, `usuarios.py` — CRUD de sus entidades.
+- `seguimiento_arl.py` — Seguimiento de afiliados en espera de activación ARL.
 
-**Auth:** JWT HS256, tokens de 12 horas, roles: `admin` | `empleado` | `cliente`.
+**Auth:** JWT HS256. Access token 15 min. Refresh token en cookie httpOnly (`SameSite=None; Secure` en prod). Roles: `admin` | `empleado` | `cliente`.
 
-**Soft deletes:** Afiliados eliminados → tabla `Eliminado` (restaurable). Retiro eliminado → afiliado pasa a `Eliminado` (no reactivar).
+**Soft deletes:** Afiliados eliminados → tabla `Eliminado` (restaurable). Retiro → afiliado pasa a `Eliminado` (no reactivar).
 
-**Audit trail:** Todas las mutaciones registradas en tabla `Actividad`.
+**Audit trail:** Mutaciones registradas en tabla `Actividad` (excepto admin — intencional). Retención 90 días.
 
-**Caché:** Redis en producción (variable `REDIS_URL`), dict en memoria para dev. Prefijos: `cobro:`, `dashboard:`. Se invalida en operaciones que afectan cobro/dashboard.
+**Caché:** Redis en producción (`REDIS_URL`), dict en memoria para dev. Prefijos: `cobro:`, `dashboard:`, `dashboard_clientes:`, `afiliados:`. Invalidación explícita en cada mutación relevante.
 
 **Estados de afiliado (`estado_srv`):** ACTIVO, SUSPENDIDO, RETIRADO, DOBLE_AFILIACION, NO_ENCONTRADO, EN_ESPERA.
+
+**Scheduler:** `bbc-daily` y `bbc-monthly` como servicios Cron separados en Railway. `ENABLE_SCHEDULER=false` en el servicio web — APScheduler no corre en prod.
 
 ### Frontend (`bbcfile/frontend/src/`)
 
 **Archivos clave:**
-- **`App.jsx`** — BrowserRouter, QueryClientProvider, rutas con `PrivateRoute` y `ClienteOnlyRoute`.
-- **`utils/api.js`** — Axios con interceptor JWT (Zustand store).
-- **`hooks/useAuth.js`** — Zustand: token, rol, login/logout.
-- **`components/Layout.jsx`** — Sidebar + shell. Notificaciones en tiempo real (polling cada 30s) con sonido Web Audio API al llegar nuevas.
-- **`components/UI.jsx`** — Design system propio (sin librería externa). Exports: `C` (colores), `StatCard`, `Btn`, `fmt`, etc.
+- **`App.jsx`** — BrowserRouter, QueryClientProvider (`staleTime:30s, refetchOnWindowFocus:false`), rutas con `PrivateRoute` y `ClienteOnlyRoute`. Cada ruta envuelta en `ErrorBoundary` individual.
+- **`utils/api.js`** — Axios con interceptor JWT, `_refreshPromise` compartida (evita race condition 401 simultáneos), `withCredentials:true`.
+- **`hooks/useAuth.js`** — Zustand persist con `_hasHydrated` guard. Token en `bbc-auth` store, sin `localStorage['token']` separado.
+- **`components/Layout.jsx`** — Sidebar colapsable con grupos, notificaciones polling 30s con sonido, WelcomeModal al iniciar sesión.
+- **`components/UI.jsx`** — Design system propio. Exports: `C` (colores), `StatCard`, `Btn`, `fmt`, `Modal`, `ErrorMsg`, `SkeletonRow`, etc.
 - **`components/FiltroCheck.jsx`** — Dropdown de filtros múltiples reutilizable.
+- **`utils/colors.js`** — `hashStr`, colores determinísticos por empresa/banco.
 
 **Páginas (`pages/`):**
 
 | Ruta | Página | Acceso |
 |---|---|---|
-| `/afiliados` | `Afiliados.jsx` | Todos |
-| `/retiros` | `Retiros.jsx` + `Pages.jsx` | Todos |
+| `/` | `Dashboard.jsx` | Admin/Empleado |
+| `/afiliados` | `Afiliados.jsx` | Admin/Empleado |
+| `/retiros` | `Retiros.jsx` + `Pages.jsx` | Admin/Empleado |
 | `/tareas` | `Tareas.jsx` | Todos |
-| `/facturacion` | `Facturacion.jsx` | Todos |
-| `/cobro` | `Cobro.jsx` | Todos |
-| `/planillas-ss` | `PlanillasSS.jsx` | Todos |
+| `/facturacion` | `Facturacion.jsx` | Admin/Empleado |
+| `/cobro` | `Cobro.jsx` | Admin/Empleado |
+| `/planillas-ss` | `PlanillasSS.jsx` | Admin/Empleado |
+| `/finanzas` | `Finanzas.jsx` | Admin |
 | `/empleados` | `Empleados.jsx` | Admin |
 | `/usuarios` | `Usuarios.jsx` | Admin |
 | `/listas` | `Listas.jsx` | Admin |
 | `/calculadora` | `Calculadora.jsx` | Admin |
 | `/actividad` | `Actividad.jsx` | Admin |
 | `/novedades-clientes` | `NovedadesClientes.jsx` | Admin |
-| `/backups` | `Backups.jsx` | Admin |
 | `/portal` | `PortalCliente.jsx` | Cliente |
 
-**Dashboard (`Dashboard.jsx`):** Filtros por año y mes. Cards de afiliados (Activos, Suspendidos, Doble afiliación, No se encuentra, En espera activac., Total). Cards financieras (Facturas, Ingresos, Pendiente período, ⚠ Pendiente total all-time, Nóminas, Gastos fijos, Utilidad neta). Refetch cada 2 minutos.
+**Cobro (`Cobro.jsx`):** Solo muestra afiliados con cobro hoy (COBRAR_HOY) o mañana (PROXIMO). Ventana 2 meses.
 
-**Cobro (`Cobro.jsx`):** Solo muestra afiliados con cobro hoy (COBRAR_HOY) o mañana (PROXIMO). No carga días futuros.
+**Retiros (`Pages.jsx`):** Búsqueda bajo demanda por documento. Eliminar retiro mueve afiliado a Eliminados.
 
-**Retiros (`Pages.jsx`):** Tab "📋 Consultar retiro" — búsqueda bajo demanda por número de documento (no carga historial automáticamente). Eliminar retiro mueve el afiliado a Eliminados.
-
-**Afiliados → tab Eliminados:** Botones: ↩ Restaurar | 📋 → Retiros | 🗑️ Borrar. "→ Retiros" crea un registro en historial de retiros desde el eliminado.
+**Afiliados → tab Eliminados:** ↩ Restaurar | 📋 → Retiros | 🗑️ Borrar permanente.
 
 **Stack:**
-- React 18.3, React Router 6, TanStack React Query 5, Zustand 5, Axios, Recharts, React Hot Toast, React Icons, Tailwind CSS 3.
+- React 18.3, React Router 6, TanStack React Query 5, Zustand 5, Axios, Recharts, Sonner, Tailwind CSS 3, shadcn/ui, pnpm.
 
 ### Data Flow
 ```
-React Page → Axios (api.js) → FastAPI (main.py) → crud.py → SQLAlchemy → PostgreSQL
+React Page → Axios (api.js) → FastAPI (main.py) → crud_*.py → SQLAlchemy → PostgreSQL
                 ↑                                      ↑
         Zustand (auth)                         Redis cache (prod)
         React Query (cache)
@@ -110,20 +124,24 @@ React Page → Axios (api.js) → FastAPI (main.py) → crud.py → SQLAlchemy �
 | Variable | Purpose | Default |
 |---|---|---|
 | `DATABASE_URL` | PostgreSQL connection string | SQLite (`bbcfile.db`) en dev |
-| `SECRET_KEY` | JWT signing key | Key hardcoded dev — **cambiar en prod** |
+| `SECRET_KEY` | JWT signing key | Vacío — **requerido en prod** |
 | `PORT` | Puerto del servidor | 8000 |
 | `REDIS_URL` | Redis para caché | Sin Redis = caché en memoria |
-| `STORAGE_BUCKET` | Bucket Cloudflare R2 | Sin bucket = disco local |
+| `STORAGE_BUCKET` | Bucket Cloudflare R2 | Sin bucket = disco local (falla en prod) |
 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credenciales R2 | — |
 | `R2_ENDPOINT_URL` | Endpoint R2 | — |
+| `SENTRY_DSN` | Monitoreo de errores | Opcional |
+| `WEB_CONCURRENCY` | Workers Uvicorn | 1 |
+| `ENABLE_SCHEDULER` | APScheduler en proceso web | `false` |
 
 ## Deployment
 
-- **Backend**: Railway (`Procfile`: `web: uvicorn main:app --host 0.0.0.0 --port $PORT`)
-- **Frontend**: Vercel
-- **Almacenamiento de archivos**: Cloudflare R2
-- **Base de datos**: PostgreSQL en Railway
-- **Git workflow**: commits y push a `dev` por defecto. Solo push a `main` cuando se indique explícitamente ("push a main").
+- **Backend**: Railway (`railway.toml` — fuente de verdad del startCommand)
+- **Frontend**: Vercel (detecta pnpm por `pnpm-lock.yaml`)
+- **Archivos**: Cloudflare R2
+- **DB**: PostgreSQL en Railway (backups diarios nativos Railway Pro)
+- **Cron**: `bbc-daily` (00:00 UTC) y `bbc-monthly` (06:00 UTC 1er día) — servicios separados Railway
+- **Git workflow**: commits y push a `dev` por defecto. Solo push a `main` cuando se indique explícitamente ("push a main"). Merge solo si GitHub Actions ✅ verde.
 
 ## Credenciales dev por defecto
 - `admin / admin1234`
@@ -131,7 +149,7 @@ React Page → Axios (api.js) → FastAPI (main.py) → crud.py → SQLAlchemy �
 
 ## Agents Team
 
-BBC File tiene un equipo de 8 agentes especializados orquestados por la sesión principal de Claude Code. Los prompts de cada agente están en `bbcfile/.claude/agents/`.
+BBC File tiene un equipo de agentes especializados orquestados por la sesión principal de Claude Code. Los prompts están en `bbcfile/.claude/agents/`.
 
 ### Cuándo usar agentes (NECESARIO, no por defecto)
 
@@ -148,7 +166,7 @@ BBC File tiene un equipo de 8 agentes especializados orquestados por la sesión 
 - Cualquier tarea describible en 1 línea
 - El orquestador ya conoce el contexto completo y el cambio es trivial
 
-**Regla:** Si puedes hacerlo directo en menos tiempo del que tarda el pipeline de agentes, hazlo directo. Los agentes son para calidad y paralelismo en trabajo complejo, no un modo por defecto.
+**Regla:** Si puedes hacerlo directo en menos tiempo del que tarda el pipeline de agentes, hazlo directo.
 
 ### Agentes disponibles
 
@@ -158,33 +176,12 @@ BBC File tiene un equipo de 8 agentes especializados orquestados por la sesión 
 | `bbc-architect` | `.claude/agents/bbc-architect.md` | Revisión arquitectónica antes de implementar |
 | `bbc-planner` | `.claude/agents/bbc-planner.md` | Descomposición de tareas con dependencias |
 | `bbc-db` | `.claude/agents/bbc-db.md` | Modelos SQLAlchemy + migraciones Alembic |
-| `bbc-backend` | `.claude/agents/bbc-backend.md` | FastAPI, crud.py, routers |
+| `bbc-backend` | `.claude/agents/bbc-backend.md` | FastAPI, crud_*.py, routers |
 | `bbc-frontend` | `.claude/agents/bbc-frontend.md` | React pages, TanStack Query |
 | `bbc-domain-reviewer` | `.claude/agents/bbc-domain-reviewer.md` | Validación de lógica de negocio SS colombiana |
 | `bbc-reviewer` | `.claude/agents/bbc-reviewer.md` | Revisión de calidad y bugs |
 | `bbc-tester` | `.claude/agents/bbc-tester.md` | Tests pytest (SQLite + PostgreSQL integración) |
 | `bbc-changelog` | `.claude/agents/bbc-changelog.md` | Actualización Obsidian |
-
-### Cómo despachar un agente
-
-El orquestador lee el skill + _shared-context antes de despachar:
-
-```python
-# Pseudocódigo — el orquestador (sesión principal) hace esto antes de cada Agent() call:
-shared = Read(".claude/agents/_shared-context.md")
-skill  = Read(".claude/agents/bbc-backend.md")  # o el agente que corresponda
-
-Agent(
-  description="Implementar endpoint GET /nuevo-modulo",
-  prompt=f"{shared}\n\n{skill}\n\n## Tarea\n{tarea}\n\n## Context del Explorer\n{handoff_explorer}"
-)
-```
-
-### Hot Context Injection
-
-Antes de despachar el primer agente de cualquier tarea, leer:
-1. Últimas 2 entradas de `Changelog.md` en Obsidian Vault
-2. Nota del módulo afectado en `Obsidian Vault/BBC File/Módulos/`
 
 ### Estrategias de ejecución
 
@@ -197,8 +194,5 @@ Auditoría:              explorer → backend + frontend (paralelo) → domain-r
 Cambio SS/facturación:  explorer → architect → planner → backend → domain-reviewer → reviewer → tester → changelog
 ```
 
-`domain-reviewer` es obligatorio cuando la tarea toca: cálculos SS, estados de factura, cobro, planillas, ingresos/utilidad.
-`architect` es obligatorio cuando la tarea toca: nuevo modelo, nuevo endpoint, cambio en auth, lógica de caché.
-
-### Spec completo
-Ver: `docs/superpowers/specs/2026-04-17-bbc-agents-team-design.md`
+`domain-reviewer` obligatorio: cálculos SS, estados factura, cobro, planillas, ingresos/utilidad.
+`architect` obligatorio: nuevo modelo, nuevo endpoint, cambio auth, lógica caché.
