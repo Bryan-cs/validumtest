@@ -898,7 +898,7 @@ export default function Tareas() {
                 <div style={{ marginBottom: 16 }}>
                   <label style={lbl}>ASIGNAR A <span style={{ color: C.red }}>*</span></label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                    {usuarios.filter(u => u.activo).map(u => {
+                    {usuarios.filter(u => u.activo && (u.rol === 'admin' || u.rol === 'empleado')).map(u => {
                       const selected = form.asignado_a === u.username;
                       const words = (u.nombre || u.username).trim().split(/\s+/);
                       const initials = words.length >= 2

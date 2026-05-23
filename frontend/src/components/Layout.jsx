@@ -409,7 +409,7 @@ export default function Layout() {
                           borderRadius: 10, padding: '1px 6px',
                           fontSize: 10, fontWeight: 700, flexShrink: 0,
                         }}>
-                          {noLeidas}
+                          {noLeidasPortal}
                         </span>
                       )}
                     </NavLink>
