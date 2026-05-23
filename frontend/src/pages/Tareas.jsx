@@ -269,13 +269,18 @@ export default function Tareas() {
   const todasSeleccionadas = completadasList.length > 0 && completadasList.every(t => seleccionadas.has(t.id));
 
   const truncar = (txt, max = 30) => txt && txt.length > max ? txt.slice(0, max).trim() + '…' : txt;
-  const inicioSemana = (() => { const d = new Date(); d.setHours(0,0,0,0); const day = d.getDay(); d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); return d; })();
+  const inicioSemanaStr = (() => {
+    const d = new Date();
+    const day = d.getDay();
+    d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+    return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  })();
   const kpiSemanal = (() => {
     const map = {};
     tareas.forEach(t => {
-      if ((t.estado === 'completada' || t.estado === 'finalizada') && t.completado_en) {
-        const cd = new Date(t.completado_en);
-        if (cd >= inicioSemana) { const k = t.asignado_a || 'Sin asignar'; map[k] = (map[k] || 0) + 1; }
+      if (t.estado === 'completada' || t.estado === 'finalizada') {
+        const fechaRef = (t.completado_en || t.creado || '').slice(0, 10);
+        if (fechaRef >= inicioSemanaStr) { const k = t.asignado_a || 'Sin asignar'; map[k] = (map[k] || 0) + 1; }
       }
     });
     return Object.entries(map).sort((a, b) => b[1] - a[1]);
