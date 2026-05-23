@@ -169,32 +169,6 @@ def _delete_file(unique_name: str):
 
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
-@router.get("/r2/cliente/{cliente}")
-def listar_r2_cliente(
-    cliente: str,
-    db: Session = Depends(get_db),
-    token=Depends(verify_token),
-):
-    """Lista todos los archivos en R2 bajo afiliados/{cliente}/. Solo admin."""
-    if token.get("rol") != "admin":
-        raise HTTPException(403, "Solo admin")
-    s3 = _get_s3()
-    if not s3:
-        raise HTTPException(503, f"R2 no disponible. {_s3_error or ''}")
-    import re
-    safe_cliente = re.sub(r'[^\w\-]', '_', cliente)
-    prefix = f"afiliados/{safe_cliente}/"
-    archivos = []
-    paginator = s3.get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=_R2_BUCKET, Prefix=prefix):
-        for obj in page.get("Contents", []):
-            archivos.append({
-                "ruta": obj["Key"],
-                "tamano": obj["Size"],
-                "modificado": obj["LastModified"].isoformat(),
-            })
-    return {"cliente": cliente, "prefix": prefix, "total": len(archivos), "archivos": archivos}
-
 def _doc_to_dict(doc: models.Documento) -> dict:
     return {
         "id": doc.id, "nombre": doc.nombre, "tipo": doc.tipo,

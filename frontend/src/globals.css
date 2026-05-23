@@ -75,6 +75,55 @@
   border-radius: 4px;
 }
 
+/* ── Dashboard stat cards — hover lift + slide-up ── */
+@keyframes stat-slide-up {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.bbc-stat-card {
+  animation: stat-slide-up .45s cubic-bezier(.22,1,.36,1) both;
+  transition: transform .22s cubic-bezier(.22,1,.36,1),
+              box-shadow .22s cubic-bezier(.22,1,.36,1),
+              border-color .22s ease;
+}
+.bbc-stat-card:hover {
+  transform: translateY(-5px) scale(1.02);
+  border-color: var(--stat-accent) !important;
+  box-shadow: 0 12px 28px rgba(0,0,0,.3), 0 0 0 1px var(--stat-accent);
+}
+.bbc-stat-card::before {
+  content: ''; position: absolute; top: 0; left: 0; right: 0;
+  height: 2px; background: var(--stat-accent, var(--c-primary));
+  transform: scaleX(0); transform-origin: left;
+  transition: transform .25s cubic-bezier(.22,1,.36,1);
+  border-radius: 12px 12px 0 0; z-index: 1;
+}
+.bbc-stat-card:hover::before { transform: scaleX(1); }
+.bbc-stat-card .bbc-stat-icon {
+  transition: transform .22s cubic-bezier(.34,1.56,.64,1);
+}
+.bbc-stat-card:hover .bbc-stat-icon { transform: scale(1.2); }
+.bbc-stat-card .bbc-stat-value { transition: color .2s ease; }
+.bbc-stat-card:hover .bbc-stat-value { color: var(--stat-accent) !important; }
+.bbc-stat-hint {
+  position: absolute; top: 10px; right: 10px;
+  font-size: 11px; font-weight: 700;
+  color: var(--stat-accent);
+  background: color-mix(in srgb, var(--stat-accent) 15%, transparent);
+  padding: 3px 8px; border-radius: 6px;
+  opacity: 0; transition: opacity .2s;
+  letter-spacing: .02em; pointer-events: none;
+}
+.bbc-stat-card:hover .bbc-stat-hint { opacity: 1; }
+
+/* ── Dashboard afiliados recientes — row hover ── */
+.bbc-afil-row {
+  border-radius: 8px;
+  transition: background .15s ease, padding .15s ease;
+  cursor: default;
+}
+.bbc-afil-row:hover { background: var(--c-surface2); }
+
 /* Notification pulse — sidebar bell & badge */
 @keyframes bbc-pulse-ring {
   0%   { box-shadow: 0 0 0 0 rgba(229,62,62,.7); }

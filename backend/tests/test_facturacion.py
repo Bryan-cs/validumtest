@@ -87,9 +87,8 @@ def test_pagar_factura_idempotente(client, admin_token):
 # ─── PLANILLA (cálculo de costos por servicios) ─────────────────────────────
 
 def test_planilla_calculo(client, admin_token):
-    """Verifica que la planilla calcula correctamente costos por servicio."""
+    """Verifica endpoint calc-planilla (fuente única para el frontend)."""
     h = {"Authorization": f"Bearer {admin_token}"}
-    # Crear afiliado con servicios completos
     client.post("/afiliados", json={
         "nombre": "Planilla Test", "tipo_doc": "CC", "doc": "777000111",
         "empresa": "TestCorp", "servicios": ["EPS", "AFP", "ARL 1"],
@@ -97,15 +96,15 @@ def test_planilla_calculo(client, admin_token):
         "fecha_afiliacion": "2024-01-15",
         "arl": "1",
     }, headers=h)
-
-    # Obtener config para saber el IBC global
-    cfg = client.get("/config", headers=h).json()
-    ibc = cfg.get("ibc_global", 1750905)
-
-    # Generar factura para este afiliado — el frontend calcula planilla
-    # pero podemos verificar los servicios vía cobro
-    r = client.get("/cobro?doc=777000111", headers=h)
+    afils = client.get("/afiliados", params={"q": "777000111"}, headers=h).json()
+    afil_id = afils["items"][0]["id"]
+    r = client.get("/facturas/calc-planilla", params={"afiliado_id": afil_id, "dias": 30}, headers=h)
     assert r.status_code == 200
+    data = r.json()
+    assert "detalle" in data and len(data["detalle"]) >= 2
+    assert data["total"] > 0
+    servicios = {d["servicio"] for d in data["detalle"]}
+    assert "EPS" in servicios
 
 
 # ─── RETIROS ─────────────────────────────────────────────────────────────────

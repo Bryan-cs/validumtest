@@ -1,39 +1,15 @@
 """Router de reportes Excel."""
-import io
 from fastapi import APIRouter, Depends
-from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
 import openpyxl
-from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.styles import Font
 import crud
 import models
+from utils.excel_export import hdr_style, xlsx_response
 from .deps import verify_token, require_admin
 
 router = APIRouter(prefix="/reportes", tags=["reportes"])
-
-
-def _hdr_style(ws, cols: list, row: int = 1):
-    fill = PatternFill("solid", fgColor="1E40AF")
-    font = Font(bold=True, color="FFFFFF", size=11)
-    border = Border(bottom=Side(style="medium", color="FFFFFF"))
-    for i, col in enumerate(cols, 1):
-        c = ws.cell(row=row, column=i, value=col)
-        c.fill = fill
-        c.font = font
-        c.alignment = Alignment(horizontal="center")
-        c.border = border
-
-
-def _xlsx_response(wb: openpyxl.Workbook, filename: str):
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 @router.get("/cobro")
@@ -46,7 +22,7 @@ def reporte_cobro(
     ws = wb.active
     ws.title = "Cobro"
     cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente", "Día cobro", "Servicios", "Planilla ($)", "Estado"]
-    _hdr_style(ws, cols)
+    hdr_style(ws, cols)
     for i, r in enumerate(items, 1):
         srvs = r.get("servicios") or []
         srvs_str = ", ".join(srvs) if isinstance(srvs, list) else str(srvs)
@@ -54,7 +30,7 @@ def reporte_cobro(
                    r.get("dia_cobro"), srvs_str, r.get("planilla", 0), r.get("estado")])
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
-    return _xlsx_response(wb, "cobro.xlsx")
+    return xlsx_response(wb, "cobro.xlsx")
 
 
 @router.get("/afiliados")
@@ -71,7 +47,7 @@ def reporte_afiliados(
     ws.title = "Afiliados"
     cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente", "Cargo", "EPS", "ARL", "AFP", "CCF",
             "Subtipo", "Estado", "Estado Servicio", "Servicios", "IBC", "Tel", "Email", "Fecha Ingreso", "Fecha Afiliación"]
-    _hdr_style(ws, cols)
+    hdr_style(ws, cols)
     for i, a in enumerate(items, 1):
         srvs = a.get("servicios") or []
         srvs_str = ", ".join(srvs) if isinstance(srvs, list) else str(srvs)
@@ -82,7 +58,7 @@ def reporte_afiliados(
                    a.get("fecha_ingreso"), a.get("fecha_afiliacion")])
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
-    return _xlsx_response(wb, "afiliados.xlsx")
+    return xlsx_response(wb, "afiliados.xlsx")
 
 
 @router.get("/retiros")
@@ -118,7 +94,7 @@ def reporte_retiros(
     ws = wb.active
     ws.title = "Retiros"
     cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente", "Fecha", "Motivo", "Mes", "Año", "Observaciones", "Registrado por"]
-    _hdr_style(ws, cols)
+    hdr_style(ws, cols)
     for i, r in enumerate(items, 1):
         ws.append([i, r.get("nombre"), tipo_doc_map.get(r.get("doc"), ""), r.get("doc"),
                    r.get("empresa"), cliente_map.get(r.get("doc"), ""),
@@ -126,7 +102,7 @@ def reporte_retiros(
                    r.get("mes"), r.get("anio"), r.get("obs"), r.get("registrado_por")])
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
-    return _xlsx_response(wb, f"retiros{'_'+anio if anio else ''}{'_'+mes if mes else ''}.xlsx")
+    return xlsx_response(wb, f"retiros{'_'+anio if anio else ''}{'_'+mes if mes else ''}.xlsx")
 
 
 @router.get("/financiero")
@@ -163,7 +139,7 @@ def reporte_financiero(
     cols = ["#", "Código", "Afiliado", "Tipo Doc", "Documento", "Empresa", "Subtipo", "Servicios",
             "Cliente", "Mes", "Año", "Período (días)", "Ingresos", "Planilla SS",
             "Utilidad", "Banco", "Estado", "Fecha pago"]
-    _hdr_style(ws, cols)
+    hdr_style(ws, cols)
     tot_ing_pag = tot_plan_pag = tot_util_pag = 0
     tot_ing_pend = tot_plan_pend = tot_util_pend = 0
     docs_con_factura = set()
@@ -229,84 +205,14 @@ def reporte_financiero(
         ws.cell(sep_row, 1, f"AFILIADOS SIN FACTURA EN {periodo_label.upper()}").font = Font(bold=True, size=12, color="DC2626")
         hdr_row = sep_row + 1
         sin_cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Subtipo", "EPS", "ARL", "Estado"]
-        _hdr_style(ws, sin_cols, row=hdr_row)
+        hdr_style(ws, sin_cols, row=hdr_row)
         for j, a in enumerate(sin_factura, 1):
             ws.append([j, a.nombre, a.tipo_doc or "", a.doc, a.empresa or "", a.subtipo or "",
                        a.eps or "", a.arl or "", a.estado_srv or a.estado or ""])
 
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 14)
-    return _xlsx_response(wb, f"financiero{'_'+anio if anio else ''}{'_'+mes if mes else ''}.xlsx")
-
-
-@router.get("/consolidado")
-def reporte_consolidado(
-    anio: str = "", mes: str = "",
-    db: Session = Depends(get_db), token=Depends(verify_token)
-):
-    dash = crud.get_dashboard(db, anio=anio, mes=mes)
-    afil_result = crud.get_afiliados(db, skip=0, limit=0)
-    afiliados = afil_result.get("items", [])
-    facturas_result = crud.get_facturas(db, anio=anio, mes=mes, skip=0, limit=0)
-    facturas = facturas_result.get("items", []) if isinstance(facturas_result, dict) else facturas_result
-
-    wb = openpyxl.Workbook()
-
-    ws1 = wb.active
-    ws1.title = "Resumen"
-    ws1.append(["BBC FILE — Reporte Consolidado"])
-    ws1["A1"].font = Font(bold=True, size=14, color="1E40AF")
-    ws1.append([f"Período: {mes or 'Todos'} {anio or 'Todos los años'}"])
-    ws1.append([])
-    ws1.append(["AFILIADOS"])
-    ws1["A4"].font = Font(bold=True)
-    ws1.append(["Activos", dash.get("activos", 0)])
-    ws1.append(["Retirados", dash.get("retirados", 0)])
-    ws1.append(["Suspendidos", dash.get("suspendidos", 0)])
-    ws1.append(["Total", dash.get("total_afiliados", 0)])
-    ws1.append([])
-    ws1.append(["FINANCIERO"])
-    ws1["A10"].font = Font(bold=True)
-    ws1.append(["Facturas emitidas", dash.get("facturas", 0)])
-    ws1.append(["Ingresos", dash.get("ingresos", 0)])
-    ws1.append(["Pendiente cobro", dash.get("pendiente_cobro", 0)])
-    ws1.append(["Nóminas empleados", dash.get("nominas", 0)])
-    ws1.append(["Gastos fijos", dash.get("gastos_fijos", 0)])
-    ws1.append(["Utilidad neta", dash.get("utilidad_neta", 0)])
-    ws1.column_dimensions["A"].width = 22
-    ws1.column_dimensions["B"].width = 18
-
-    ws2 = wb.create_sheet("Afiliados")
-    cols2 = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente", "EPS", "ARL", "AFP", "CCF", "Estado", "Servicios", "IBC"]
-    _hdr_style(ws2, cols2)
-    for i, a in enumerate(afiliados, 1):
-        srvs = a.get("servicios") or []
-        srvs_str = ", ".join(srvs) if isinstance(srvs, list) else str(srvs)
-        ws2.append([i, a.get("nombre"), a.get("tipo_doc", ""), a.get("doc"), a.get("empresa"), a.get("cliente_txt"),
-                    a.get("eps"), a.get("arl"), a.get("afp"), a.get("ccf"),
-                    a.get("estado_srv") or a.get("estado"), srvs_str, a.get("ibc")])
-    for col in ws2.columns:
-        ws2.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
-
-    ws3 = wb.create_sheet("Facturas")
-    # Mapa doc → tipo_doc para la hoja de facturas del consolidado
-    _docs_f = list({f.get("doc") for f in facturas if f.get("doc")})
-    _tdoc_map = {}
-    if _docs_f:
-        _afils3 = db.query(models.Afiliado.doc, models.Afiliado.tipo_doc)\
-                    .filter(models.Afiliado.doc.in_(_docs_f)).all()
-        _tdoc_map = {a.doc: (a.tipo_doc or "") for a in _afils3}
-    cols3 = ["#", "Código", "Afiliado", "Tipo Doc", "Documento", "Cliente", "Mes", "Año", "Ingresos", "Planilla", "Utilidad", "Estado"]
-    _hdr_style(ws3, cols3)
-    for i, f in enumerate(facturas, 1):
-        ws3.append([i, f.get("codigo"), f.get("nombre_afiliado"),
-                    _tdoc_map.get(f.get("doc"), ""), f.get("doc"),
-                    f.get("cliente"), f.get("mes"), f.get("anio"), f.get("ingresos", 0),
-                    f.get("costos", 0), f.get("utilidad", 0), f.get("estado")])
-    for col in ws3.columns:
-        ws3.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
-
-    return _xlsx_response(wb, f"consolidado_bbcfile{'_'+anio if anio else ''}.xlsx")
+    return xlsx_response(wb, f"financiero{'_'+anio if anio else ''}{'_'+mes if mes else ''}.xlsx")
 
 
 @router.get("/eliminados")
@@ -326,7 +232,7 @@ def reporte_eliminados(db: Session = Depends(get_db), token=Depends(verify_token
     ws.title = "Eliminados"
     cols = ["#", "Nombre", "Empresa", "Documento", "EPS", "CCF", "Fecha afiliación",
             "Mes", "Fecha eliminación", "Eliminado por", "Estado planilla"]
-    _hdr_style(ws, cols)
+    hdr_style(ws, cols)
     ESTADOS = {
         "retiro_pendiente": "Retiro pendiente",
         "planilla_hecha": "Planilla hecha",
@@ -349,4 +255,4 @@ def reporte_eliminados(db: Session = Depends(get_db), token=Depends(verify_token
         ])
     for col in ws.columns:
         ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
-    return _xlsx_response(wb, "eliminados.xlsx")
+    return xlsx_response(wb, "eliminados.xlsx")

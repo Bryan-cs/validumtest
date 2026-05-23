@@ -50,9 +50,3 @@ export function empresaStyle(nombre = '') {
   if (key) return EMPRESA_COLOR[key];
   return EMPRESA_PALETTE[hashStr(nombre.toLowerCase()) % EMPRESA_PALETTE.length];
 }
-
-export function bancoColor(nombre = '') {
-  if (!nombre) return BANCO_PALETTE[0];
-  const key = Object.keys(BANCO_COLOR).find(k => nombre.toLowerCase().includes(k));
-  return key ? BANCO_COLOR[key] : BANCO_PALETTE[hashStr(nombre.toLowerCase()) % BANCO_PALETTE.length];
-}

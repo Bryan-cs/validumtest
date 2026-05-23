@@ -2,7 +2,7 @@
 BBC File — Backend FastAPI
 Ejecutar: uvicorn main:app --reload
 """
-APP_VERSION = "1.2.0"
+APP_VERSION = "1.2.0"  # Sincronizado con FastAPI(version=...)
 from dotenv import load_dotenv
 load_dotenv()  # carga .env si existe; no sobreescribe vars del entorno del sistema
 
@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI):
 _is_prod = os.getenv("DATABASE_URL", "").startswith("postgresql")
 app = FastAPI(
     title="BBC File API",
-    version="1.0.0",
+    version=APP_VERSION,
     lifespan=lifespan,
     docs_url=None if _is_prod else "/docs",
     redoc_url=None if _is_prod else "/redoc",
@@ -366,10 +366,10 @@ def health_detail(db: Session = Depends(get_db), token=Depends(verify_token)):
             storage_ok = True
         else:
             storage_ok = False
-            storage_err = "storage_error"
-    except Exception:
+            storage_err = _s3_error or "storage_unavailable"
+    except Exception as ex:
         storage_ok = False
-        storage_err = "storage_error"
+        storage_err = str(ex)
     result = {"status": "ok" if db_ok else "degraded", "db": "ok" if db_ok else "error"}
     if redis_ok is not None:
         result["redis"] = "ok" if redis_ok else "error"

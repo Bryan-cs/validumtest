@@ -63,6 +63,23 @@ def pagar_factura(id: int, banco: str = "", monto: float = None,
     return crud.pagar_factura(db, id, banco=banco, user=token.get("sub", "sistema"), monto=monto)
 
 
+@router.get("/calc-planilla")
+def calc_planilla(
+    afiliado_id: int,
+    dias: int = 30,
+    db: Session = Depends(get_db),
+    token=Depends(verify_token),
+):
+    """Calcula detalle de planilla SS para un afiliado (fuente única para el frontend)."""
+    if dias < 0 or dias > 30:
+        raise HTTPException(422, "dias debe estar entre 0 y 30")
+    a = db.query(models.Afiliado).filter(models.Afiliado.id == afiliado_id).first()
+    if not a:
+        raise HTTPException(404, "Afiliado no encontrado")
+    result = crud._planilla(db, a, dias)
+    return {"detalle": result["detalle"], "total": result["total"], "ibc": result["ibc"]}
+
+
 @router.patch("/{id}/planilla-pagada")
 def planilla_pagada(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     f = crud.get_factura(db, id)

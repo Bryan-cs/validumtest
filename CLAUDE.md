@@ -20,7 +20,7 @@ uvicorn main:app --reload        # Dev server → http://localhost:8000
 ```bash
 cd bbcfile/frontend
 pnpm install
-pnpm start         # Dev server → http://localhost:5173
+pnpm start         # Dev server → http://localhost:5173 (vite.config.js)
 pnpm run build     # Build de producción
 ```
 
@@ -48,8 +48,8 @@ pnpm run build     # Build de producción
 **Routers (`backend/routers/`):**
 - `auth.py` — Login, JWT (AT 15 min / RT cookie httpOnly), bloqueo brute-force por IP + combo IP:username.
 - `afiliados.py` — CRUD afiliados con paginación server-side y filtros avanzados.
-- `facturas.py` — Facturación, pago, generación PDF, ingresos adicionales.
-- `reportes.py` — Exportaciones Excel y PDF (afiliados, cobro, financiero, consolidado, eliminados).
+- `facturas.py` — Facturación, pago, generación PDF, ingresos adicionales, `GET /calc-planilla` (cálculo SS para UI).
+- `reportes.py` — Exportaciones Excel y PDF (afiliados, cobro, financiero, eliminados).
 - `tareas.py` — Tareas internas con comentarios y notificaciones.
 - `portal.py` — Portal del cliente: solicitudes novedad/retiro, novedades de pago, reportes.
 - `documentos.py` — Subida/descarga archivos; Cloudflare R2 (prod) o disco local (dev). Valida magic bytes.
@@ -88,7 +88,7 @@ pnpm run build     # Build de producción
 |---|---|---|
 | `/` | `Dashboard.jsx` | Admin/Empleado |
 | `/afiliados` | `Afiliados.jsx` | Admin/Empleado |
-| `/retiros` | `Retiros.jsx` + `Pages.jsx` | Admin/Empleado |
+| `/retiros` | `Retiros.jsx` | Admin/Empleado |
 | `/tareas` | `Tareas.jsx` | Todos |
 | `/facturacion` | `Facturacion.jsx` | Admin/Empleado |
 | `/cobro` | `Cobro.jsx` | Admin/Empleado |
@@ -104,7 +104,7 @@ pnpm run build     # Build de producción
 
 **Cobro (`Cobro.jsx`):** Solo muestra afiliados con cobro hoy (COBRAR_HOY) o mañana (PROXIMO). Ventana 2 meses.
 
-**Retiros (`Pages.jsx`):** Búsqueda bajo demanda por documento. Eliminar retiro mueve afiliado a Eliminados.
+**Retiros (`Retiros.jsx`):** Búsqueda bajo demanda por documento. Eliminar retiro mueve afiliado a Eliminados.
 
 **Afiliados → tab Eliminados:** ↩ Restaurar | 📋 → Retiros | 🗑️ Borrar permanente.
 

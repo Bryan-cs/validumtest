@@ -11,7 +11,9 @@ frontend/.env.*
 .claude/
 .superpowers/
 docs/superpowers/
-docs/ui-proposals.html
+
+# Herramientas locales
+.playwright-mcp/
 
 # Python
 __pycache__/

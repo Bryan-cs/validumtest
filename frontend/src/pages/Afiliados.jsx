@@ -127,6 +127,7 @@ export default function Afiliados() {
   const [segPagina, setSegPagina] = useState(1);
   const [arlPagina, setArlPagina] = useState(1);
   const [arlModal, setArlModal] = useState(null);
+
   const [arlForm, setArlForm] = useState({
     nombre:'', documento:'', cliente:'', empresa:'',
     fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', observaciones:''
@@ -409,7 +410,17 @@ export default function Afiliados() {
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setPendingFiles([]); setModal('nuevo'); };
-  const openEditar = (a) => { setForm({...a}); setPendingFiles([]); setModal(a); };
+  const openEditar = async (a) => {
+    setForm({ ...a, servicios: a.servicios ?? [] });
+    setPendingFiles([]);
+    setModal(a);
+    try {
+      const res = await api.get(`/afiliados/${a.id}`);
+      setForm({ ...res.data, servicios: res.data.servicios ?? [] });
+    } catch {
+      // cae back al dato del listado ya cargado
+    }
+  };
   const toggleSrv  = (s) => {
     setForm(f => {
       const srvs = f.servicios || [];

@@ -1,18 +1,8 @@
 // Shared UI Components for BBC File
 import React, { useEffect, useState, Component } from 'react';
 import { Button } from './ui/button';
-import { Badge as ShadBadge } from './ui/badge';
 import { Card as ShadCard } from './ui/card';
 import { cn } from '../lib/utils';
-import { Input as ShadInput } from './ui/input';
-import { Label } from './ui/label';
-import {
-  Select as ShadSelect,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from './ui/select';
 import {
   Dialog,
   DialogContent,
@@ -47,14 +37,18 @@ export function Card({ children, style }) {
   );
 }
 
-export function StatCard({ label, value, color, icon, trend, trendUp = true }) {
+export function StatCard({ label, value, color, icon, trend, trendUp = true, clickHint, style }) {
   const accentColor = color || 'var(--c-primary)';
   return (
-    <div className="relative overflow-hidden rounded-xl border bg-card p-[18px] flex-1 min-w-[130px]">
+    <div
+      className="bbc-stat-card relative overflow-hidden rounded-xl border bg-card p-[18px] flex-1 min-w-[130px]"
+      style={{ '--stat-accent': accentColor, ...style }}
+    >
       <div
         className="absolute inset-0 pointer-events-none"
         style={{ background: `linear-gradient(135deg, ${accentColor}15 0%, transparent 65%)` }}
       />
+      {clickHint && <div className="bbc-stat-hint">{clickHint}</div>}
       {trend && (
         <div className={cn(
           'absolute top-3.5 right-3.5 rounded-full px-2 py-0.5 text-[11px] font-bold',
@@ -65,14 +59,14 @@ export function StatCard({ label, value, color, icon, trend, trendUp = true }) {
       )}
       {icon && (
         <div
-          className="w-8 h-8 rounded-lg flex items-center justify-center text-sm mb-3 relative"
+          className="bbc-stat-icon w-8 h-8 rounded-lg flex items-center justify-center text-sm mb-3 relative"
           style={{ background: `${accentColor}18` }}
         >
           {icon}
         </div>
       )}
       <div
-        className="text-2xl font-bold tracking-tight leading-none mb-1 relative"
+        className="bbc-stat-value text-2xl font-bold tracking-tight leading-none mb-1 relative"
         style={{ color: accentColor }}
       >
         {value}
@@ -81,21 +75,6 @@ export function StatCard({ label, value, color, icon, trend, trendUp = true }) {
         {label}
       </div>
     </div>
-  );
-}
-
-export function Badge({ label, color, bg }) {
-  return (
-    <ShadBadge
-      variant="outline"
-      style={{
-        color,
-        backgroundColor: bg,
-        borderColor: color ? `${color}44` : undefined,
-      }}
-    >
-      {label}
-    </ShadBadge>
   );
 }
 
@@ -125,94 +104,6 @@ export function Btn({ type = 'button', children, onClick, variant = 'primary', s
     >
       {children}
     </Button>
-  );
-}
-
-export function Input({ label, value, onChange, placeholder, type = 'text', style }) {
-  const uid = label ? `ui-input-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined;
-  return (
-    <div className="mb-3" style={style}>
-      {label && (
-        <Label
-          htmlFor={uid}
-          className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5 block"
-        >
-          {label}
-        </Label>
-      )}
-      <ShadInput
-        id={uid}
-        type={type}
-        value={value}
-        onChange={e => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="bg-card"
-      />
-    </div>
-  );
-}
-
-export function Select({ label, value, onChange, options = [], style }) {
-  const uid = label ? `ui-select-${label.replace(/\s+/g, '-').toLowerCase()}` : undefined;
-  return (
-    <div className="mb-3" style={style}>
-      {label && (
-        <label
-          htmlFor={uid}
-          className="block text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-1.5"
-        >
-          {label}
-        </label>
-      )}
-      <ShadSelect value={value} onValueChange={onChange}>
-        <SelectTrigger id={uid} className="bg-card">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {options.map(o =>
-            typeof o === 'string'
-              ? <SelectItem key={o} value={o}>{o}</SelectItem>
-              : <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-          )}
-        </SelectContent>
-      </ShadSelect>
-    </div>
-  );
-}
-
-export function Table({ headers, rows, loading }) {
-  return (
-    <div className="overflow-x-auto rounded-lg border border-border">
-      <table className="w-full border-collapse bg-card text-sm">
-        <thead>
-          <tr>
-            {headers.map((h, i) => (
-              <th
-                key={i}
-                className="px-4 py-2.5 text-left text-[10px] font-semibold uppercase tracking-widest text-muted-foreground bg-muted/40 border-b border-border"
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {loading ? (
-            <tr>
-              <td colSpan={headers.length} className="px-4 py-8 text-center text-muted-foreground">
-                Cargando...
-              </td>
-            </tr>
-          ) : rows.length === 0 ? (
-            <tr>
-              <td colSpan={headers.length} className="px-4 py-8 text-center text-muted-foreground">
-                Sin registros
-              </td>
-            </tr>
-          ) : rows}
-        </tbody>
-      </table>
-    </div>
   );
 }
 
@@ -349,22 +240,6 @@ export function OfflineBanner() {
       padding: '8px 16px', fontSize: 13, fontWeight: 600,
     }}>
       Sin conexión a internet — Los cambios no se guardarán hasta que vuelvas a conectarte
-    </div>
-  );
-}
-
-// ─── LOADING SPINNER ─────────────────────────────────────────────────────────
-export function Loading({ text = 'Cargando...' }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center',
-      padding: 40, color: C.text2, fontSize: 14 }}>
-      <div style={{
-        width: 20, height: 20, border: `2px solid ${C.border}`,
-        borderTopColor: C.primary, borderRadius: '50%',
-        animation: 'spin .6s linear infinite', marginRight: 10,
-      }} />
-      {text}
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
     </div>
   );
 }

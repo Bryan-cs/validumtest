@@ -481,25 +481,34 @@ export default function Tareas() {
         </div>
       )}
 
+
       {/* ── KPI semanal ── */}
       {kpiSemanal.length > 0 && (
-        <div style={{ marginBottom: 14, padding: '10px 14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: 10, display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 11, fontWeight: 700, color: C.text2, textTransform: 'uppercase', letterSpacing: '.07em', flexShrink: 0 }}>Esta semana</span>
-          {kpiSemanal.map(([nombre, count]) => {
-            const words = nombre.trim().split(/\s+/);
-            const initials = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : nombre.slice(0, 2).toUpperCase();
-            const pal = EMPRESA_PALETTE[hashStr(nombre) % EMPRESA_PALETTE.length];
-            return (
-              <div key={nombre} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <div style={{ width: 26, height: 26, borderRadius: '50%', background: pal.bg, color: pal.color, fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
-                <div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: C.text, lineHeight: 1 }}>{words[0]}</div>
-                  <div style={{ fontSize: 18, fontWeight: 800, color: C.green, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums' }}>{count}</div>
+        <div style={{ marginBottom: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
+          <div style={{ padding: '7px 16px', borderBottom: `1px solid ${C.border}`, background: '#f0fdf4' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '.08em' }}>✦ Completadas esta semana</span>
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap' }}>
+            {kpiSemanal.map(([nombre, count], i) => {
+              const words = nombre.trim().split(/\s+/);
+              const initials = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : nombre.slice(0, 2).toUpperCase();
+              const pal = EMPRESA_PALETTE[hashStr(nombre) % EMPRESA_PALETTE.length];
+              const isFirst = i === 0;
+              return (
+                <div key={nombre} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 20px', borderRight: `1px solid ${C.border}` }}>
+                  <div style={{ width: 36, height: 36, borderRadius: '50%', background: pal.bg, color: pal.color, fontSize: 13, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>{initials}</div>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: C.text2, lineHeight: 1, marginBottom: 3 }}>{words[0]} {words[1] || ''}</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
+                      <span style={{ fontSize: 28, fontWeight: 900, color: '#16a34a', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>tarea{count !== 1 ? 's' : ''}</span>
+                      {isFirst && kpiSemanal.length > 1 && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: '#fef9c3', color: '#854d0e', marginLeft: 4 }}>🥇 líder</span>}
+                    </div>
+                  </div>
                 </div>
-                <div style={{ fontSize: 10, color: C.text2, lineHeight: 1.3 }}>completada{count !== 1 ? 's' : ''}</div>
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -601,6 +610,7 @@ export default function Tareas() {
                         style={{
                           background: marcada ? C.blueBg : vencida ? '#fff9f9' : C.surface,
                           border: `1px solid ${marcada ? C.blue : vencida ? '#fca5a5' : C.border}`,
+                          borderLeft: `3px solid ${marcada ? C.blue : vencida ? '#dc2626' : col.borderColor}`,
                           borderRadius: 9, overflow: 'hidden',
                           transition: 'box-shadow .15s, border-color .15s, opacity .15s',
                           opacity: dragId === t.id ? 0.45 : 1,
@@ -629,7 +639,7 @@ export default function Tareas() {
                           {/* Description */}
                           {t.descripcion && (
                             <div style={{ margin: '0 0 7px' }}>
-                              <p style={{ margin: 0, fontSize: 12, color: C.text, lineHeight: 1.45 }}>{truncar(t.descripcion)}</p>
+                              <p style={{ margin: 0, fontSize: 12, color: C.text, lineHeight: 1.45, fontWeight: 700 }}>{truncar(t.descripcion)}</p>
                               {t.descripcion.length > 30 && (
                                 <button type="button"
                                   onClick={e => { e.stopPropagation(); setModalMensajeCompleto({ titulo: t.titulo, texto: t.descripcion, asignado: t.asignado_a, fecha: t.fecha_limite, estado: t.estado }); }}
@@ -642,11 +652,11 @@ export default function Tareas() {
 
                           {/* Footer */}
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                              <div style={{ width: 22, height: 22, borderRadius: '50%', background: C.accent, color: '#fff', fontSize: 10, fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                              <div style={{ width: 26, height: 26, borderRadius: '50%', background: C.accent, color: '#fff', fontSize: 11, fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, boxShadow: '0 1px 4px rgba(0,0,0,.15)' }}>
                                 {(t.asignado_a || '?')[0].toUpperCase()}
                               </div>
-                              <span style={{ fontSize: 11, color: C.text2, fontWeight: 500 }}>{t.asignado_a}</span>
+                              <span style={{ fontSize: 12, color: C.text, fontWeight: 700 }}>{t.asignado_a}</span>
                             </div>
                             {t.fecha_limite ? (
                               <span style={{ fontSize: 11, fontWeight: 600, color: vencida ? C.red : urgente ? C.amber : dias === 0 ? C.blue : C.text2, display: 'flex', alignItems: 'center', gap: 3 }}>
@@ -657,6 +667,14 @@ export default function Tareas() {
                                 ✅ {new Date(t.completado_en).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' })}
                               </span>
                             ) : null}
+                          </div>
+
+                          {/* Fecha asignación */}
+                          <div style={{ marginBottom: 8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ fontSize: 11, color: C.text2, fontWeight: 500 }}>📌 Asignada</span>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: C.text, background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 5, padding: '1px 7px' }}>
+                              {new Date(t.creado).toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                            </span>
                           </div>
 
                           {/* Actions */}

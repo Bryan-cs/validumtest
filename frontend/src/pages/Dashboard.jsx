@@ -7,12 +7,7 @@ import { StatCard, SkeletonCard, ErrorMsg, C } from '../components/UI';
 
 function ClickableCard({ onClick, children }) {
   return (
-    <div
-      onClick={onClick}
-      style={{ flex: 1, minWidth: 130, cursor: 'pointer', borderRadius: 12, transition: 'opacity .15s' }}
-      onMouseEnter={e => e.currentTarget.style.opacity = '.8'}
-      onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-    >
+    <div onClick={onClick} style={{ flex: 1, minWidth: 130, cursor: 'pointer' }}>
       {children}
     </div>
   );
@@ -55,22 +50,22 @@ export default function Dashboard() {
           ? <ErrorMsg message="Error al cargar métricas" onRetry={refetch} />
           : <>
             <div style={{ flex:1, minWidth:130 }}>
-              <StatCard label="Activos"            value={d?.activos          ?? '—'} color={C.green}   icon="👥" />
+              <StatCard label="Activos"            value={d?.activos          ?? '—'} color={C.green}   icon="👥" style={{ animationDelay:'.00s' }} />
             </div>
             <ClickableCard onClick={() => irAAfiliados('SUSPENDIDO')}>
-              <StatCard label="Suspendidos"        value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" />
+              <StatCard label="Suspendidos"        value={d?.suspendidos      ?? '—'} color={C.amber}   icon="⏸️" clickHint="↗ Ver lista" style={{ animationDelay:'.06s' }} />
             </ClickableCard>
             <ClickableCard onClick={() => irAAfiliados('DOBLE AFILIACION')}>
-              <StatCard label="Doble afiliación"   value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" />
+              <StatCard label="Doble afiliación"   value={d?.doble_afiliacion ?? '—'} color={C.blue}    icon="🔄" clickHint="↗ Ver lista" style={{ animationDelay:'.12s' }} />
             </ClickableCard>
             <ClickableCard onClick={() => irAAfiliados('NO SE ENCUENTRA AFILIADO')}>
-              <StatCard label="No se encuentra"    value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" />
+              <StatCard label="No se encuentra"    value={d?.no_encontrado    ?? '—'} color={C.red}     icon="🔍" clickHint="↗ Ver lista" style={{ animationDelay:'.18s' }} />
             </ClickableCard>
             <ClickableCard onClick={() => irAAfiliados('EN ESPERA DE ACTIVACION')}>
-              <StatCard label="En espera activac." value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" />
+              <StatCard label="En espera activac." value={d?.en_espera        ?? '—'} color={C.amber}   icon="⏳" clickHint="↗ Ver lista" style={{ animationDelay:'.24s' }} />
             </ClickableCard>
             <div style={{ flex:1, minWidth:130 }}>
-              <StatCard label="Total afiliados"    value={d?.total_afiliados  ?? '—'} color={C.primary} icon="📊" />
+              <StatCard label="Total afiliados"    value={d?.total_afiliados  ?? '—'} color={C.primary} icon="📊" style={{ animationDelay:'.30s' }} />
             </div>
           </>
         }
@@ -88,7 +83,7 @@ export default function Dashboard() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
             {recientes.map((a, idx) => (
-              <div key={a.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderBottom: idx < recientes.length - 1 ? `1px solid ${C.border}` : 'none' }}>
+              <div key={a.id} className="bbc-afil-row" style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 8px', margin: '0 -8px', borderBottom: idx < recientes.length - 1 ? `1px solid ${C.border}` : 'none' }}>
                 <div style={{
                   width: 34, height: 34, borderRadius: '50%',
                   background: C.surface2, border: `1px solid ${C.border}`,
