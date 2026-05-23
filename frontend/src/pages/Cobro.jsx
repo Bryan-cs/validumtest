@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../utils/api';
 import { C, Btn, PageHeader, StatCard, fmt, ErrorMsg } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
+import { NuevaFacturaModal } from './Facturacion';
 
 async function dlExcel(url, filename) {
   try {
@@ -43,6 +44,7 @@ export default function Cobro() {
   const [filtros,    setFiltros]    = useState(saved.filtros    ?? { empresa:[], cliente:[], estado:[], subtipo:[] });
   const [expanded,   setExp]        = useState(null);
   const [novedadModal, setNovedadModal] = useState(null);
+  const [facturaAfil, setFacturaAfil] = useState(null);
   const [mesFiltro,  setMesFiltro]  = useState(saved.mesFiltro  ?? '');
   const [anioFiltro, setAnioFiltro] = useState(saved.anioFiltro ?? '');
   const [docBuscar,  setDocBuscar]  = useState(saved.docBuscar  ?? '');
@@ -184,16 +186,16 @@ export default function Cobro() {
         <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
-              {['','Afiliado','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades'].map(h=>(
+              {['','Afiliado','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades',''].map(h=>(
                 <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                   color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {isLoading && <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+            {isLoading && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
             {!isLoading && rowsFiltrados.length===0 && (
-              <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
+              <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados.</td></tr>
             )}
             {rowsPagina.map(r => {
               const cfg   = ESTADO_CONFIG[r.estado]||ESTADO_CONFIG.PROXIMO;
@@ -255,10 +257,20 @@ export default function Cobro() {
                         </span>
                       ) : <span style={{ fontSize:11,color:C.text2 }}>—</span>}
                     </td>
+                    <td style={{ ...tdc, width:110 }} onClick={e=>e.stopPropagation()}>
+                      <button
+                        title="Generar factura"
+                        onClick={e=>{ e.stopPropagation(); setFacturaAfil({ doc: r.doc }); }}
+                        style={{ padding:'6px 12px', borderRadius:7, border:'none',
+                          background:C.primary, color:'#fff', cursor:'pointer', fontSize:12,
+                          fontWeight:700, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:5 }}>
+                        🧾 Facturar
+                      </button>
+                    </td>
                   </tr>
                   {isExp && (
                     <tr style={{ background:C.surface2, borderBottom:`1px solid ${C.border}` }}>
-                      <td colSpan={11} style={{ padding:'12px 20px' }}>
+                      <td colSpan={12} style={{ padding:'12px 20px' }}>
                         <PlanillaDetalle afiliado={r} cobroRow={r} config={config} />
                       </td>
                     </tr>
@@ -285,6 +297,14 @@ export default function Cobro() {
           <span style={{ fontSize:12, color:C.text2, marginLeft:4 }}>Pág {pagina}/{totalPags} · {rowsFiltrados.length} total</span>
         </div>
       )}
+
+      <NuevaFacturaModal
+        open={!!facturaAfil}
+        onClose={() => setFacturaAfil(null)}
+        config={config}
+        listas={listas}
+        prefill={facturaAfil}
+      />
 
       {/* Modal novedades completas */}
       {novedadModal && (

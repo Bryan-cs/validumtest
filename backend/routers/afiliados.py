@@ -461,3 +461,4 @@ def delete_afiliado(id: int, db: Session = Depends(get_db), token=Depends(requir
     crud.delete_afiliado(db, id, deleted_by=token.get("sub", "sistema"))
     return {"ok": True, "facturas_pendientes": len(pendientes),
             "codigos": [f.codigo for f in pendientes]}
+

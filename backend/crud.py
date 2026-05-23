@@ -16,11 +16,5 @@ from crud_dashboard import *
 from crud_cobro import *
 from crud_tareas import *
 
-# Privados usados por routers vía import crud._xxx o acceso directo
-from crud_cache import _cache_get, _cache_set, _redis_disponible
-from crud_helpers import (
-    _log, _get_rol_usuario, _afiliado_to_dict, _factura_to_dict,
-    _planilla, _get_ibc, _get_pct, _ceil100, _servicios_afiliado,
-)
-from crud_afiliados import _split_csv
-from crud_tareas import _tarea_to_dict, _load_comments_map, _ESTADO_LABEL
+# Privados expuestos a routers (el resto queda en crud_* vía import *)
+from crud_helpers import _log, _factura_to_dict, _planilla

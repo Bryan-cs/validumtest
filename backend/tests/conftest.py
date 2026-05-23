@@ -8,6 +8,12 @@ Uso:
   pytest                                                                     # SQLite (default)
 """
 import os
+import sys
+
+# Permite `from conftest import TestingSession` en tests aunque tests/ sea un package
+_tests_dir = os.path.dirname(__file__)
+if _tests_dir not in sys.path:
+    sys.path.insert(0, _tests_dir)
 
 _pg_url = os.environ.get("TEST_DATABASE_URL")
 TEST_DB_URL = _pg_url if _pg_url else "sqlite:///./test_bbcfile.db"
@@ -72,3 +78,13 @@ def admin_token(client):
 def empleado_token(client):
     r = client.post("/auth/login", json={"username": "empleado1", "password": "emp1234"})
     return r.json()["access_token"]
+
+
+@pytest.fixture
+def db():
+    """Sesión DB directa para tests de scheduler/modelos (no pasa por FastAPI)."""
+    session = TestingSession()
+    try:
+        yield session
+    finally:
+        session.close()

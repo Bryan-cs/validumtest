@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers.deps import require_admin, require_admin_or_empleado
 import models, crud
+from utils.planillas_query import list_planillas_with_docs
 
 router = APIRouter(prefix="/planillas", tags=["planillas"])
 
@@ -22,27 +23,7 @@ def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
     if anio:    q = q.filter(models.PlanillaPago.anio == anio)
     total = q.count()
     rows = q.offset(skip).limit(limit).all()
-    if not rows:
-        return {"total": 0, "items": []}
-    # Batch load all documents (avoid N+1)
-    planilla_ids = [p.id for p in rows]
-    all_docs = db.query(models.Documento).filter(
-        models.Documento.contexto == "planilla_pago",
-        models.Documento.contexto_id.in_(planilla_ids),
-    ).all()
-    docs_by_planilla = {}
-    for d in all_docs:
-        docs_by_planilla.setdefault(d.contexto_id, []).append(d)
-    items = [
-        {
-            "id": p.id, "cliente_ref": p.cliente_ref, "mes": p.mes, "anio": p.anio,
-            "observaciones": p.observaciones, "subido_por": p.subido_por,
-            "creado": p.creado.isoformat() if p.creado else None,
-            "archivos": [{"id": d.id, "nombre": d.nombre, "tamano": d.tamano} for d in docs_by_planilla.get(p.id, [])],
-        }
-        for p in rows
-    ]
-    return {"total": total, "items": items}
+    return {"total": total, "items": list_planillas_with_docs(db, rows)}
 
 
 @router.post("")

@@ -43,7 +43,6 @@ export default defineConfig({
           'vendor-query': ['@tanstack/react-query', '@tanstack/react-table'],
           'vendor-ui': [
             '@radix-ui/react-dialog',
-            '@radix-ui/react-dropdown-menu',
             '@radix-ui/react-select',
             '@radix-ui/react-tooltip',
             '@radix-ui/react-label',
@@ -51,7 +50,6 @@ export default defineConfig({
             '@radix-ui/react-slot',
             'lucide-react',
             'sonner',
-            'next-themes',
           ],
           'vendor-utils': ['axios', 'zustand', 'clsx', 'tailwind-merge', 'class-variance-authority'],
         },
@@ -64,9 +62,6 @@ export default defineConfig({
     },
   },
   server: {
-    port: 3000,
-    proxy: {
-      '/api': 'http://localhost:8000',
-    },
+    port: 5173,
   },
 });

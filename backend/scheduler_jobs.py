@@ -202,3 +202,60 @@ def limpiar_planillas_antiguas():
         _log.warning(f"Error limpiando planillas antiguas: {e}")
     finally:
         db.close()
+
+
+def alertar_arl_pendientes():
+    """Alerta a admin/empleados cuando un registro ARL lleva >15 días sin activar.
+
+    Re-alerta cada 7 días por registro para evitar spam.
+    """
+    from database import SessionLocal
+    from logger import logger as _log
+    import models
+    from sqlalchemy import or_
+
+    db = SessionLocal()
+    try:
+        ahora = datetime.now(timezone.utc)
+        umbral_alerta  = ahora - timedelta(days=15)
+        umbral_reenvio = ahora - timedelta(days=7)
+        # creado_en es naive (sin timezone) — comparar con naive UTC
+        umbral_alerta_naive = umbral_alerta.replace(tzinfo=None)
+
+        registros = db.query(models.SeguimientoArl).filter(
+            models.SeguimientoArl.estado == 'activo',
+            models.SeguimientoArl.creado_en < umbral_alerta_naive,
+            or_(
+                models.SeguimientoArl.ultima_alerta_en.is_(None),
+                models.SeguimientoArl.ultima_alerta_en < umbral_reenvio,
+            )
+        ).all()
+
+        if not registros:
+            return
+
+        destinatarios = db.query(models.Usuario).filter(
+            models.Usuario.rol.in_(['admin', 'empleado']),
+            models.Usuario.activo == True,
+        ).all()
+
+        if not destinatarios:
+            _log.warning("alertar_arl_pendientes: sin destinatarios activos — alertas suprimidas")
+            return
+
+        total_notifs = 0
+        for reg in registros:
+            dias = (ahora.replace(tzinfo=None) - reg.creado_en).days
+            msg = f"⚠️ {reg.nombre} lleva {dias} días en SeguimientoARL sin activar ({reg.entidad_arl})"
+            for u in destinatarios:
+                db.add(models.Notificacion(usuario=u.username, mensaje=msg))
+                total_notifs += 1
+            reg.ultima_alerta_en = ahora
+
+        db.commit()
+        _log.info(f"ARL alertas: {len(registros)} registros, {total_notifs} notificaciones creadas")
+    except Exception as e:
+        db.rollback()
+        _log.error(f"Error alertar_arl_pendientes: {e}")
+    finally:
+        db.close()

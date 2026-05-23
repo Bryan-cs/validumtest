@@ -118,6 +118,14 @@ def finalizar(id: int, db: Session = Depends(get_db), token=Depends(require_admi
     return t
 
 
+@router.post("/limpiar-historial")
+def eliminar_todas_finalizadas(db: Session = Depends(get_db), token=Depends(require_admin)):
+    """Admin elimina todas las tareas en estado 'finalizada' de una vez."""
+    count = db.query(models.Tarea).filter(models.Tarea.estado == "finalizada").delete()
+    db.commit()
+    return {"eliminadas": count}
+
+
 @router.delete("/{id}")
 def eliminar_tarea(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Admin puede eliminar tareas finalizadas o privadas que creó. Empleado solo sus privadas."""

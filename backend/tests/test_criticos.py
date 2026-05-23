@@ -247,3 +247,185 @@ def test_ibc_below_smmlv_rechazado(client, admin_token):
     assert r.status_code == 422, (
         f"Esperaba 422 al crear afiliado con ibc=500000 (< SMMLV), got {r.status_code}"
     )
+
+
+# ─── ALERTAS AUTOMÁTICAS SEGUIMIENTO ARL ─────────────────────────────────────
+
+def test_alertar_arl_pendientes_crea_notificaciones(client):
+    """Registro con 16 días sin activar → notificación creada para cada admin/empleado."""
+    from conftest import TestingSession
+    import models
+    from datetime import datetime, timezone, timedelta
+    from scheduler_jobs import alertar_arl_pendientes
+
+    db = TestingSession()
+    try:
+        db.query(models.SeguimientoArl).filter(
+            models.SeguimientoArl.documento == "888001ALERT"
+        ).delete()
+        db.query(models.Notificacion).filter(
+            models.Notificacion.mensaje.contains("ARL Alert Viejo")
+        ).delete()
+        db.commit()
+
+        reg = models.SeguimientoArl(
+            nombre="ARL Alert Viejo",
+            documento="888001ALERT",
+            cliente="TestCliente",
+            empresa="TestEmpresa",
+            entidad_arl="SURA",
+            estado="activo",
+            creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=16),
+            ultima_alerta_en=None,
+        )
+        db.add(reg)
+        db.commit()
+        db.refresh(reg)
+        reg_id = reg.id
+    finally:
+        db.close()
+
+    alertar_arl_pendientes()
+
+    db = TestingSession()
+    try:
+        notifs = db.query(models.Notificacion).filter(
+            models.Notificacion.mensaje.contains("ARL Alert Viejo")
+        ).all()
+        assert len(notifs) >= 1, "Debe haber al menos 1 notificación creada"
+        reg_updated = db.query(models.SeguimientoArl).filter_by(id=reg_id).first()
+        assert reg_updated.ultima_alerta_en is not None, "ultima_alerta_en debe quedar seteado"
+    finally:
+        db.close()
+
+
+def test_alertar_arl_pendientes_no_spam(client):
+    """Registro alertado hace 3 días → no crea nueva notificación."""
+    from conftest import TestingSession
+    import models
+    from datetime import datetime, timezone, timedelta
+    from scheduler_jobs import alertar_arl_pendientes
+
+    db = TestingSession()
+    try:
+        db.query(models.SeguimientoArl).filter(
+            models.SeguimientoArl.documento == "888002NOSPAM"
+        ).delete()
+        db.commit()
+
+        reg = models.SeguimientoArl(
+            nombre="ARL No Spam",
+            documento="888002NOSPAM",
+            cliente="TestCliente",
+            empresa="TestEmpresa",
+            entidad_arl="SURA",
+            estado="activo",
+            creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=20),
+            ultima_alerta_en=datetime.now(timezone.utc) - timedelta(days=3),
+        )
+        db.add(reg)
+        db.commit()
+    finally:
+        db.close()
+
+    db = TestingSession()
+    try:
+        before_count = db.query(models.Notificacion).filter(
+            models.Notificacion.mensaje.contains("ARL No Spam")
+        ).count()
+    finally:
+        db.close()
+
+    alertar_arl_pendientes()
+
+    db = TestingSession()
+    try:
+        after_count = db.query(models.Notificacion).filter(
+            models.Notificacion.mensaje.contains("ARL No Spam")
+        ).count()
+        assert after_count == before_count, "No debe crear nueva notificación si alerta < 7 días"
+    finally:
+        db.close()
+
+
+def test_alertar_arl_pendientes_retirado_ignorado(client):
+    """Registro con estado='retirado' → ignorado por el job."""
+    from conftest import TestingSession
+    import models
+    from datetime import datetime, timezone, timedelta
+    from scheduler_jobs import alertar_arl_pendientes
+
+    db = TestingSession()
+    try:
+        db.query(models.SeguimientoArl).filter(
+            models.SeguimientoArl.documento == "888003RETIRED"
+        ).delete()
+        db.commit()
+
+        reg = models.SeguimientoArl(
+            nombre="ARL Retirado",
+            documento="888003RETIRED",
+            cliente="TestCliente",
+            empresa="TestEmpresa",
+            entidad_arl="SURA",
+            estado="retirado",
+            creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=20),
+            ultima_alerta_en=None,
+        )
+        db.add(reg)
+        db.commit()
+    finally:
+        db.close()
+
+    alertar_arl_pendientes()
+
+    db = TestingSession()
+    try:
+        notifs = db.query(models.Notificacion).filter(
+            models.Notificacion.mensaje.contains("ARL Retirado")
+        ).all()
+        assert len(notifs) == 0, "Estado retirado no debe generar alertas"
+    finally:
+        db.close()
+
+
+def test_alertar_arl_pendientes_fresco_ignorado(client):
+    """Registro con 10 días (< umbral 15) → ignorado por el job."""
+    from conftest import TestingSession
+    import models
+    from datetime import datetime, timezone, timedelta
+    from scheduler_jobs import alertar_arl_pendientes
+
+    db = TestingSession()
+    try:
+        db.query(models.SeguimientoArl).filter(
+            models.SeguimientoArl.documento == "888004FRESH"
+        ).delete()
+        db.commit()
+
+        reg = models.SeguimientoArl(
+            nombre="ARL Fresco",
+            documento="888004FRESH",
+            cliente="TestCliente",
+            empresa="TestEmpresa",
+            entidad_arl="SURA",
+            estado="activo",
+            creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=10),
+            ultima_alerta_en=None,
+        )
+        db.add(reg)
+        db.commit()
+    finally:
+        db.close()
+
+    alertar_arl_pendientes()
+
+    db = TestingSession()
+    try:
+        notifs = db.query(models.Notificacion).filter(
+            models.Notificacion.mensaje.contains("ARL Fresco")
+        ).all()
+        assert len(notifs) == 0, "Registro < 15 días no debe generar alertas"
+    finally:
+        db.close()
+

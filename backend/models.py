@@ -367,3 +367,4 @@ class SeguimientoArl(Base):
     observaciones    = Column(Text, nullable=True)
     estado           = Column(String(20), default='activo')  # activo | retirar | retirado
     creado_en        = Column(DateTime, default=_utcnow)
+    ultima_alerta_en = Column(DateTime(timezone=True), nullable=True)

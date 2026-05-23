@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import api from '../utils/api';
 import { C, Btn, Modal, PageHeader, StatCard, fmt, SkeletonRow, ErrorMsg, ConfirmModal } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
+import usePlanilla from '../hooks/usePlanilla';
 
 const UP = v => (v||'').toUpperCase();
 
@@ -39,45 +40,6 @@ function calcularFechaVencimiento(fecha_afiliacion, mes, anio) {
   if (dia >= 15 && dia <= 19)       return `20 de ${mes} de ${anio}`;
   if (dia >= 20 && dia <= 25)       return `25 de ${mes} de ${anio}`;
   return null;
-}
-
-// Cálculo de planilla idéntico al .py
-function calcPlanilla(afiliado, config, dias) {
-  const ceil100 = v => Math.ceil(v / 100) * 100;
-  if (!afiliado || !config) return [];
-  const ibc = (afiliado.ibc && afiliado.ibc > 0) ? afiliado.ibc : (config.ibc_global || 1750905);
-  const pcts = config.porcentajes || {};
-  const servicios = afiliado.servicios || [];
-  const result = [];
-  const seen = new Set();
-  for (const s of servicios) {
-    const su = s.toUpperCase();
-    let key = null;
-    if (su.includes('EPS')) key = 'EPS';
-    else if (su.includes('CCF') || su.includes('CAJA')) key = 'CCF';
-    else if (su.includes('AFP') || su.includes('PENSION')) key = 'AFP';
-    else if (su.includes('ARL')) {
-      for (const n of ['1','2','3','4','5']) { if (su.includes(n)) { key = `ARL ${n}`; break; } }
-    }
-    if (!key) key = s;
-    if (!seen.has(key)) {
-      seen.add(key);
-      const pct = pcts[key] || 0;
-      const val30 = ceil100(ibc * pct);
-      const valor = dias > 0 ? ceil100(val30 * dias / 30) : 0;
-      result.push({ servicio: key, pct, val30, valor, ibc });
-    }
-  }
-  // ARL del campo directo (solo si ninguna ARL fue ya agregada desde servicios)
-  const yaHayArl = [...seen].some(k => k.startsWith('ARL'));
-  if (!yaHayArl && afiliado.arl && afiliado.arl !== 'N/A' && afiliado.arl !== '') {
-    const arlKey = `ARL ${afiliado.arl}`;
-    const pct = pcts[arlKey] || 0;
-    const val30 = ceil100(ibc * pct);
-    const valor = dias > 0 ? ceil100(val30 * dias / 30) : 0;
-    result.push({ servicio: arlKey, pct, val30, valor, ibc });
-  }
-  return result;
 }
 
 // ─── MODAL NUEVA FACTURA ─────────────────────────────────────────────────────
@@ -117,7 +79,7 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
     }
   }, [open, prefill]);
 
-  const planilla = calcPlanilla(afiliado, config, dias);
+  const { data: planilla = [] } = usePlanilla(afiliado, dias);
   const planillaKey = planilla.map(p => p.servicio + ':' + p.valor).join(',');
 
   useEffect(() => {
@@ -171,25 +133,29 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
     onError: e => { const d=e.response?.data?.detail; toast.error(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||e.message||'Error')); },
   });
 
+  const inicialAvatar = afiliado ? afiliado.nombre.trim()[0].toUpperCase() : null;
+
   return (
-    <Modal open={open} onClose={onClose} width={820} title="Nueva factura por afiliado">
-      <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', gap:10, marginBottom:10 }}>
+    <Modal open={open} onClose={onClose} width={860} title="🧾 Nueva factura por afiliado">
+
+      {/* ── Fila 1: Búsqueda + período ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'2fr 80px 1fr 1fr', gap:10, marginBottom:14 }}>
         <div>
-          <label style={lbl}>Cédula del afiliado *</label>
+          <label style={mlbl}>Cédula del afiliado *</label>
           <div style={{ display:'flex', gap:6 }}>
             <input style={{ ...inp, flex:1 }} value={cedula}
               onChange={e => setCedula(e.target.value.replace(/\D/g, ''))}
               onKeyDown={e => e.key==='Enter' && buscar()} placeholder="Número de documento..." />
-            <Btn onClick={buscar} size="sm">🔍 Consultar</Btn>
+            <Btn onClick={buscar} size="sm">🔍</Btn>
           </div>
         </div>
-        <div><label style={lbl}>Días (0-30)</label>
+        <div><label style={mlbl}>Días</label>
           <input type="number" min={0} max={30} style={inp} value={dias}
             onChange={e => setDias(Math.min(30, Math.max(0, +e.target.value)))} /></div>
-        <div><label style={lbl}>Mes</label>
+        <div><label style={mlbl}>Mes</label>
           <select style={inp} value={mes} onChange={e => setMes(e.target.value)}>
             {MESES.map(m => <option key={m}>{m}</option>)}</select></div>
-        <div><label style={lbl}>Año</label>
+        <div><label style={mlbl}>Año</label>
           <select style={inp} value={anio} onChange={e => setAnio(e.target.value)}>
             {Array.from({ length: 6 }, (_, i) => String(new Date().getFullYear() - 2 + i)).map(a => (
               <option key={a}>{a}</option>
@@ -197,39 +163,90 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
           </select></div>
       </div>
 
-      {errorBusq && <div style={{ background:C.redBg,color:C.red,borderRadius:7,padding:'8px 12px',fontSize:12,marginBottom:10 }}>{errorBusq}</div>}
+      {/* ── Error búsqueda ── */}
+      {errorBusq && (
+        <div style={{ background:C.redBg, color:C.red, borderRadius:8, padding:'10px 14px',
+          fontSize:12, marginBottom:12, fontWeight:600, display:'flex', alignItems:'center', gap:8 }}>
+          ⚠️ {errorBusq}
+        </div>
+      )}
+
+      {/* ── Tarjeta afiliado ── */}
       {afiliado && (
-        <div style={{ background:C.blueBg,color:C.blue,borderRadius:7,padding:'8px 12px',fontSize:12,marginBottom:10,fontWeight:500 }}>
-          ✓ <strong>{afiliado.nombre}</strong> | Empresa: {afiliado.empresa} | Cliente: {afiliado.cliente_txt||'—'} |
-          IBC: {fmt(ibc)}{afiliado.ibc ? ' ⚡ propio' : ' (global)'} | Días: {dias}/30 | Total planilla: <strong>{fmt(costoPlanilla)}</strong>
-          {dias===0 && <span style={{ color:C.amber }}> ⚠️ Días=0: primer mes, planilla no aplica</span>}
+        <div style={{ background:`linear-gradient(135deg, ${C.primary}12 0%, ${C.blueBg} 100%)`,
+          border:`1.5px solid ${C.primary}30`, borderRadius:12, padding:'14px 18px',
+          marginBottom:14, display:'flex', alignItems:'center', gap:14 }}>
+          <div style={{ width:44, height:44, borderRadius:12, background:C.primary,
+            display:'flex', alignItems:'center', justifyContent:'center',
+            fontSize:20, fontWeight:800, color:'#fff', flexShrink:0 }}>
+            {inicialAvatar}
+          </div>
+          <div style={{ flex:1, minWidth:0 }}>
+            <div style={{ fontWeight:800, fontSize:15, color:C.text, marginBottom:4 }}>{afiliado.nombre}</div>
+            <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+              {afiliado.empresa && (
+                <span style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+                  padding:'2px 10px', fontSize:11, fontWeight:600, color:C.text2 }}>
+                  🏢 {afiliado.empresa}
+                </span>
+              )}
+              {afiliado.cliente_txt && (
+                <span style={{ background:C.primary, borderRadius:6,
+                  padding:'2px 10px', fontSize:11, fontWeight:700, color:'#fff' }}>
+                  👤 {afiliado.cliente_txt}
+                </span>
+              )}
+              <span style={{ background:C.surface2, border:`1px solid ${C.border}`, borderRadius:6,
+                padding:'3px 12px', fontSize:13, fontWeight:700, color:C.text2 }}>
+                IBC {fmt(ibc)}{afiliado.ibc ? ' ⚡' : ''}
+              </span>
+              {afiliado.fecha_afiliacion && (
+                <span style={{ background:C.primary, borderRadius:6,
+                  padding:'2px 10px', fontSize:11, fontWeight:700, color:'#fff' }}>
+                  📅 Fecha de afiliación: {afiliado.fecha_afiliacion}
+                </span>
+              )}
+              {dias===0 && (
+                <span style={{ background:C.amberBg, border:`1px solid ${C.amber}40`, borderRadius:6,
+                  padding:'2px 10px', fontSize:11, fontWeight:700, color:C.amber }}>
+                  ⚠️ Días=0 · primer mes
+                </span>
+              )}
+            </div>
+          </div>
+          <div style={{ textAlign:'right', flexShrink:0 }}>
+            <div style={{ fontSize:11, color:C.text2, fontWeight:700 }}>Total planilla</div>
+            <div style={{ fontSize:22, fontWeight:800, color:C.primary }}>{fmt(costoPlanilla)}</div>
+          </div>
         </div>
       )}
 
-      <div style={{ marginBottom:10 }}>
-        <label style={lbl}>📝 Novedades / observaciones</label>
-        <input style={{ ...inp, textTransform:'uppercase' }} value={novedades}
-          onChange={e => setNovedades(UP(e.target.value))} placeholder="OBSERVACIONES DE ESTA FACTURA..." />
-      </div>
-
+      {/* ── Alerta detalle afiliado ── */}
       {afiliado?.detalle && (
-        <div style={{ background:C.amberBg,border:`1px solid ${C.amber}`,borderRadius:7,
-          padding:'8px 12px',marginBottom:10,fontSize:12,color:C.text,fontWeight:500 }}>
-          <span style={{ fontWeight:700,color:C.amber }}>⚠️ Detalle del afiliado:</span>{' '}
-          {afiliado.detalle}
+        <div style={{ background:C.amberBg, border:`1px solid ${C.amber}`,borderRadius:8,
+          padding:'10px 14px', marginBottom:12, fontSize:12, color:C.text,
+          display:'flex', gap:8, alignItems:'flex-start' }}>
+          <span style={{ fontSize:16 }}>⚠️</span>
+          <span><strong style={{ color:C.amber }}>Detalle:</strong> {afiliado.detalle}</span>
         </div>
       )}
 
+      {/* ── Servicios ── */}
       <SrvTable planilla={planilla} marcados={marcados} setMarcados={setMarcados} dias={dias}
         sinAfiliado={!afiliado} cargoAdicional={cargoAdicional} setCargoAdicional={setCargoAdicional}
         fechaAfiliacion={afiliado?.fecha_afiliacion} />
 
-      <div style={{ marginBottom:10 }}>
-        <label style={lbl}>Ingreso cobrado al cliente ($)</label>
-        <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-          <input type="number" style={{ ...inp, width:220 }} value={ingreso}
+      {/* ── Ingreso + Novedades en fila ── */}
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:12, marginBottom:12 }}>
+        <div>
+          <label style={mlbl}>💵 Ingreso cobrado al cliente ($)</label>
+          <input type="number" style={{ ...inp, fontSize:16, fontWeight:700 }} value={ingreso}
             onChange={e => setIngreso(e.target.value)} placeholder="0" />
-          <span style={{ fontSize:11,color:C.text2 }}>Planilla + administración cobrada</span>
+        </div>
+        <div>
+          <label style={mlbl}>📝 Novedades / observaciones</label>
+          <input style={{ ...inp, textTransform:'uppercase' }} value={novedades}
+            onChange={e => setNovedades(UP(e.target.value))} placeholder="OBSERVACIONES DE ESTA FACTURA..." />
         </div>
       </div>
 
@@ -282,7 +299,7 @@ function EditarFacturaModal({ open, onClose, factura, config, listas }) {
     }
   }, [open, factura?.id, config]);
 
-  const planilla = calcPlanilla(afiliado, config, dias);
+  const { data: planilla = [] } = usePlanilla(afiliado, dias);
   const planillaFinal = planilla.length > 0 ? planilla : (factura?.servicios_detalle || []).map(s => ({
     servicio: s.servicio, pct: s.pct || 0, valor: s.valor || 0, val30: s.val30 || 0,
   }));
@@ -355,14 +372,10 @@ function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado, cargoAdi
     <div style={{ marginBottom:10 }}>
       <div style={{ fontSize:13,fontWeight:700,color:C.primary,borderBottom:`2px solid ${C.primary}`,paddingBottom:4,marginBottom:6,display:'flex',alignItems:'center',gap:10 }}>
         <span>Servicios contratados del afiliado</span>
-        <span style={{ fontSize:11,fontWeight:400,color:C.text2 }}>Desmarca los que no aplican (ej: primer mes)</span>
-        {fechaAfiliacion && (
-          <span style={{ marginLeft:'auto',fontSize:11,fontWeight:700,
-            background:C.blueBg,color:C.blue,border:`1px solid ${C.blue}`,
-            borderRadius:5,padding:'2px 8px',whiteSpace:'nowrap' }}>
-            📅 Afiliado desde: {fechaAfiliacion}
-          </span>
-        )}
+        <span style={{ fontSize:11,fontWeight:700,color:C.amber,background:C.amberBg,
+          border:`1px solid ${C.amber}40`,borderRadius:5,padding:'2px 9px' }}>
+          ⚠️ Desmarca los que no aplican (ej: primer mes)
+        </span>
       </div>
       {planilla.length === 0
         ? <div style={{ color:C.text2,fontSize:12,padding:'8px 0' }}>{sinAfiliado ? 'Busca el afiliado por cédula para cargar servicios.' : 'Sin servicios registrados.'}</div>
@@ -397,7 +410,7 @@ function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado, cargoAdi
                   <div style={{ padding:'8px 10px',fontSize:12,color:C.text2 }}>
                     {((p.pct||0)*100).toFixed(4).replace(/\.?0+$/,'')}%</div>
                   <div style={{ padding:'8px 10px',fontSize:13,fontWeight:600,
-                    color:inc?C.red:C.text2,textDecoration:inc?'none':'line-through' }}>
+                    color:inc?C.primary:C.text2,textDecoration:inc?'none':'line-through' }}>
                     {dias===0 ? <span style={{ color:C.text2 }}>— (ref: {fmt(p.val30)})</span>
                       : `${fmt(p.valor)}${dias<30?` (${dias}d)`:''}`}
                   </div>
@@ -409,12 +422,12 @@ function SrvTable({ planilla, marcados, setMarcados, dias, sinAfiliado, cargoAdi
       }
       {cargoAdicional !== undefined && (
         <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:6,
-          background:C.amberBg, border:`1px solid ${C.amber}`, borderRadius:7, padding:'6px 12px' }}>
-          <span style={{ fontSize:12, color:C.amber, fontWeight:600 }}>⚙️ Mora / 4x1000 / cargo adicional:</span>
+          background:C.surface2, border:`1px solid ${C.border}`, borderRadius:7, padding:'6px 12px' }}>
+          <span style={{ fontSize:12, color:C.text2, fontWeight:700 }}>⚙️ Mora / 4x1000 / cargo adicional:</span>
           <input type="number" value={cargoAdicional} onChange={e => setCargoAdicional(e.target.value)}
-            style={{ width:110, padding:'4px 8px', border:`1px solid ${C.amber}`, borderRadius:6,
-              fontSize:13, fontWeight:700, color:C.amber, background:C.surface, outline:'none' }} />
-          <span style={{ fontSize:11, color:C.text2 }}>Se suma al costo de la planilla</span>
+            style={{ width:110, padding:'4px 8px', border:`1px solid ${C.border}`, borderRadius:6,
+              fontSize:13, fontWeight:700, color:C.text, background:C.surface, outline:'none' }} />
+          <span style={{ fontSize:11, color:C.text2, fontWeight:700 }}>Se suma al costo de la planilla</span>
         </div>
       )}
     </div>
@@ -448,20 +461,29 @@ function ConceptosSection({ conceptos, setConceptos }) {
 }
 
 function ResumenFinanciero({ ingreso, costoPlanilla, extra, utilidad }) {
+  const cards = [
+    { label:'Ingreso cliente',   value:fmt(ingreso),       icon:'💵', ingreso:true },
+    { label:'Costo planilla SS', value:fmt(costoPlanilla), icon:'📋' },
+    { label:'Conceptos extra',   value:fmt(extra),         icon:'➕' },
+    { label:'Utilidad neta',     value:fmt(utilidad),      icon: utilidad>=0?'📈':'📉', utilidad:true },
+  ];
   return (
-    <div style={{ background:C.surface2,border:`1px solid ${C.border}`,borderRadius:8,padding:'12px 16px',marginBottom:14 }}>
-      <div style={{ fontSize:13,fontWeight:700,color:C.primary,marginBottom:8 }}>Resumen financiero</div>
-      {[
-        ['Ingreso cobrado al cliente:', fmt(ingreso), C.text],
-        ['Costo planilla SS (marcados):', fmt(costoPlanilla), C.red],
-        ['Conceptos adicionales:', fmt(extra), C.amber],
-        ['Utilidad neta = Ingreso − Planilla + Conceptos:', fmt(utilidad), utilidad>=0?C.green:C.red],
-      ].map(([label,value,color]) => (
-        <div key={label} style={{ display:'flex',justifyContent:'space-between',marginBottom:4 }}>
-          <span style={{ fontSize:12,color:C.text2 }}>{label}</span>
-          <span style={{ fontSize:14,fontWeight:700,color }}>{value}</span>
-        </div>
-      ))}
+    <div style={{ marginBottom:14 }}>
+      <div style={{ fontSize:12, fontWeight:700, color:C.text2, textTransform:'uppercase',
+        letterSpacing:'.06em', marginBottom:8 }}>Resumen financiero</div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:8 }}>
+        {cards.map(c => (
+          <div key={c.label} style={{ background:C.surface2, border:`1px solid ${C.border}`,
+            borderRadius:10, padding:'12px 14px' }}>
+            <div style={{ fontSize:18, marginBottom:4 }}>{c.icon}</div>
+            <div style={{ fontSize:12, color:C.text, fontWeight:700, marginBottom:2 }}>{c.label}</div>
+            <div style={{ fontSize:18, fontWeight:800,
+              color: c.utilidad ? (utilidad>=0 ? C.primary : C.red) : c.ingreso ? C.green : C.text }}>
+              {c.value}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -802,7 +824,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                 <thead>
                   <tr style={{ background:C.surface2 }}>
                     {['Concepto','Descripción','Valor','Mes','Año','Registrado por','Fecha',''].map(h => (
-                      <th key={h} style={{ padding:'10px 12px', fontSize:12, fontWeight:600, color:C.text2, textAlign:'left', borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
+                      <th key={h} style={{ padding:'10px 12px', fontSize:13, fontWeight:700, color:C.text, textAlign:'left', borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
                     ))}
                   </tr>
                 </thead>
@@ -902,8 +924,8 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
                   onChange={toggleTodos} title="Seleccionar todas las pendientes" />
               </th>
               {['Código','Afiliado','Cliente','Período','Ingreso','Planilla','Utilidad','Banco','Estado','Novedades','Acciones'].map(h=>(
-                <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
-                  color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
+                <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:13,fontWeight:700,
+                  color:C.text,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>
           </thead>
@@ -1160,6 +1182,7 @@ export default function Facturacion({ prefillAfiliado, onFacturaCreada }) {
 
 const tdc = { padding:'10px 12px',fontSize:13,color:C.text,verticalAlign:'middle' };
 const sel = { padding:'8px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',background:C.surface,color:C.text };
-const lbl = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
+const lbl  = { display:'block',fontSize:12,color:C.text2,fontWeight:500,marginBottom:4 };
+const mlbl = { display:'block',fontSize:11,color:C.text,fontWeight:700,marginBottom:5,textTransform:'uppercase',letterSpacing:'.05em' };
 const inp = { width:'100%',padding:'9px 12px',border:`1px solid ${C.border}`,borderRadius:7,fontSize:13,outline:'none',boxSizing:'border-box',color:C.text,background:C.surface };
 

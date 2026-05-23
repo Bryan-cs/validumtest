@@ -127,6 +127,7 @@ export default function Afiliados() {
   const [segPagina, setSegPagina] = useState(1);
   const [arlPagina, setArlPagina] = useState(1);
   const [arlModal, setArlModal] = useState(null);
+
   const [arlForm, setArlForm] = useState({
     nombre:'', documento:'', cliente:'', empresa:'',
     fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', observaciones:''
@@ -409,7 +410,17 @@ export default function Afiliados() {
 
   const sf = (k,v) => setForm(f=>({...f,[k]:v}));
   const openNuevo  = () => { setForm({ empresa:'', servicios:[], subtipo:'0', estado:'ACTIVO', estado_srv:'ACTIVO' }); setPendingFiles([]); setModal('nuevo'); };
-  const openEditar = (a) => { setForm({...a}); setPendingFiles([]); setModal(a); };
+  const openEditar = async (a) => {
+    setForm({ ...a, servicios: a.servicios ?? [] });
+    setPendingFiles([]);
+    setModal(a);
+    try {
+      const res = await api.get(`/afiliados/${a.id}`);
+      setForm({ ...res.data, servicios: res.data.servicios ?? [] });
+    } catch {
+      // cae back al dato del listado ya cargado
+    }
+  };
   const toggleSrv  = (s) => {
     setForm(f => {
       const srvs = f.servicios || [];
@@ -1328,7 +1339,15 @@ export default function Afiliados() {
                       <td style={{ ...tdc, fontSize:12, fontWeight:600 }}>{row.entidad_arl||'SURA'}</td>
                       <td style={{ ...tdc, fontSize:12 }}>{row.nivel_arl||'N/A'}</td>
                       <td style={tdc}>{statusBadge(row.estado==='activo'?'ACTIVO':row.estado==='retirar'?'PENDIENTE DE RETIRAR':'RETIRADO')}</td>
-                      <td style={{ ...tdc, maxWidth:180, fontSize:12, color:C.text2 }}>{row.observaciones||'—'}</td>
+                      <td style={{ ...tdc, maxWidth:200 }}>
+                        {row.observaciones
+                          ? <span title={row.observaciones} style={{ display:'inline-block', background:C.blueBg, color:C.blue,
+                              borderRadius:10, padding:'2px 10px', fontSize:11, fontWeight:600,
+                              maxWidth:190, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', cursor:'default' }}>
+                              {row.observaciones}
+                            </span>
+                          : <span style={{ fontSize:11, color:C.text2 }}>—</span>}
+                      </td>
                       <td style={tdc}>
                         <div style={{ display:'flex', gap:4 }}>
                           <Btn size="sm" variant="secondary" onClick={() => abrirEditarArl(row)}>✏️</Btn>

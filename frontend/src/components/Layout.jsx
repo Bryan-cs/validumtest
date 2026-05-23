@@ -46,6 +46,7 @@ const navGroups = (rol) => [
       ...(rol === 'admin' ? [{ to: '/finanzas', label: '📊 Reportes Financieros' }] : []),
       { to: '/cobro',        label: '💰 Cobro' },
       { to: '/planillas-ss', label: '📋 Planillas SS' },
+      ...(rol === 'admin' ? [{ to: '/empleados', label: '💵 Nómina' }] : []),
     ],
   },
   ...(rol !== 'cliente' ? [
@@ -63,7 +64,6 @@ const navGroups = (rol) => [
       label: 'CONFIGURACIÓN',
       items: [
         { to: '/usuarios',           label: '⚙️ Usuarios' },
-        { to: '/empleados',          label: '👔 Empleados' },
         { to: '/listas',             label: '📋 Listas' },
         { to: '/calculadora',        label: '🧮 Calculadora' },
       ],
@@ -79,7 +79,9 @@ const navGroups = (rol) => [
 ];
 
 function tiempoRelativo(fechaStr) {
-  const d = new Date(fechaStr.endsWith('Z') ? fechaStr : fechaStr + 'Z');
+  if (!fechaStr) return '';
+  const normalized = fechaStr.endsWith('Z') || /[+-]\d{2}:\d{2}$/.test(fechaStr) ? fechaStr : fechaStr + 'Z';
+  const d = new Date(normalized);
   const diff = Date.now() - d.getTime();
   const min = Math.floor(diff / 60000);
   if (min < 1) return 'ahora';
@@ -162,6 +164,7 @@ export default function Layout() {
     refetchInterval: 60_000,
   });
   const noLeidas = notifs.filter(n => !n.leida).length;
+  const noLeidasPortal = notifs.filter(n => !n.leida && !n.tarea_id).length;
   const prevNoLeidas = useRef(noLeidas);
 
   useEffect(() => {
@@ -200,7 +203,7 @@ export default function Layout() {
         map.set(n.mensaje, { ...n, count: 1, ids: [n.id], alguna_no_leida: !n.leida });
       }
     });
-    return [...map.values()];
+    return [...map.values()].sort((a, b) => new Date(b.creado) - new Date(a.creado));
   }, [notifs]);
 
   // ── Drag handlers ──────────────────────────────────────────────────────────
@@ -368,7 +371,7 @@ export default function Layout() {
                 {/* Group items */}
                 {!isGroupCollapsed && group.items.map((item) => {
                   const isNovClientes = item.to === '/novedades-clientes';
-                  const showDot = isNovClientes && noLeidas > 0;
+                  const showDot = isNovClientes && noLeidasPortal > 0;
                   return (
                     <NavLink key={item.to} to={item.to} end={item.to === '/'}
                       title={collapsed ? item.label : undefined}

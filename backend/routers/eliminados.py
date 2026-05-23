@@ -169,7 +169,3 @@ def restaurar_eliminado(id: int, db: Session = Depends(get_db), token=Depends(ve
             crud.cache_invalidar(f"usuario_rol:{u.username}")
     return {"ok": True, "nombre": e.nombre}
 
-
-@router.post("/{id}/a-retiros", status_code=201)
-def eliminado_a_retiros(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    return crud.eliminado_a_retiro(db, id, user=token.get("sub", "sistema"))
