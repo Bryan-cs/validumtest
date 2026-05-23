@@ -411,6 +411,24 @@ export default function Tareas() {
             </button>
           );
         })()}
+        {counts.finalizada > 0 && (() => {
+          const active = filtroEstado === 'finalizada';
+          return (
+            <button type="button"
+              onClick={() => { setFiltroEstado(active ? '' : 'finalizada'); if (!active) setShowFinalizadas(true); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20,
+                background: active ? COL_FINALIZADA.dot : COL_FINALIZADA.headBg,
+                color: active ? '#fff' : COL_FINALIZADA.labelColor,
+                fontSize: 12, fontWeight: 600,
+                border: `1.5px solid ${active ? COL_FINALIZADA.dot : 'transparent'}`,
+                cursor: 'pointer', fontFamily: FONT, transition: 'all .15s',
+              }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: active ? '#fff' : COL_FINALIZADA.dot, flexShrink: 0, display: 'inline-block' }} />
+              {counts.finalizada} finalizada{counts.finalizada !== 1 ? 's' : ''}
+            </button>
+          );
+        })()}
         {(filtroEstado || filtroAsignado || fechaDesde || fechaHasta) && (
           <button type="button"
             onClick={() => { setFiltroEstado(''); setFiltroAsignado(''); setFechaDesde(''); setFechaHasta(''); }}
@@ -458,7 +476,7 @@ export default function Tareas() {
             }}>
             Todos
           </button>
-          {usuarios.filter(u => u.activo).map(u => {
+          {usuarios.filter(u => u.activo && (u.rol === 'admin' || u.rol === 'empleado')).map(u => {
             const selected = filtroAsignado === u.username;
             const words = (u.nombre || u.username).trim().split(/\s+/);
             const initials = words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : words[0].slice(0, 2).toUpperCase();
@@ -660,7 +678,7 @@ export default function Tareas() {
                             </div>
                             {t.fecha_limite ? (
                               <span style={{ fontSize: 11, fontWeight: 600, color: vencida ? C.red : urgente ? C.amber : dias === 0 ? C.blue : C.text2, display: 'flex', alignItems: 'center', gap: 3 }}>
-                                📅 {dias === 0 ? 'Hoy' : dias === 1 ? 'Mañana' : t.fecha_limite.slice(5).replace('-', '/')}
+                                📅 Vence: {dias === 0 ? 'Hoy' : dias === 1 ? 'Mañana' : t.fecha_limite.slice(5).replace('-', '/')}
                               </span>
                             ) : t.completado_en && isCompletada ? (
                               <span style={{ fontSize: 11, fontWeight: 600, color: C.green }}>
