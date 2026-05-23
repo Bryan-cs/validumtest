@@ -124,17 +124,17 @@ export default function NovedadesClientes() {
 
   const updNovedad = useMutation({
     mutationFn:({id,estado,respuesta})=>api.patch(`/portal/novedades-pago/${id}/estado`,{estado,respuesta}),
-    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-novedades-pago'], prev => prev?.map(n => n.id === id ? { ...n, estado, respuesta: respuesta ?? n.respuesta } : n)); cerrarModalResp(); },
+    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-novedades-pago'], prev => prev?.map(n => n.id === id ? { ...n, estado, respuesta: respuesta ?? n.respuesta } : n)); qc.invalidateQueries({ queryKey: ['notificaciones'] }); cerrarModalResp(); },
     onError:()=>toast.error('Error al actualizar'),
   });
   const updSolicitud = useMutation({
     mutationFn:({id,estado,respuesta})=>api.patch(`/portal/solicitudes-retiro/${id}/estado`,{estado,respuesta}),
-    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-solicitudes-retiro'], prev => prev?.map(s => s.id === id ? { ...s, estado, respuesta: respuesta ?? s.respuesta } : s)); cerrarModalResp(); },
+    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-solicitudes-retiro'], prev => prev?.map(s => s.id === id ? { ...s, estado, respuesta: respuesta ?? s.respuesta } : s)); qc.invalidateQueries({ queryKey: ['notificaciones'] }); cerrarModalResp(); },
     onError:()=>toast.error('Error al actualizar'),
   });
   const updNovedadAfil = useMutation({
     mutationFn:({id,estado,respuesta})=>api.patch(`/portal/solicitudes-novedad/${id}/estado`,{estado,respuesta}),
-    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-novedades-afil'], prev => prev?.map(s => s.id === id ? { ...s, estado, respuesta: respuesta ?? s.respuesta } : s)); cerrarModalResp(); },
+    onSuccess:(_, { id, estado, respuesta })=>{ toast.success('Estado actualizado'); qc.setQueryData(['admin-novedades-afil'], prev => prev?.map(s => s.id === id ? { ...s, estado, respuesta: respuesta ?? s.respuesta } : s)); qc.invalidateQueries({ queryKey: ['notificaciones'] }); cerrarModalResp(); },
     onError:()=>toast.error('Error al actualizar'),
   });
 
