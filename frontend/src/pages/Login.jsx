@@ -451,7 +451,7 @@ export default function Login() {
                 Cargando noticias del sector…
               </div>
             ) : tickerLoop.length > 0 ? (
-              <div style={{ display: 'inline-flex', whiteSpace: 'nowrap', alignItems: 'center', animation: 'edTicker 70s linear infinite' }}>
+              <div style={{ display: 'inline-flex', whiteSpace: 'nowrap', alignItems: 'center', animation: 'edTicker 150s linear infinite' }}>
                 {tickerLoop.map((it, i) => (
                   <button key={i}
                     onClick={() => { try { window.open(it.link, '_blank', 'noopener,noreferrer'); } catch(_){} }}
