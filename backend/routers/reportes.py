@@ -26,6 +26,7 @@ def reporte_cobro(
     # ── Calcular periodos de mora por afiliado ────────────────────────────────
     docs = list({r["doc"] for r in items if r.get("doc")})
     paid_facts: set = set()
+    creado_map: dict = {}
     if docs:
         paid_facts = set(
             (f.doc, f.mes, f.anio)
@@ -34,6 +35,13 @@ def reporte_cobro(
             .filter(models.Factura.estado.in_(["pagado", "planilla_pagada"]))
             .all()
         )
+        creado_map = {
+            a.doc: a.creado
+            for a in db.query(models.Afiliado.doc, models.Afiliado.creado)
+            .filter(models.Afiliado.doc.in_(docs))
+            .all()
+            if a.creado
+        }
 
     cfg = db.query(models.Config).first()
     cfg_corte = (cfg.anio_inicio_cobro, cfg.mes_inicio_cobro) if (
@@ -54,6 +62,15 @@ def reporte_cobro(
             pm, py = 1, py + 1
         if cfg_corte and (py, pm) < cfg_corte:
             py, pm = cfg_corte[0], cfg_corte[1]
+        # Piso: no contar mora antes del mes siguiente al registro en sistema
+        creado = creado_map.get(doc)
+        if creado:
+            reg_m = creado.month + 1
+            reg_y = creado.year
+            if reg_m > 12:
+                reg_m, reg_y = 1, reg_y + 1
+            if (reg_y, reg_m) > (py, pm):
+                py, pm = reg_y, reg_m
         meses_mora = []
         y, m = py, pm
         while (y, m) <= (hoy.year, hoy.month):
