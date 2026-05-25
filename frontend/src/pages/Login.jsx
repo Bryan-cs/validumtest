@@ -426,7 +426,7 @@ export default function Login() {
 
         {/* News ticker */}
         <div style={{
-          position: 'absolute', left: 0, right: 0, bottom: 0, zIndex: 3,
+          position: isMobile ? 'fixed' : 'absolute', left: 0, right: 0, bottom: 0, zIndex: 3,
           height: 48, display: 'flex', alignItems: 'center',
           background: 'rgba(11,27,43,0.88)',
           borderTop: `1px solid ${P.cream}1c`,
