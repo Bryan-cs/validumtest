@@ -182,6 +182,10 @@ export default function Login() {
           letter-spacing: 0.1em; text-transform: uppercase;
           transition: color .22s;
         }
+
+        @media (max-width: 819px) {
+          .ed-trap { flex: 1; width: auto; }
+        }
       `}</style>
 
       <div
@@ -224,11 +228,11 @@ export default function Login() {
         <div style={{
           position: 'relative', zIndex: 2,
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: isMobile ? '20px' : '28px 56px', flexWrap: 'wrap', gap: 12,
+          padding: isMobile ? '14px 16px' : '28px 56px', flexWrap: 'wrap', gap: 12,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div style={{ width: 44, height: 50, flexShrink: 0, filter: `drop-shadow(0 4px 10px ${P.ink}55)` }}>
-              <svg viewBox="0 0 40 46" width="44" height="50" style={{ display: 'block' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ width: isMobile ? 36 : 44, height: isMobile ? 41 : 50, flexShrink: 0, filter: `drop-shadow(0 4px 10px ${P.ink}55)` }}>
+              <svg viewBox="0 0 40 46" width={isMobile ? 36 : 44} height={isMobile ? 41 : 50} style={{ display: 'block' }}>
                 <path d="M20 2 L36 7 V22 C36 31 29.5 39 20 44 C10.5 39 4 31 4 22 V7 Z"
                   fill="none" stroke="#3DD68C" strokeWidth="2" strokeLinejoin="round" />
                 <path d="M13.5 22 L18 27 L27 17"
@@ -236,40 +240,49 @@ export default function Login() {
               </svg>
             </div>
             <div style={{ lineHeight: 1.1 }}>
-              <div style={{ fontFamily: "'Newsreader', serif", fontSize: 24, fontWeight: 600, color: P.cream, letterSpacing: '-0.018em' }}>
+              <div style={{ fontFamily: "'Newsreader', serif", fontSize: isMobile ? 20 : 24, fontWeight: 600, color: P.cream, letterSpacing: '-0.018em' }}>
                 BBC File
               </div>
-              <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.22em', marginTop: 4, color: P.accent }}>
-                SOFTWARE DE GESTIÓN · CO
-              </div>
+              {!isMobile && (
+                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.22em', marginTop: 4, color: P.accent }}>
+                  SOFTWARE DE GESTIÓN · CO
+                </div>
+              )}
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-            <a href="https://landing-page-bbc-file.vercel.app" target="_blank" rel="noopener noreferrer"
-              onMouseEnter={e => { e.currentTarget.style.background = `${P.accent}22`; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-              onMouseLeave={e => { e.currentTarget.style.background = `${P.accent}10`; e.currentTarget.style.transform = 'none'; }}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8,
-                padding: '7px 14px', border: `1px solid ${P.accent}55`, borderRadius: 999,
-                fontSize: 10.5, letterSpacing: '0.16em',
+          {!isMobile ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+              <a href="https://landing-page-bbc-file.vercel.app" target="_blank" rel="noopener noreferrer"
+                onMouseEnter={e => { e.currentTarget.style.background = `${P.accent}22`; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = `${P.accent}10`; e.currentTarget.style.transform = 'none'; }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 14px', border: `1px solid ${P.accent}55`, borderRadius: 999,
+                  fontSize: 10.5, letterSpacing: '0.16em',
+                  fontFamily: "'JetBrains Mono', monospace",
+                  color: P.accent, textDecoration: 'none',
+                  background: `${P.accent}10`, transition: 'all 0.2s',
+                }}
+              >
+                CONOCE EL SISTEMA <span aria-hidden="true">→</span>
+              </a>
+              <div style={{
                 fontFamily: "'JetBrains Mono', monospace",
-                color: P.accent, textDecoration: 'none',
-                background: `${P.accent}10`, transition: 'all 0.2s',
-              }}
-            >
-              CONOCE EL SISTEMA <span aria-hidden="true">→</span>
-            </a>
-            <div style={{
-              fontFamily: "'JetBrains Mono', monospace",
-              display: 'flex', alignItems: 'center', gap: 10,
-              padding: '7px 14px', border: `1px solid ${P.cream}22`,
-              borderRadius: 999, fontSize: 10.5, letterSpacing: '0.18em', color: P.cream,
-            }}>
-              <span style={{ width: 7, height: 7, borderRadius: '50%', background: P.statusG, boxShadow: `0 0 10px ${P.statusG}` }} />
-              SISTEMA OPERATIVO
+                display: 'flex', alignItems: 'center', gap: 10,
+                padding: '7px 14px', border: `1px solid ${P.cream}22`,
+                borderRadius: 999, fontSize: 10.5, letterSpacing: '0.18em', color: P.cream,
+              }}>
+                <span style={{ width: 7, height: 7, borderRadius: '50%', background: P.statusG, boxShadow: `0 0 10px ${P.statusG}` }} />
+                SISTEMA OPERATIVO
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: P.statusG, boxShadow: `0 0 8px ${P.statusG}` }} />
+              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.18em', color: P.statusG }}>EN LÍNEA</span>
+            </div>
+          )}
         </div>
 
         {/* Main content grid */}
@@ -278,14 +291,14 @@ export default function Login() {
           display: 'grid',
           gridTemplateColumns: isMobile ? '1fr' : '1fr 460px',
           gap: isMobile ? 28 : 56,
-          padding: isMobile ? '20px 20px 80px' : '0 56px',
+          padding: isMobile ? '16px 16px 80px' : '0 56px',
           height: isMobile ? 'auto' : 'calc(100% - 154px)',
-          minHeight: isMobile ? 'calc(100vh - 96px)' : 'auto',
+          minHeight: isMobile ? 'calc(100vh - 60px)' : 'auto',
           alignItems: 'center',
         }}>
 
-          {/* Editorial hero — memoized, doesn't re-render on form state changes */}
-          <LoginHero isMobile={isMobile} />
+          {/* Editorial hero — desktop only */}
+          {!isMobile && <LoginHero isMobile={isMobile} />}
 
           {/* Glass login card */}
           <form
@@ -304,13 +317,19 @@ export default function Login() {
               willChange: 'transform',
             }}
           >
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.22em', color: P.accentD, marginBottom: 14, fontSize: 11 }}>
+            {isMobile && (
+              <div style={{ fontFamily: "'Newsreader', serif", fontSize: 22, lineHeight: 1.15, color: P.ink, letterSpacing: '-0.02em', marginBottom: 16 }}>
+                Gestiona la seguridad social,{' '}
+                <em style={{ color: P.accentD }}>simplificada.</em>
+              </div>
+            )}
+            <div style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.22em', color: P.accentD, marginBottom: 10, fontSize: isMobile ? 9 : 11 }}>
               BIENVENIDO DE VUELTA
             </div>
-            <div style={{ fontFamily: "'Newsreader', serif", fontSize: 38, lineHeight: 1.02, color: P.ink, letterSpacing: '-0.02em', marginBottom: 8 }}>
+            <div style={{ fontFamily: "'Newsreader', serif", fontSize: isMobile ? 30 : 38, lineHeight: 1.02, color: P.ink, letterSpacing: '-0.02em', marginBottom: 6 }}>
               Inicia sesión
             </div>
-            <div style={{ fontSize: 13.5, color: P.muted, marginBottom: 22 }}>
+            <div style={{ fontSize: 13, color: P.muted, marginBottom: isMobile ? 16 : 22 }}>
               Ingresa con tus credenciales corporativas.
             </div>
 
@@ -381,7 +400,7 @@ export default function Login() {
                   SÍGUENOS EN FACEBOOK
                 </span>
               </div>
-              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <div style={{ display: 'flex', gap: 8, width: '100%', justifyContent: 'center' }}>
                 <a href="https://www.facebook.com/TechPlanetEsal" target="_blank" rel="noreferrer" className="ed-trap">
                   <span className="ed-trap-lbl">Techplanet</span>
                 </a>
