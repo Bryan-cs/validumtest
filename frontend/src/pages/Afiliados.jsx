@@ -939,16 +939,16 @@ export default function Afiliados() {
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
-                  {['Nombre','Empresa','Documento','EPS','CCF','Fecha afiliación','Mes','Fecha retiro','Retirado por','Estado planilla','Acciones'].map(h=>(
+                  {['Nombre','Empresa','Tipo doc','Documento','EPS','CCF','Fecha afiliación','Mes','Fecha retiro','Retirado por','Estado planilla','Acciones'].map(h=>(
                     <th key={h} style={{ padding:'11px 12px',textAlign:'left',fontSize:11,fontWeight:700,
                       color:C.text,background:C.surface2,borderBottom:`2px solid ${C.border}`,whiteSpace:'nowrap',textTransform:'uppercase',letterSpacing:'0.03em' }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {loadElim && <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+                {loadElim && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
                 {!loadElim && eliminados.length===0 && (
-                  <tr><td colSpan={11} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros retirados</td></tr>
+                  <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros retirados</td></tr>
                 )}
                 {eliminados.filter(e => {
                   if (buscarElim) {
@@ -976,6 +976,7 @@ export default function Afiliados() {
                       : C.redBg }}>
                     <td style={{ ...tdc, fontWeight:600, color: e.estado_planilla === 'retiro_pendiente' ? C.amber : e.estado_planilla === 'planilla_hecha' ? C.blue : e.estado_planilla === 'planilla_pagada' ? '#166534' : C.red }}>{e.nombre}</td>
                     <td style={tdc}>{e.empresa||'—'}</td>
+                    <td style={{ ...tdc,fontSize:11 }}>{e.tipo_doc||'—'}</td>
                     <td style={{ ...tdc,fontFamily:'monospace',fontSize:12 }}>{e.doc}</td>
                     <td style={{ ...tdc,fontSize:12 }}>{e.eps||'—'}</td>
                     <td style={{ ...tdc,fontSize:12 }}>{e.ccf||'—'}</td>
