@@ -169,8 +169,8 @@ def delete_afiliado(db, id, deleted_by=""):
         db.query(models.Factura).filter_by(doc=a.doc).update(
             {"afiliado_eliminado": True})
         a.activo = False
-        db.commit()
         _log(db, deleted_by, "eliminó un afiliado", "Afiliados", nombre)
+        db.commit()
     except Exception:
         db.rollback()
         raise
