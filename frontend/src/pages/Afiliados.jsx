@@ -120,6 +120,13 @@ export default function Afiliados() {
   const [elimAnio,       setElimAnio]       = useState(() => String(new Date().getFullYear()));
   const [elimMes,        setElimMes]        = useState(() => String(new Date().getMonth()+1).padStart(2,'0'));
   const [elimDia,        setElimDia]        = useState(() => String(new Date().getDate()).padStart(2,'0'));
+  const [elimEps,          setElimEps]          = useState('');
+  const [elimCcf,          setElimCcf]          = useState('');
+  const [elimRetiradorPor, setElimRetiradorPor] = useState('');
+  const [elimEstadoFilt,   setElimEstadoFilt]   = useState('');
+  const [elimEmpresa,      setElimEmpresa]      = useState('');
+  const [elimMesCol,       setElimMesCol]       = useState('');
+  const [elimAnioAfil,     setElimAnioAfil]     = useState('');
 
   const [arlFiltroCliente, setArlFiltroCliente] = useState('');
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
@@ -206,6 +213,13 @@ export default function Afiliados() {
     queryKey:['eliminados'], queryFn:()=>api.get('/eliminados').then(r=>r.data),
     enabled: (tab === 'eliminados' || tab === 'pagos') && (esAdmin || esEmpleado),
   });
+
+  const elimEpsOpts         = useMemo(()=>[...new Set(eliminados.map(e=>e.eps||'').filter(Boolean))].sort(),[eliminados]);
+  const elimCcfOpts         = useMemo(()=>[...new Set(eliminados.map(e=>e.ccf||'').filter(Boolean))].sort(),[eliminados]);
+  const elimRetiradoPorOpts = useMemo(()=>[...new Set(eliminados.map(e=>e.eliminado_por||'').filter(Boolean))].sort(),[eliminados]);
+  const elimEmpresaOpts     = useMemo(()=>[...new Set(eliminados.map(e=>e.empresa||'').filter(Boolean))].sort(),[eliminados]);
+  const elimMesColOpts      = useMemo(()=>[...new Set(eliminados.map(e=>e.mes||'').filter(Boolean))].sort(),[eliminados]);
+  const elimAnioAfilOpts    = useMemo(()=>[...new Set(eliminados.map(e=>(e.fecha_afiliacion||'').slice(0,4)).filter(Boolean))].sort().reverse(),[eliminados]);
 
   // Facturas del afiliado seleccionado en tab pagos
   // Si el afiliado fue retirado no está en `todos` — buscarlo en eliminados como fallback
@@ -832,47 +846,95 @@ export default function Afiliados() {
             padding:'10px 14px', marginBottom:14, fontSize:12, color:C.amber, fontWeight:500 }}>
             ⚠️ Afiliados retirados del sistema. Puedes restaurarlos como ACTIVOS con el botón ↩ Restaurar.
           </div>
-          <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap', alignItems:'center' }}>
-            <input
-              placeholder="🔍 Buscar por nombre, documento o empresa..."
-              value={buscarElim}
-              onChange={e => setBuscarElim(e.target.value)}
-              style={{ flex:'1 1 220px', padding:'10px 14px', border:`1px solid ${C.border}`, borderRadius:8,
-                fontSize:14, outline:'none', boxSizing:'border-box', background:C.surface, color:C.text }}
-            />
-            <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-              <select value={elimAnio} onChange={e=>setElimAnio(e.target.value)}
-                style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
-                  outline:'none', background:C.surface, color:elimAnio ? C.text : C.text2, cursor:'pointer' }}>
-                <option value="">Año</option>
-                {aniosElim.map(a => <option key={a} value={a}>{a}</option>)}
-              </select>
-              <select value={elimMes} onChange={e=>setElimMes(e.target.value)}
-                style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
-                  outline:'none', background:C.surface, color:elimMes ? C.text : C.text2, cursor:'pointer' }}>
-                <option value="">Mes</option>
-                {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map((m,i)=>(
-                  <option key={m} value={String(i+1).padStart(2,'0')}>{m}</option>
-                ))}
-              </select>
-              <select value={elimDia} onChange={e=>setElimDia(e.target.value)}
-                style={{ padding:'8px 10px', border:`1px solid ${C.border}`, borderRadius:8, fontSize:13,
-                  outline:'none', background:C.surface, color:elimDia ? C.text : C.text2, cursor:'pointer' }}>
-                <option value="">Día</option>
-                {Array.from({length:31},(_,i)=>String(i+1).padStart(2,'0')).map(d=>(
-                  <option key={d} value={d}>{Number(d)}</option>
-                ))}
-              </select>
-              {(elimMes || elimAnio || elimDia) && (
-                <button onClick={() => { setElimMes(''); setElimAnio(''); setElimDia(''); }}
-                  style={{ padding:'7px 10px', border:`1px solid ${C.border}`, borderRadius:8,
-                    background:C.surface2, cursor:'pointer', fontSize:12, color:C.text2 }}>✕</button>
-              )}
-              <Btn size="sm" variant="secondary" onClick={() => dlExcel('/reportes/eliminados', 'retirados.xlsx')}>
-                ⬇ Excel
-              </Btn>
-            </div>
-          </div>
+          {(() => {
+            const selSt = (active) => ({
+              padding:'8px 10px', border:`1px solid ${active ? C.primary : C.border}`,
+              borderRadius:8, fontSize:13, outline:'none', background: active ? C.blueBg : C.surface,
+              color: active ? C.primary : C.text2, cursor:'pointer',
+            });
+            const hayFiltros = buscarElim || elimAnio || elimMes || elimDia || elimEps || elimCcf || elimRetiradorPor || elimEstadoFilt || elimEmpresa || elimMesCol || elimAnioAfil;
+            const limpiarTodo = () => {
+              setBuscarElim(''); setElimAnio(''); setElimMes(''); setElimDia('');
+              setElimEps(''); setElimCcf(''); setElimRetiradorPor(''); setElimEstadoFilt('');
+              setElimEmpresa(''); setElimMesCol(''); setElimAnioAfil('');
+            };
+            return (
+              <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap', alignItems:'center' }}>
+                {/* Row 1: búsqueda + fecha retiro + Excel */}
+                <input
+                  placeholder="🔍 Nombre, documento o empresa..."
+                  value={buscarElim}
+                  onChange={e => setBuscarElim(e.target.value)}
+                  style={{ flex:'1 1 200px', padding:'10px 14px', border:`1px solid ${C.border}`, borderRadius:8,
+                    fontSize:14, outline:'none', boxSizing:'border-box', background:C.surface, color:C.text }}
+                />
+                <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                  <select value={elimAnio} onChange={e=>setElimAnio(e.target.value)} style={selSt(!!elimAnio)}>
+                    <option value="">Año retiro</option>
+                    {aniosElim.map(a => <option key={a} value={a}>{a}</option>)}
+                  </select>
+                  <select value={elimMes} onChange={e=>setElimMes(e.target.value)} style={selSt(!!elimMes)}>
+                    <option value="">Mes retiro</option>
+                    {['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'].map((m,i)=>(
+                      <option key={m} value={String(i+1).padStart(2,'0')}>{m}</option>
+                    ))}
+                  </select>
+                  <select value={elimDia} onChange={e=>setElimDia(e.target.value)} style={selSt(!!elimDia)}>
+                    <option value="">Día</option>
+                    {Array.from({length:31},(_,i)=>String(i+1).padStart(2,'0')).map(d=>(
+                      <option key={d} value={d}>{Number(d)}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Row 2: filtros adicionales */}
+                <div style={{ width:'100%', display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                  <select value={elimEmpresa} onChange={e=>setElimEmpresa(e.target.value)} style={selSt(!!elimEmpresa)}>
+                    <option value="">Empresa</option>
+                    {elimEmpresaOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimEps} onChange={e=>setElimEps(e.target.value)} style={selSt(!!elimEps)}>
+                    <option value="">EPS</option>
+                    {elimEpsOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimCcf} onChange={e=>setElimCcf(e.target.value)} style={selSt(!!elimCcf)}>
+                    <option value="">CCF</option>
+                    {elimCcfOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimAnioAfil} onChange={e=>setElimAnioAfil(e.target.value)} style={selSt(!!elimAnioAfil)}>
+                    <option value="">Año afiliación</option>
+                    {elimAnioAfilOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimMesCol} onChange={e=>setElimMesCol(e.target.value)} style={selSt(!!elimMesCol)}>
+                    <option value="">Mes</option>
+                    {elimMesColOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimRetiradorPor} onChange={e=>setElimRetiradorPor(e.target.value)} style={selSt(!!elimRetiradorPor)}>
+                    <option value="">Retirado por</option>
+                    {elimRetiradoPorOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimEstadoFilt} onChange={e=>setElimEstadoFilt(e.target.value)} style={selSt(!!elimEstadoFilt)}>
+                    <option value="">Estado planilla</option>
+                    <option value="retiro_pendiente">Retiro pendiente</option>
+                    <option value="planilla_hecha">Planilla hecha</option>
+                    <option value="planilla_pagada">Planilla pagada</option>
+                  </select>
+                  {hayFiltros && (
+                    <button onClick={limpiarTodo}
+                      style={{ padding:'7px 12px', border:`1px solid ${C.border}`, borderRadius:8,
+                        background:C.surface2, cursor:'pointer', fontSize:12, color:C.text2, whiteSpace:'nowrap' }}>
+                      ✕ Limpiar filtros
+                    </button>
+                  )}
+                  <div style={{ marginLeft:'auto' }}>
+                    <Btn size="sm" variant="secondary" onClick={() => dlExcel('/reportes/eliminados', 'retirados.xlsx')}>
+                      ⬇ Excel
+                    </Btn>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
@@ -898,6 +960,13 @@ export default function Afiliados() {
                   if (elimAnio && (e.fecha_eliminacion||'').slice(0,4) !== elimAnio) return false;
                   if (elimMes && (e.fecha_eliminacion||'').slice(5,7) !== elimMes) return false;
                   if (elimDia && (e.fecha_eliminacion||'').slice(8,10) !== elimDia) return false;
+                  if (elimEmpresa && (e.empresa||'') !== elimEmpresa) return false;
+                  if (elimEps && (e.eps||'') !== elimEps) return false;
+                  if (elimCcf && (e.ccf||'') !== elimCcf) return false;
+                  if (elimAnioAfil && (e.fecha_afiliacion||'').slice(0,4) !== elimAnioAfil) return false;
+                  if (elimMesCol && (e.mes||'') !== elimMesCol) return false;
+                  if (elimRetiradorPor && (e.eliminado_por||'') !== elimRetiradorPor) return false;
+                  if (elimEstadoFilt && (e.estado_planilla||'') !== elimEstadoFilt) return false;
                   return true;
                 }).map(e=>(
                   <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`,
