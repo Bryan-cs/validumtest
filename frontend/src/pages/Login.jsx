@@ -170,10 +170,10 @@ export default function Login() {
         /* Trapdoor Facebook buttons — editorial palette */
         .ed-trap {
           position: relative;
-          width: 100px; height: 40px;
-          overflow: hidden; border-radius: 8px;
-          border: 1px solid rgba(11,27,43,0.18);
-          background: rgba(11,27,43,0.05);
+          width: 108px; height: 46px;
+          overflow: hidden; border-radius: 9px;
+          border: 1.5px solid rgba(11,27,43,0.2);
+          background: rgba(11,27,43,0.06);
           display: inline-flex; align-items: center; justify-content: center;
           cursor: pointer; text-decoration: none;
           transition: border-color .2s, background .2s;
@@ -201,9 +201,9 @@ export default function Login() {
 
         .ed-trap-lbl {
           position: relative; z-index: 1;
-          color: #0B1B2B; font-size: 11px; font-weight: 700;
-          font-family: 'JetBrains Mono', monospace;
-          letter-spacing: 0.05em; text-align: center;
+          color: #0B1B2B; font-size: 11.5px; font-weight: 700;
+          font-family: 'Manrope', sans-serif;
+          letter-spacing: 0.03em; text-align: center;
         }
       `}</style>
 
@@ -388,16 +388,22 @@ export default function Login() {
 
             {/* Social — 3 Facebook trapdoor buttons */}
             <div style={{
-              marginTop: 18, paddingTop: 14,
+              marginTop: 20, paddingTop: 16,
               borderTop: `1px solid ${P.ink}14`,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
             }}>
-              <span style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10, letterSpacing: '0.22em', color: P.muted,
-              }}>
-                SÍGUENOS EN FACEBOOK
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#1877F2">
+                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                </svg>
+                <span style={{
+                  fontFamily: "'Manrope', sans-serif",
+                  fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
+                  color: '#1877F2',
+                }}>
+                  SÍGUENOS EN FACEBOOK
+                </span>
+              </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                 <a href="https://www.facebook.com/TechPlanetEsal" target="_blank" rel="noreferrer" className="ed-trap">
                   <div className="ed-door ed-door-top"><img src="/facebook-f.svg" className="ed-door-img" alt="" /></div>
