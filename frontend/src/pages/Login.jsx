@@ -19,34 +19,17 @@ const P = {
 const PHOTO = 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=1800&q=85&auto=format&fit=crop';
 
 // ── Live news ticker ──────────────────────────────────────────────────────────
-const RSS_FEEDS = [
-  { name: 'El Tiempo',  url: 'https://www.eltiempo.com/rss/economia.xml' },
-  { name: 'Portafolio', url: 'https://www.portafolio.co/rss/economia.xml' },
-];
-const KW = /seguridad social|pension|eps|arl|salud|trabajo|empleo|aporte|parafiscal|ugpp|colpensiones|minsalud|mintrabajo|laboral|nómina|nomina|cesant|reforma|afilia|cotiza/i;
-
 function useNews() {
   const [items, setItems]   = useState([]);
   const [status, setStatus] = useState('loading');
 
   const load = useCallback(() => {
-    Promise.all(
-      RSS_FEEDS.map(f =>
-        fetch('https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent(f.url))
-          .then(r => r.json())
-          .then(d => d.status === 'ok'
-            ? d.items.map(it => ({ title: it.title, source: f.name, link: it.link }))
-            : [])
-          .catch(() => [])
-      )
-    ).then(arrs => {
-      const seen   = new Set();
-      const unique = arrs.flat()
-        .filter(it => KW.test(it.title))
-        .filter(it => { const k = it.title.slice(0, 80).toLowerCase(); return seen.has(k) ? false : (seen.add(k), true); });
-      setItems(unique.slice(0, 8));
-      setStatus(unique.length ? 'ok' : 'empty');
-    });
+    api.get('/news/ticker')
+      .then(r => {
+        setItems(r.data);
+        setStatus(r.data.length ? 'ok' : 'empty');
+      })
+      .catch(() => setStatus('empty'));
   }, []);
 
   useEffect(() => { load(); }, [load]);
