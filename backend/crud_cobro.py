@@ -72,6 +72,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
         models.Afiliado.servicios,
         models.Afiliado.arl,
         models.Afiliado.novedades,
+        models.Afiliado.creado,
     ))
     if empresa: q = q.filter(models.Afiliado.empresa == empresa)
     if cliente: q = q.filter(models.Afiliado.cliente_txt == cliente)
@@ -102,6 +103,16 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
         if primer_cobro_m > 12:
             primer_cobro_m = 1
             primer_cobro_y += 1
+
+        # Piso: el cobro no puede empezar antes del mes siguiente al registro en sistema
+        if a.creado:
+            reg = a.creado
+            reg_m = reg.month + 1
+            reg_y = reg.year
+            if reg_m > 12:
+                reg_m, reg_y = 1, reg_y + 1
+            if (reg_y, reg_m) > (primer_cobro_y, primer_cobro_m):
+                primer_cobro_y, primer_cobro_m = reg_y, reg_m
 
         for (y, m) in meses_ventana:
             if (y, m) < (primer_cobro_y, primer_cobro_m): continue
