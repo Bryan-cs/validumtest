@@ -150,43 +150,37 @@ export default function Login() {
         .ed-input::placeholder { color: #8BA0B0; }
         .ed-input:disabled { background: rgba(11,27,43,0.06); opacity: 0.7; }
 
-        /* Trapdoor Facebook buttons — editorial palette */
+        /* Facebook buttons — editorial Navy/Gold palette */
         .ed-trap {
           position: relative;
-          width: 108px; height: 46px;
-          overflow: hidden; border-radius: 9px;
-          border: 1.5px solid rgba(11,27,43,0.2);
-          background: rgba(11,27,43,0.06);
+          width: 112px; height: 44px;
+          overflow: hidden; border-radius: 8px;
+          border: 1.5px solid rgba(11,27,43,0.22);
+          background: rgba(11,27,43,0.04);
           display: inline-flex; align-items: center; justify-content: center;
           cursor: pointer; text-decoration: none;
-          transition: border-color .2s, background .2s;
+          transition: border-color .22s, box-shadow .22s;
         }
-        .ed-trap:hover { border-color: #0B1B2B; background: rgba(11,27,43,0.08); }
-        .ed-trap:hover .ed-door      { box-shadow: 0 0 10px -2px rgba(0,0,0,.3); transform: scale(1.06); }
-        .ed-trap:hover .ed-door-top  { top: -50%; }
-        .ed-trap:hover .ed-door-bot  { top: 100%; }
-
-        .ed-door {
-          position: absolute; left: 0;
-          width: 100%; height: 50%; background: #0B1B2B;
-          overflow: hidden; z-index: 2;
-          transition: top 400ms ease-in-out, box-shadow 200ms, transform 300ms ease-in-out;
+        .ed-trap::before {
+          content: '';
+          position: absolute; inset: 0;
+          background: #0B1B2B;
+          transform: translateY(102%);
+          transition: transform .3s cubic-bezier(0.22,1,0.36,1);
         }
-        .ed-door-top { top: 0; }
-        .ed-door-bot { top: 50%; }
-
-        .ed-door-img {
-          position: absolute; height: 16px; width: auto; display: block;
-          left: 50%; transform: translateX(-50%);
-          top: 12px; pointer-events: none; filter: brightness(10);
+        .ed-trap:hover {
+          border-color: #0B1B2B;
+          box-shadow: 0 6px 18px rgba(11,27,43,0.20);
         }
-        .ed-door-bot .ed-door-img { top: -4px; }
+        .ed-trap:hover::before { transform: translateY(0); }
+        .ed-trap:hover .ed-trap-lbl { color: #E6CFA3; }
 
         .ed-trap-lbl {
           position: relative; z-index: 1;
-          color: #0B1B2B; font-size: 11.5px; font-weight: 700;
+          color: #34495C; font-size: 10.5px; font-weight: 700;
           font-family: 'Manrope', sans-serif;
-          letter-spacing: 0.03em; text-align: center;
+          letter-spacing: 0.1em; text-transform: uppercase;
+          transition: color .22s;
         }
       `}</style>
 
@@ -389,18 +383,12 @@ export default function Login() {
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
                 <a href="https://www.facebook.com/TechPlanetEsal" target="_blank" rel="noreferrer" className="ed-trap">
-                  <div className="ed-door ed-door-top"><img src="/facebook-f.svg" className="ed-door-img" alt="" /></div>
-                  <div className="ed-door ed-door-bot"><img src="/facebook-f.svg" className="ed-door-img" alt="" /></div>
                   <span className="ed-trap-lbl">Techplanet</span>
                 </a>
                 <a href="https://www.facebook.com/profile.php?id=61584899039203" target="_blank" rel="noreferrer" className="ed-trap">
-                  <div className="ed-door ed-door-top"><img src="/facebook-f.svg" className="ed-door-img" alt="" /></div>
-                  <div className="ed-door ed-door-bot"><img src="/facebook-f.svg" className="ed-door-img" alt="" /></div>
                   <span className="ed-trap-lbl">Protsecoop</span>
                 </a>
                 <a href="https://www.facebook.com/profile.php?id=61586640354662" target="_blank" rel="noreferrer" className="ed-trap">
-                  <div className="ed-door ed-door-top"><img src="/facebook-f.svg" className="ed-door-img" alt="" /></div>
-                  <div className="ed-door ed-door-bot"><img src="/facebook-f.svg" className="ed-door-img" alt="" /></div>
                   <span className="ed-trap-lbl">Carsecoop</span>
                 </a>
               </div>
