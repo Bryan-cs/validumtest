@@ -124,6 +124,9 @@ export default function Afiliados() {
   const [elimCcf,          setElimCcf]          = useState('');
   const [elimRetiradorPor, setElimRetiradorPor] = useState('');
   const [elimEstadoFilt,   setElimEstadoFilt]   = useState('');
+  const [elimEmpresa,      setElimEmpresa]      = useState('');
+  const [elimMesCol,       setElimMesCol]       = useState('');
+  const [elimAnioAfil,     setElimAnioAfil]     = useState('');
 
   const [arlFiltroCliente, setArlFiltroCliente] = useState('');
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
@@ -211,9 +214,12 @@ export default function Afiliados() {
     enabled: (tab === 'eliminados' || tab === 'pagos') && (esAdmin || esEmpleado),
   });
 
-  const elimEpsOpts = useMemo(()=>[...new Set(eliminados.map(e=>e.eps||'').filter(Boolean))].sort(),[eliminados]);
-  const elimCcfOpts = useMemo(()=>[...new Set(eliminados.map(e=>e.ccf||'').filter(Boolean))].sort(),[eliminados]);
+  const elimEpsOpts         = useMemo(()=>[...new Set(eliminados.map(e=>e.eps||'').filter(Boolean))].sort(),[eliminados]);
+  const elimCcfOpts         = useMemo(()=>[...new Set(eliminados.map(e=>e.ccf||'').filter(Boolean))].sort(),[eliminados]);
   const elimRetiradoPorOpts = useMemo(()=>[...new Set(eliminados.map(e=>e.eliminado_por||'').filter(Boolean))].sort(),[eliminados]);
+  const elimEmpresaOpts     = useMemo(()=>[...new Set(eliminados.map(e=>e.empresa||'').filter(Boolean))].sort(),[eliminados]);
+  const elimMesColOpts      = useMemo(()=>[...new Set(eliminados.map(e=>e.mes||'').filter(Boolean))].sort(),[eliminados]);
+  const elimAnioAfilOpts    = useMemo(()=>[...new Set(eliminados.map(e=>(e.fecha_afiliacion||'').slice(0,4)).filter(Boolean))].sort().reverse(),[eliminados]);
 
   // Facturas del afiliado seleccionado en tab pagos
   // Si el afiliado fue retirado no está en `todos` — buscarlo en eliminados como fallback
@@ -846,10 +852,11 @@ export default function Afiliados() {
               borderRadius:8, fontSize:13, outline:'none', background: active ? C.blueBg : C.surface,
               color: active ? C.primary : C.text2, cursor:'pointer',
             });
-            const hayFiltros = buscarElim || elimAnio || elimMes || elimDia || elimEps || elimCcf || elimRetiradorPor || elimEstadoFilt;
+            const hayFiltros = buscarElim || elimAnio || elimMes || elimDia || elimEps || elimCcf || elimRetiradorPor || elimEstadoFilt || elimEmpresa || elimMesCol || elimAnioAfil;
             const limpiarTodo = () => {
               setBuscarElim(''); setElimAnio(''); setElimMes(''); setElimDia('');
               setElimEps(''); setElimCcf(''); setElimRetiradorPor(''); setElimEstadoFilt('');
+              setElimEmpresa(''); setElimMesCol(''); setElimAnioAfil('');
             };
             return (
               <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap', alignItems:'center' }}>
@@ -882,6 +889,10 @@ export default function Afiliados() {
 
                 {/* Row 2: filtros adicionales */}
                 <div style={{ width:'100%', display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+                  <select value={elimEmpresa} onChange={e=>setElimEmpresa(e.target.value)} style={selSt(!!elimEmpresa)}>
+                    <option value="">Empresa</option>
+                    {elimEmpresaOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
                   <select value={elimEps} onChange={e=>setElimEps(e.target.value)} style={selSt(!!elimEps)}>
                     <option value="">EPS</option>
                     {elimEpsOpts.map(v=><option key={v} value={v}>{v}</option>)}
@@ -889,6 +900,14 @@ export default function Afiliados() {
                   <select value={elimCcf} onChange={e=>setElimCcf(e.target.value)} style={selSt(!!elimCcf)}>
                     <option value="">CCF</option>
                     {elimCcfOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimAnioAfil} onChange={e=>setElimAnioAfil(e.target.value)} style={selSt(!!elimAnioAfil)}>
+                    <option value="">Año afiliación</option>
+                    {elimAnioAfilOpts.map(v=><option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <select value={elimMesCol} onChange={e=>setElimMesCol(e.target.value)} style={selSt(!!elimMesCol)}>
+                    <option value="">Mes</option>
+                    {elimMesColOpts.map(v=><option key={v} value={v}>{v}</option>)}
                   </select>
                   <select value={elimRetiradorPor} onChange={e=>setElimRetiradorPor(e.target.value)} style={selSt(!!elimRetiradorPor)}>
                     <option value="">Retirado por</option>
@@ -941,8 +960,11 @@ export default function Afiliados() {
                   if (elimAnio && (e.fecha_eliminacion||'').slice(0,4) !== elimAnio) return false;
                   if (elimMes && (e.fecha_eliminacion||'').slice(5,7) !== elimMes) return false;
                   if (elimDia && (e.fecha_eliminacion||'').slice(8,10) !== elimDia) return false;
+                  if (elimEmpresa && (e.empresa||'') !== elimEmpresa) return false;
                   if (elimEps && (e.eps||'') !== elimEps) return false;
                   if (elimCcf && (e.ccf||'') !== elimCcf) return false;
+                  if (elimAnioAfil && (e.fecha_afiliacion||'').slice(0,4) !== elimAnioAfil) return false;
+                  if (elimMesCol && (e.mes||'') !== elimMesCol) return false;
                   if (elimRetiradorPor && (e.eliminado_por||'') !== elimRetiradorPor) return false;
                   if (elimEstadoFilt && (e.estado_planilla||'') !== elimEstadoFilt) return false;
                   return true;
