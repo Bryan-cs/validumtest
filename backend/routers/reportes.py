@@ -17,19 +17,81 @@ def reporte_cobro(
     empresa: str = "", cliente: str = "", tipo: str = "",
     db: Session = Depends(get_db), token=Depends(verify_token)
 ):
+    from datetime import datetime
+    from models import COL_TZ
+    from const import MESES
+
     items = crud.get_cobro(db, empresa=empresa, cliente=cliente, tipo=tipo)
+
+    # ── Calcular periodos de mora por afiliado ────────────────────────────────
+    docs = list({r["doc"] for r in items if r.get("doc")})
+    paid_facts: set = set()
+    if docs:
+        paid_facts = set(
+            (f.doc, f.mes, f.anio)
+            for f in db.query(models.Factura.doc, models.Factura.mes, models.Factura.anio)
+            .filter(models.Factura.doc.in_(docs))
+            .filter(models.Factura.estado.in_(["pagado", "planilla_pagada"]))
+            .all()
+        )
+
+    cfg = db.query(models.Config).first()
+    cfg_corte = (cfg.anio_inicio_cobro, cfg.mes_inicio_cobro) if (
+        cfg and cfg.anio_inicio_cobro and cfg.mes_inicio_cobro
+    ) else None
+    hoy = datetime.now(COL_TZ)
+
+    def _mora(doc: str, fecha_afil: str):
+        if not fecha_afil or "-" not in fecha_afil:
+            return 0, ""
+        try:
+            parts = fecha_afil.split("-")
+            y0, m0, d0 = int(parts[0]), int(parts[1]), int(parts[2])
+        except Exception:
+            return 0, ""
+        pm, py = m0 + 1, y0
+        if pm > 12:
+            pm, py = 1, py + 1
+        if cfg_corte and (py, pm) < cfg_corte:
+            py, pm = cfg_corte[0], cfg_corte[1]
+        meses_mora = []
+        y, m = py, pm
+        while (y, m) <= (hoy.year, hoy.month):
+            mes_nom = MESES[m - 1]
+            es_actual = (y == hoy.year and m == hoy.month)
+            vencido = (not es_actual) or (d0 <= hoy.day)
+            if vencido and (doc, mes_nom, str(y)) not in paid_facts:
+                meses_mora.append(f"{mes_nom} {y}")
+            m += 1
+            if m > 12:
+                m, y = 1, y + 1
+        return len(meses_mora), ", ".join(meses_mora)
+
+    mora_cache: dict = {}
+    for r in items:
+        doc = r.get("doc")
+        if doc and doc not in mora_cache:
+            mora_cache[doc] = _mora(doc, r.get("fecha_afiliacion", ""))
+
+    # ── Construir Excel ───────────────────────────────────────────────────────
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "Cobro"
-    cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente", "Día cobro", "Servicios", "Planilla ($)", "Estado"]
+    cols = ["#", "Nombre", "Tipo Doc", "Documento", "Empresa", "Cliente",
+            "Día cobro", "Servicios", "Planilla ($)", "Estado",
+            "Períodos mora", "Meses en mora"]
     hdr_style(ws, cols)
     for i, r in enumerate(items, 1):
         srvs = r.get("servicios") or []
         srvs_str = ", ".join(srvs) if isinstance(srvs, list) else str(srvs)
-        ws.append([i, r.get("nombre"), r.get("tipo_doc", ""), r.get("doc"), r.get("empresa"), r.get("cliente"),
-                   r.get("dia_cobro"), srvs_str, r.get("planilla", 0), r.get("estado")])
+        doc = r.get("doc")
+        mora_n, mora_str = mora_cache.get(doc, (0, ""))
+        ws.append([i, r.get("nombre"), r.get("tipo_doc", ""), doc,
+                   r.get("empresa"), r.get("cliente"), r.get("dia_cobro"),
+                   srvs_str, r.get("planilla", 0), r.get("estado"),
+                   mora_n or "", mora_str])
     for col in ws.columns:
-        ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 12)
+        ws.column_dimensions[col[0].column_letter].width = max(len(str(col[0].value or "")), 14)
     return xlsx_response(wb, "cobro.xlsx")
 
 
