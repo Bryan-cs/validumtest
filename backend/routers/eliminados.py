@@ -27,7 +27,7 @@ def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
             "mes": r.mes,
             "eliminado_por": r.eliminado_por,
             "estado_planilla": r.estado_planilla,
-            **{k: _parse_datos(r.datos_completos).get(k, "") for k in ("eps", "ccf", "fecha_afiliacion")},
+            **{k: _parse_datos(r.datos_completos).get(k, "") for k in ("eps", "ccf", "fecha_afiliacion", "tipo_doc")},
         }
         for r in rows
     ]
