@@ -5,6 +5,7 @@ from datetime import datetime
 class LoginRequest(BaseModel):
     username: str
     password: str
+    remember_me: bool = True
 
 class AfiliadoCreate(BaseModel):
     nombre: str

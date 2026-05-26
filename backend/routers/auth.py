@@ -19,13 +19,13 @@ from logger import logger
 def _is_prod() -> bool:
     return bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ENVIRONMENT") == "production")
 
-def _set_refresh_cookie(response: Response, token: str) -> None:
+def _set_refresh_cookie(response: Response, token: str, remember: bool = True) -> None:
     prod = _is_prod()
     response.set_cookie(
         key="refresh_token",
         value=token,
         httponly=True,
-        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+        max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600 if remember else None,
         path="/auth",
         samesite="none" if prod else "lax",
         secure=prod,
@@ -176,7 +176,7 @@ def login(request: Request, response: Response, data: schemas.LoginRequest, db: 
         {**token_data, "type": "refresh"},
         expires=timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS),
     )
-    _set_refresh_cookie(response, rt)
+    _set_refresh_cookie(response, rt, remember=data.remember_me)
     return {
         "access_token": access_token,
         "token_type": "bearer",
