@@ -21,9 +21,13 @@ const useAuthStore = create(
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
 
-      login: (token, user) => {
+      login: (token, user, rememberMe = true) => {
         resetRedirectFlag();
         set({ token, user });
+        if (!rememberMe) {
+          // Session-only: remove persisted data so browser restart clears the session
+          try { localStorage.removeItem('bbc-auth'); } catch (_) {}
+        }
       },
 
       setToken: (token) => set({ token }),

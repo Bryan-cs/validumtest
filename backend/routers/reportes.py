@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 import openpyxl
-from openpyxl.styles import Font
+from openpyxl.styles import Font, PatternFill
 import crud
 import models
 from utils.excel_export import hdr_style, xlsx_response
