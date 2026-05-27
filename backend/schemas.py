@@ -1,6 +1,9 @@
 from pydantic import BaseModel, field_validator
 from typing import Optional, List, Any, Literal
 from datetime import datetime
+import re as _re
+
+_DATE_RE = _re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
 class LoginRequest(BaseModel):
     username: str
@@ -56,6 +59,19 @@ class AfiliadoCreate(BaseModel):
     @classmethod
     def none_to_str(cls, v):
         return v if v is not None else ""
+
+    @field_validator('fecha_afiliacion', 'fecha_ingreso')
+    @classmethod
+    def fecha_formato(cls, v, info):
+        if not v:
+            return v
+        if not _DATE_RE.match(v):
+            raise ValueError(f'{info.field_name}: formato inválido, use YYYY-MM-DD')
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError(f'{info.field_name}: fecha inválida ({v})')
+        return v
 
 class FacturaCreate(BaseModel):
     codigo: str = ""
@@ -331,6 +347,19 @@ class SeguimientoArlCreate(BaseModel):
     nivel_arl: str = "N/A"
     observaciones: Optional[str] = None
 
+    @field_validator('fecha_afiliacion')
+    @classmethod
+    def fecha_formato(cls, v):
+        if not v:
+            return v
+        if not _DATE_RE.match(v):
+            raise ValueError(f'fecha_afiliacion: formato inválido, use YYYY-MM-DD')
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError(f'fecha_afiliacion: fecha inválida ({v})')
+        return v
+
 class SeguimientoArlUpdate(BaseModel):
     nombre: Optional[str] = None
     documento: Optional[str] = None
@@ -341,6 +370,19 @@ class SeguimientoArlUpdate(BaseModel):
     nivel_arl: Optional[str] = None
     observaciones: Optional[str] = None
     estado: Optional[str] = None
+
+    @field_validator('fecha_afiliacion')
+    @classmethod
+    def fecha_formato(cls, v):
+        if not v:
+            return v
+        if not _DATE_RE.match(v):
+            raise ValueError(f'fecha_afiliacion: formato inválido, use YYYY-MM-DD')
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError(f'fecha_afiliacion: fecha inválida ({v})')
+        return v
 
 class BulkEstadoBody(BaseModel):
     ids: List[int]
