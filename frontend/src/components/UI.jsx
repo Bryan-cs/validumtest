@@ -200,6 +200,9 @@ export class ErrorBoundary extends Component {
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
   }
+  componentDidCatch(error) {
+    import('@sentry/react').then(({ captureException }) => captureException(error)).catch(() => {});
+  }
   render() {
     if (!this.state.hasError) return this.props.children;
     return (
