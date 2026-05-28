@@ -16,7 +16,10 @@ const P = {
   statusG:  '#5EE2A0',
 };
 
-const PHOTO = 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=1800&q=85&auto=format&fit=crop';
+// Desktop: 1600px max (cubre pantallas hasta 2K). Mobile: 900px (suficiente bajo overlay+blur).
+// q=70 vs 85 = ~30% menos KB, sin diferencia visible bajo el filtro brightness(0.52).
+const PHOTO_DESKTOP = 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=1600&q=70&auto=format&fit=crop&fm=webp';
+const PHOTO_MOBILE  = 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=900&q=70&auto=format&fit=crop&fm=webp';
 
 // ── Live news ticker ──────────────────────────────────────────────────────────
 function useNews() {
@@ -200,16 +203,24 @@ export default function Login() {
           fontFamily: "'Manrope', system-ui, sans-serif", color: P.cream,
         }}
       >
-        {/* Background photo */}
-        <img ref={photoRef} src={PHOTO} alt="" style={{
-          position: isMobile ? 'fixed' : 'absolute',
-          inset: '-4%', width: '108%', height: '108%',
-          objectFit: 'cover',
-          filter: 'saturate(0.9) brightness(0.52)',
-          transform: 'translate3d(0,0,0) scale(1.04)',
-          transition: 'transform 0.5s cubic-bezier(0.22,1,0.36,1)',
-          willChange: 'transform',
-        }} />
+        {/* Background photo — fetchpriority high + WebP + tamaño según viewport */}
+        <img
+          ref={photoRef}
+          src={isMobile ? PHOTO_MOBILE : PHOTO_DESKTOP}
+          alt=""
+          fetchpriority="high"
+          decoding="async"
+          loading="eager"
+          style={{
+            position: isMobile ? 'fixed' : 'absolute',
+            inset: '-4%', width: '108%', height: '108%',
+            objectFit: 'cover',
+            filter: 'saturate(0.9) brightness(0.52)',
+            transform: 'translate3d(0,0,0) scale(1.04)',
+            transition: 'transform 0.5s cubic-bezier(0.22,1,0.36,1)',
+            willChange: 'transform',
+          }}
+        />
 
 
 
