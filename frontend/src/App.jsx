@@ -24,13 +24,17 @@ const PortalCliente       = lazy(() => import('./pages/PortalCliente'));
 const NovedadesClientes   = lazy(() => import('./pages/NovedadesClientes'));
 const PlanillasSS         = lazy(() => import('./pages/PlanillasSS'));
 const Finanzas            = lazy(() => import('./pages/Finanzas'));
+const CredencialesPortales = lazy(() => import('./pages/CredencialesPortales'));
 
 const qc = new QueryClient({
   defaultOptions: {
     queries: { retry: 1, staleTime: 30_000, refetchOnWindowFocus: false },
     mutations: {
       onError: (err) => {
-        const msg = err?.response?.data?.detail || err?.message || 'Error inesperado';
+        const raw = err?.response?.data?.detail;
+        const msg = Array.isArray(raw)
+          ? raw.map(e => e.msg).join('; ')
+          : raw || err?.message || 'Error inesperado';
         import('sonner').then(m => m.toast.error(msg));
       },
     },
@@ -104,6 +108,7 @@ export default function App() {
             <Route path="calculadora" element={<PrivateRoute adminOnly><Page><Calculadora /></Page></PrivateRoute>} />
             <Route path="actividad"        element={<PrivateRoute adminOnly><Page><Actividad /></Page></PrivateRoute>} />
             <Route path="novedades-clientes" element={<PrivateRoute><Page><NovedadesClientes /></Page></PrivateRoute>} />
+            <Route path="credenciales"       element={<PrivateRoute><Page><CredencialesPortales /></Page></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

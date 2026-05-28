@@ -1,5 +1,5 @@
 """Historial de actividad."""
-from datetime import timezone
+from datetime import timezone, timedelta
 import models
 from models import COL_TZ
 
@@ -12,13 +12,15 @@ def get_actividad(db, modulo="", usuario="", desde="", hasta="",
     if usuario: q = q.filter_by(usuario=usuario)
     if desde:
         try:
-            q = q.filter(models.Actividad.fecha >= _dt.fromisoformat(desde))
+            # Medianoche Colombia → UTC para filtrar correctamente
+            desde_col = _dt.fromisoformat(desde).replace(hour=0, minute=0, second=0, tzinfo=COL_TZ)
+            q = q.filter(models.Actividad.fecha >= desde_col.astimezone(timezone.utc))
         except ValueError:
             pass
     if hasta:
         try:
-            hasta_fin = _dt.fromisoformat(hasta).replace(hour=23, minute=59, second=59)
-            q = q.filter(models.Actividad.fecha <= hasta_fin)
+            hasta_col = _dt.fromisoformat(hasta).replace(hour=23, minute=59, second=59, tzinfo=COL_TZ)
+            q = q.filter(models.Actividad.fecha <= hasta_col.astimezone(timezone.utc))
         except ValueError:
             pass
     total = q.count()

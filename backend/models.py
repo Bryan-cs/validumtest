@@ -351,6 +351,26 @@ class TokenBlacklist(Base):
     expires_at = Column(DateTime(timezone=True))                    # timezone=True evita bugs de comparación en PostgreSQL
     creado     = Column(DateTime(timezone=True), default=_utcnow)
 
+class CredencialPortal(Base):
+    __tablename__ = "credenciales_portales"
+    __table_args__ = (
+        Index('ix_cred_portal_tipo', 'portal'),
+        Index('ix_cred_doc', 'numero_doc'),
+    )
+    id             = Column(Integer, primary_key=True, index=True)
+    tipo_doc       = Column(String(10), default="NIT")   # NIT | CC
+    numero_doc     = Column(String(40), nullable=False)
+    titular        = Column(String(150), default="")
+    portal         = Column(String(40), nullable=False)  # EPS | CCF | Aportes en Línea | Pago Simple | Asopagos
+    entidad        = Column(String(100), default="")     # Sura EPS, Compensar, etc.
+    usuario_portal = Column(String(150), nullable=False)
+    clave_portal   = Column(Text, nullable=False)        # encriptada con Fernet
+    obs            = Column(Text, default="")
+    creado_por     = Column(String(60), default="")
+    creado         = Column(DateTime(timezone=True), default=_utcnow)
+    actualizado    = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+
 class SeguimientoArl(Base):
     __tablename__ = "seguimiento_arl"
     __table_args__ = (

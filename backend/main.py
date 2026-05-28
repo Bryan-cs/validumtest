@@ -303,6 +303,7 @@ from routers import dashboard as dashboard_router
 from routers import cobro as cobro_router
 from routers import actividad as actividad_router
 from routers import news as news_router
+from routers import credenciales as credenciales_router
 
 app.include_router(auth_router.router)
 app.include_router(afiliados_router.router)
@@ -324,6 +325,7 @@ app.include_router(dashboard_router.router)
 app.include_router(cobro_router.router)
 app.include_router(actividad_router.router)
 app.include_router(news_router.router)
+app.include_router(credenciales_router.router)
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────
