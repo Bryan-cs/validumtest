@@ -13,8 +13,10 @@ router = APIRouter(prefix="/credenciales", tags=["credenciales"])
 
 
 def _get_fernet():
+    # FERNET_KEY independiente de SECRET_KEY: rotar JWT no destruye credenciales cifradas.
+    # Fallback a SECRET_KEY para retrocompatibilidad con datos existentes.
     from cryptography.fernet import Fernet
-    secret = os.getenv("SECRET_KEY", "dev-insecure-key-bbc-change-in-prod")
+    secret = os.getenv("FERNET_KEY") or os.getenv("SECRET_KEY", "dev-insecure-key-bbc-change-in-prod")
     key = base64.urlsafe_b64encode(hashlib.sha256(secret.encode()).digest())
     return Fernet(key)
 
@@ -84,6 +86,7 @@ def crear(data: schemas.CredencialCreate, db: Session = Depends(get_db), token=D
     db.refresh(c)
     _log(db, token.get("sub", ""), "registró credencial de portal", "Credenciales",
          f"{data.portal} — {data.entidad} ({data.titular})")
+    db.commit()
     return _to_dict(c)
 
 
@@ -107,6 +110,7 @@ def actualizar(cred_id: int, data: schemas.CredencialUpdate,
     db.commit()
     _log(db, token.get("sub", ""), "editó credencial de portal", "Credenciales",
          f"{c.portal} — {c.entidad}")
+    db.commit()
     return _to_dict(c)
 
 
@@ -119,6 +123,7 @@ def eliminar(cred_id: int, db: Session = Depends(get_db), token=Depends(require_
     db.delete(c)
     db.commit()
     _log(db, token.get("sub", ""), "eliminó credencial de portal", "Credenciales", desc)
+    db.commit()
     return {"ok": True}
 
 
@@ -129,4 +134,5 @@ def revelar_clave(cred_id: int, db: Session = Depends(get_db), token=Depends(req
         raise HTTPException(404, "Credencial no encontrada")
     _log(db, token.get("sub", ""), "reveló clave de portal", "Credenciales",
          f"{c.portal} — {c.entidad}")
+    db.commit()
     return {"clave": _decrypt(c.clave_portal)}

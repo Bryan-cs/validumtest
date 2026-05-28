@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
@@ -59,6 +59,17 @@ export default function CredencialesPortales() {
   const [showPw, setShowPw] = useState(false);
   const [claves, setClaves] = useState({});
   const [confirmDel, setConfirmDel] = useState(null);
+
+  // Seguridad: limpiar claves reveladas al desmontar (cambio de página, logout)
+  // y al perder visibilidad del tab para que no queden en memoria del SPA.
+  useEffect(() => {
+    const onVisibility = () => { if (document.hidden) setClaves({}); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      setClaves({});
+    };
+  }, []);
 
   const { data: creds = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['credenciales'],
