@@ -345,3 +345,30 @@ class SeguimientoArlUpdate(BaseModel):
 class BulkEstadoBody(BaseModel):
     ids: List[int]
     estado: str
+
+class CredencialCreate(BaseModel):
+    tipo_doc: str = "NIT"
+    numero_doc: str = ""
+    titular: str = ""
+    portal: str
+    entidad: str = ""
+    usuario_portal: str
+    clave_portal: str
+    obs: str = ""
+
+    @field_validator('usuario_portal', 'clave_portal', 'portal', mode='before')
+    @classmethod
+    def no_vacio(cls, v, info):
+        if not v or not str(v).strip():
+            raise ValueError(f'{info.field_name} es requerido')
+        return str(v).strip()
+
+class CredencialUpdate(BaseModel):
+    tipo_doc: Optional[str] = None
+    numero_doc: Optional[str] = None
+    titular: Optional[str] = None
+    portal: Optional[str] = None
+    entidad: Optional[str] = None
+    usuario_portal: Optional[str] = None
+    clave_portal: Optional[str] = None
+    obs: Optional[str] = None

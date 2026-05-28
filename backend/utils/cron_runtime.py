@@ -16,9 +16,17 @@ def en_ventana_cron(min_inicio: int, min_fin: int, etiqueta: str, log, *, wrap_m
     return en_ventana
 
 
-def wait_for_db(etiqueta: str, log, max_attempts: int = 10, delay: int = 15) -> bool:
+def wait_for_db(etiqueta: str, log, max_attempts: int = 15, delay: int = 20, warmup: int = 10) -> bool:
+    """Espera a que la DB esté disponible con reintentos.
+
+    warmup: segundos de espera antes del primer intento (Railway private DNS tarda en resolverse
+    en cold starts — sin este sleep el primer intento falla por DNS antes de que la red esté lista).
+    """
     from database import SessionLocal
     import sqlalchemy
+    if warmup:
+        log.info(f"{etiqueta}: esperando {warmup}s para warm-up de red privada…")
+        time.sleep(warmup)
     for attempt in range(1, max_attempts + 1):
         try:
             db = SessionLocal()

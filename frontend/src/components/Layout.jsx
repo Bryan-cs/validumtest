@@ -55,6 +55,7 @@ const navGroups = (rol) => [
       label: 'CLIENTES',
       items: [
         { to: '/novedades-clientes', label: '📬 Novedades clientes' },
+        { to: '/credenciales',       label: '🔑 Credenciales' },
       ],
     },
   ] : []),
