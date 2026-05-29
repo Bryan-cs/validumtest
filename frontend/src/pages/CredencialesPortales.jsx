@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
@@ -21,6 +21,34 @@ const EMPTY_FORM = {
   portal: 'EPS', entidad: '',
   usuario_portal: '', clave_portal: '', obs: '',
 };
+
+// Detecta URLs http(s) en texto plano y las convierte en <a> seguros.
+// Soporta hasta el primer carácter de espacio o salto de línea.
+// XSS-safe: solo construye <a> con href validado, nunca innerHTML.
+const URL_RE = /(https?:\/\/[^\s<>"']+)/g;
+
+function linkify(text, linkColor = '#2563EB') {
+  if (!text) return null;
+  const parts = String(text).split(URL_RE);
+  return parts.map((part, i) => {
+    if (URL_RE.test(part)) {
+      URL_RE.lastIndex = 0;
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          style={{ color: linkColor, textDecoration: 'underline', wordBreak: 'break-all' }}
+        >
+          {part}
+        </a>
+      );
+    }
+    return <React.Fragment key={i}>{part}</React.Fragment>;
+  });
+}
 
 function PortalBadge({ portal }) {
   const s = PORTAL_STYLE[portal] || { bg: '#F3F4F6', color: '#6B7280' };
@@ -59,6 +87,18 @@ export default function CredencialesPortales() {
   const [showPw, setShowPw] = useState(false);
   const [claves, setClaves] = useState({});
   const [confirmDel, setConfirmDel] = useState(null);
+  const [modalObs, setModalObs] = useState(null);   // credencial seleccionada para ver obs completa
+
+  // Seguridad: limpiar claves reveladas al desmontar (cambio de página, logout)
+  // y al perder visibilidad del tab para que no queden en memoria del SPA.
+  useEffect(() => {
+    const onVisibility = () => { if (document.hidden) setClaves({}); };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      setClaves({});
+    };
+  }, []);
 
   const { data: creds = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['credenciales'],
@@ -262,11 +302,33 @@ export default function CredencialesPortales() {
                     </div>
                   </div>
 
-                  {c.obs && (
-                    <div style={{ marginTop: 8, fontSize: 11, color: C.text2, background: C.surface2, borderRadius: 6, padding: '4px 8px', fontStyle: 'italic' }}>
-                      {c.obs}
-                    </div>
-                  )}
+                  {c.obs && (() => {
+                    const obsTrim = c.obs.trim();
+                    const isLong = obsTrim.length > 80 || obsTrim.includes('\n');
+                    const preview = isLong ? obsTrim.slice(0, 80).replace(/\n/g, ' ') + '…' : obsTrim;
+                    return (
+                      <div
+                        onClick={() => setModalObs(c)}
+                        title="Click para ver completa"
+                        style={{
+                          marginTop: 8, fontSize: 11, color: C.text2, background: C.surface2,
+                          borderRadius: 6, padding: '6px 10px', fontStyle: 'italic',
+                          cursor: 'pointer', border: `1px solid transparent`,
+                          transition: 'border-color 0.15s, background 0.15s',
+                        }}
+                        onMouseEnter={e => { e.currentTarget.style.borderColor = C.border; e.currentTarget.style.background = '#fff'; }}
+                        onMouseLeave={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = C.surface2; }}
+                      >
+                        <span style={{ marginRight: 6 }}>📝</span>
+                        {linkify(preview)}
+                        {isLong && (
+                          <span style={{ marginLeft: 6, color: C.primary, fontStyle: 'normal', fontWeight: 700 }}>
+                            Ver completa →
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Footer */}
@@ -339,8 +401,14 @@ export default function CredencialesPortales() {
           </div>
 
           <div>
-            <label style={lbl}>Observaciones</label>
-            <input style={inp} value={form.obs} onChange={e => f('obs', e.target.value)} placeholder="Notas adicionales (opcional)" />
+            <label style={lbl}>Observaciones <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: C.text2 }}>— soporta URLs (se vuelven enlaces clicables)</span></label>
+            <textarea
+              style={{ ...inp, minHeight: 72, resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.5 }}
+              value={form.obs}
+              onChange={e => f('obs', e.target.value)}
+              placeholder="Notas, URL del portal, instrucciones, etc."
+              rows={3}
+            />
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, paddingTop: 4 }}>
@@ -361,6 +429,30 @@ export default function CredencialesPortales() {
         onConfirm={() => mutDelete.mutate(confirmDel.id)}
         onCancel={() => setConfirmDel(null)}
       />
+
+      {/* Modal: observación completa con URLs clicables */}
+      <Modal
+        open={!!modalObs}
+        onClose={() => setModalObs(null)}
+        title={modalObs ? `📝 Observaciones — ${modalObs.portal} · ${modalObs.entidad || ''}` : ''}
+        width={620}
+      >
+        {modalObs && (
+          <div style={{ padding: '4px 0' }}>
+            <div style={{
+              background: C.surface2, border: `1px solid ${C.border}`, borderRadius: 8,
+              padding: '14px 16px', fontSize: 14, lineHeight: 1.65, color: C.text,
+              whiteSpace: 'pre-wrap', wordBreak: 'break-word',
+              maxHeight: '60vh', overflowY: 'auto',
+            }}>
+              {linkify(modalObs.obs)}
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 14 }}>
+              <Btn variant="secondary" onClick={() => setModalObs(null)}>Cerrar</Btn>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }

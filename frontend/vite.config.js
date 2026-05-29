@@ -3,10 +3,20 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 import { VitePWA } from 'vite-plugin-pwa';
+import { visualizer } from 'rollup-plugin-visualizer';
+
+const ANALYZE = process.env.ANALYZE === 'true';
 
 export default defineConfig({
   plugins: [
     react(),
+    ANALYZE && visualizer({
+      filename: 'dist/bundle-stats.html',
+      open: true,
+      gzipSize: true,
+      brotliSize: true,
+      template: 'treemap',
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'favicon.svg', 'favicon-96x96.png', 'apple-touch-icon.png', 'icons/*.png', 'icons/*.svg'],
