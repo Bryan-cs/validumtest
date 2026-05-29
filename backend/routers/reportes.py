@@ -27,14 +27,29 @@ def reporte_cobro(
     docs = list({r["doc"] for r in items if r.get("doc")})
     paid_facts: set = set()
     creado_map: dict = {}
+    # Primera factura (cualquier estado) por afiliado — usada como piso de mora
+    # cuando `Afiliado.creado` es NULL (datos legacy importados sin timestamp).
+    # Evita marcar como mora los meses anteriores al inicio real de facturación.
+    first_factura_map: dict = {}
     if docs:
-        paid_facts = set(
-            (f.doc, f.mes, f.anio)
-            for f in db.query(models.Factura.doc, models.Factura.mes, models.Factura.anio)
-            .filter(models.Factura.doc.in_(docs))
-            .filter(models.Factura.estado.in_(["pagado", "planilla_pagada"]))
-            .all()
-        )
+        # Normalizar mes/anio (strip + title) para evitar mismatch si la DB
+        # tiene whitespace o capitalización mixta por importaciones manuales.
+        all_facts_rows = db.query(
+            models.Factura.doc, models.Factura.mes, models.Factura.anio, models.Factura.estado
+        ).filter(models.Factura.doc.in_(docs)).all()
+
+        for f in all_facts_rows:
+            mes_norm = (f.mes or "").strip().title()
+            anio_norm = str(f.anio or "").strip()
+            if f.estado in ("pagado", "planilla_pagada"):
+                paid_facts.add((f.doc, mes_norm, anio_norm))
+            # Primera factura por doc (cualquier estado, incluye pendiente)
+            if mes_norm in MESES and anio_norm.isdigit():
+                key = (int(anio_norm), MESES.index(mes_norm) + 1)
+                prev = first_factura_map.get(f.doc)
+                if prev is None or key < prev:
+                    first_factura_map[f.doc] = key
+
         creado_map = {
             a.doc: a.creado
             for a in db.query(models.Afiliado.doc, models.Afiliado.creado)
@@ -71,6 +86,11 @@ def reporte_cobro(
                 reg_m, reg_y = 1, reg_y + 1
             if (reg_y, reg_m) > (py, pm):
                 py, pm = reg_y, reg_m
+        else:
+            # Sin Afiliado.creado: usar primera factura como piso (datos legacy).
+            first_fact = first_factura_map.get(doc)
+            if first_fact and first_fact > (py, pm):
+                py, pm = first_fact
         meses_mora = []
         y, m = py, pm
         while (y, m) <= (hoy.year, hoy.month):
