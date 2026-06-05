@@ -40,7 +40,7 @@ def _log(db: Session, usuario: str, accion: str, modulo: str, detalle: str = "")
 
 def _get_ibc(db: Session, afiliado: models.Afiliado = None) -> float:
     if afiliado and afiliado.ibc and afiliado.ibc > 0:
-        return afiliado.ibc
+        return float(afiliado.ibc)
     cfg = db.query(models.Config).first()
     return float(cfg.ibc_global) if cfg else 1_750_905
 
