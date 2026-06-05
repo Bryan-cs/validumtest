@@ -80,6 +80,30 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
 
     afils = q.all()
 
+    # Mapa de primera factura por doc — fallback para afiliados con Afiliado.creado=NULL
+    # (datos legacy importados sin timestamp). Evita que aparezcan como VENCIDO en meses
+    # anteriores al inicio real de facturación.
+    docs_afils = [a.doc for a in afils if a.doc]
+    first_factura_map: dict = {}
+    if docs_afils:
+        for f in db.query(
+            models.Factura.doc, models.Factura.mes, models.Factura.anio
+        ).filter(models.Factura.doc.in_(docs_afils)).all():
+            mes_norm = (f.mes or "").strip().title()
+            anio_norm = str(f.anio or "").strip()
+            if mes_norm in MESES and anio_norm.isdigit():
+                key = (int(anio_norm), MESES.index(mes_norm) + 1)
+                prev = first_factura_map.get(f.doc)
+                if prev is None or key < prev:
+                    first_factura_map[f.doc] = key
+
+    # Mes siguiente al actual — fallback final para afiliados sin creado y sin facturas
+    # (recién registrados sin historial). No deben aparecer en cobro hasta el siguiente ciclo.
+    next_month = hoy.month + 1
+    next_year = hoy.year
+    if next_month > 12:
+        next_month, next_year = 1, next_year + 1
+
     rows = []
     for a in afils:
         fa = a.fecha_afiliacion or a.fecha_ingreso or ""
@@ -113,6 +137,17 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
                 reg_m, reg_y = 1, reg_y + 1
             if (reg_y, reg_m) > (primer_cobro_y, primer_cobro_m):
                 primer_cobro_y, primer_cobro_m = reg_y, reg_m
+        else:
+            # Afiliado.creado=NULL (data legacy): usar primera factura como piso.
+            first_fact = first_factura_map.get(a.doc)
+            if first_fact:
+                if first_fact > (primer_cobro_y, primer_cobro_m):
+                    primer_cobro_y, primer_cobro_m = first_fact
+            else:
+                # Sin creado y sin factura: tratar como recién registrado.
+                # No aparece en cobro hasta el siguiente ciclo (mes siguiente al actual).
+                if (next_year, next_month) > (primer_cobro_y, primer_cobro_m):
+                    primer_cobro_y, primer_cobro_m = next_year, next_month
 
         for (y, m) in meses_ventana:
             if (y, m) < (primer_cobro_y, primer_cobro_m): continue

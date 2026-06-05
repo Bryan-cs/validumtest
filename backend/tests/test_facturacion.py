@@ -107,6 +107,23 @@ def test_planilla_calculo(client, admin_token):
     assert "EPS" in servicios
 
 
+def test_planilla_calculo_ibc_custom(client, admin_token):
+    """Regresión: afiliado con ibc individual (Numeric→Decimal) no debe romper ibc*pct."""
+    h = {"Authorization": f"Bearer {admin_token}"}
+    client.post("/afiliados", json={
+        "nombre": "Planilla IBC Custom", "tipo_doc": "CC", "doc": "777000222",
+        "empresa": "TestCorp", "servicios": ["EPS"],
+        "subtipo": "0", "estado": "ACTIVO", "estado_srv": "ACTIVO",
+        "fecha_afiliacion": "2024-01-15",
+        "ibc": 2500000,
+    }, headers=h)
+    afils = client.get("/afiliados", params={"q": "777000222"}, headers=h).json()
+    afil_id = afils["items"][0]["id"]
+    r = client.get("/facturas/calc-planilla", params={"afiliado_id": afil_id, "dias": 30}, headers=h)
+    assert r.status_code == 200, r.text
+    assert r.json()["ibc"] == 2500000
+
+
 # ─── RETIROS ─────────────────────────────────────────────────────────────────
 
 def test_crear_retiro(client, admin_token):
