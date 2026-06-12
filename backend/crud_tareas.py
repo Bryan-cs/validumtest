@@ -74,7 +74,9 @@ def update_tarea(db, tarea_id: int, data: schemas.TareaUpdate, username: str, ro
 def get_tareas(db, username: str, rol: str, skip: int = 0, limit: int = 200):
     q = db.query(models.Tarea)
     if rol != "admin":
-        q = q.filter_by(asignado_a=username)
+        # Asignadas a mí o creadas por mí (empleado debe ver las que asignó a otros)
+        q = q.filter(or_(models.Tarea.asignado_a == username,
+                         models.Tarea.creado_por == username))
     q = q.filter(or_(models.Tarea.privada == False, models.Tarea.creado_por == username))
     total = q.count()
     tareas = q.order_by(models.Tarea.creado.desc()).offset(skip).limit(limit).all()
