@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.orm import Session
 from database import get_db
 import schemas, crud, models
-from .deps import verify_token, require_admin
+from .deps import verify_token, require_admin, require_admin_or_empleado
 
 router = APIRouter(prefix="/tareas", tags=["tareas"])
 
@@ -16,11 +16,19 @@ def list_tareas(skip: int = 0, limit: int = 200,
 
 @router.post("", status_code=201)
 def create_tarea(data: schemas.TareaCreate, db: Session = Depends(get_db), token=Depends(verify_token)):
-    # Solo admin puede crear tareas no privadas (asignadas a otros)
-    if not data.privada and token.get("rol") != "admin":
-        # Empleados pueden crear solo privadas auto-asignadas
+    rol = token.get("rol")
+    # Admin y empleado pueden crear tareas públicas asignadas a otros usuarios
+    if not data.privada and rol not in ("admin", "empleado"):
+        # Clientes solo pueden crear privadas auto-asignadas
         data.privada = True
         data.asignado_a = token["sub"]
+    if not data.privada and rol == "empleado":
+        if not data.asignado_a:
+            data.asignado_a = token["sub"]
+        elif data.asignado_a != token["sub"]:
+            destino = db.query(models.Usuario).filter_by(username=data.asignado_a).first()
+            if not destino or not destino.activo or destino.rol not in ("admin", "empleado"):
+                raise HTTPException(400, "Solo puedes asignar tareas a usuarios activos del equipo")
     data.creado_por = token["sub"]
     if data.privada:
         data.asignado_a = token["sub"]
@@ -28,6 +36,16 @@ def create_tarea(data: schemas.TareaCreate, db: Session = Depends(get_db), token
 
 
 # ── Rutas estáticas ANTES de las dinámicas ────────────────────────────────────
+
+@router.get("/asignables")
+def usuarios_asignables(db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
+    """Usuarios activos del equipo (admin/empleado) a los que se puede asignar tarea."""
+    usuarios = db.query(models.Usuario)\
+        .filter(models.Usuario.activo == True, models.Usuario.rol.in_(["admin", "empleado"]))\
+        .order_by(models.Usuario.username).all()
+    return [{"id": u.id, "username": u.username, "nombre": u.nombre,
+             "rol": u.rol, "activo": u.activo} for u in usuarios]
+
 
 @router.get("/notificaciones")
 def notificaciones(db: Session = Depends(get_db), token=Depends(verify_token)):

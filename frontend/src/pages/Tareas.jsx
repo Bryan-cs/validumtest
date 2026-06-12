@@ -89,6 +89,7 @@ export default function Tareas() {
   const { user } = useAuthStore();
   const qc = useQueryClient();
   const isAdmin = user?.rol === 'admin';
+  const canAssign = isAdmin || user?.rol === 'empleado';
   const filterRef = useRef(null);
 
   const [modalNueva, setModalNueva]           = useState(false);
@@ -129,9 +130,9 @@ export default function Tareas() {
   });
 
   const { data: usuarios = [] } = useQuery({
-    queryKey: ['usuarios'],
-    queryFn: () => api.get('/usuarios').then(r => r.data),
-    enabled: isAdmin,
+    queryKey: ['tareas-asignables'],
+    queryFn: () => api.get('/tareas/asignables').then(r => r.data),
+    enabled: canAssign,
     staleTime: 300_000,
   });
 
@@ -884,7 +885,7 @@ export default function Tareas() {
                         color: !form.privada ? '#fff' : C.text2,
                       }}>Pública</button>
                     <button type="button"
-                      onClick={() => setForm(f => ({ ...f, privada: true, asignado_a: !isAdmin ? user?.username || '' : f.asignado_a }))}
+                      onClick={() => setForm(f => ({ ...f, privada: true, asignado_a: !canAssign ? user?.username || '' : f.asignado_a }))}
                       style={{ flex: 1, padding: '9px 0', border: 'none', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, transition: 'background .15s, color .15s',
                         background: form.privada ? C.primary : C.surface2,
                         color: form.privada ? '#fff' : C.text2,
@@ -894,7 +895,7 @@ export default function Tareas() {
               </div>
 
               {/* Asignar a — avatar pills */}
-              {!form.privada && isAdmin && (
+              {!form.privada && canAssign && (
                 <div style={{ marginBottom: 16 }}>
                   <label style={lbl}>ASIGNAR A <span style={{ color: C.red }}>*</span></label>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
@@ -930,7 +931,7 @@ export default function Tareas() {
                   </div>
                 </div>
               )}
-              {!form.privada && !isAdmin && (
+              {!form.privada && !canAssign && (
                 <div style={{ marginBottom: 16 }}>
                   <label style={lbl}>ASIGNAR A</label>
                   <input style={{ ...inp, background: C.surface2 }} readOnly value={user?.username || ''} />
@@ -963,10 +964,10 @@ export default function Tareas() {
             <div style={{ padding: '4px 24px 20px', display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
               <Btn variant="secondary" onClick={() => { setModalNueva(false); setNuevaFiles([]); }}>Cancelar</Btn>
               <Btn variant="accent"
-                disabled={!form.titulo.trim() || (!form.privada && !form.asignado_a && isAdmin) || crear.isPending}
+                disabled={!form.titulo.trim() || (!form.privada && !form.asignado_a && canAssign) || crear.isPending}
                 onClick={() => {
                   const payload = { ...form };
-                  if (!isAdmin) payload.asignado_a = user?.username || '';
+                  if (!canAssign || form.privada) payload.asignado_a = user?.username || '';
                   crear.mutate(payload);
                 }}>
                 {crear.isPending ? 'Creando...' : 'Crear tarea'}
