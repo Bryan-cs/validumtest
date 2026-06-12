@@ -297,7 +297,72 @@ def reporte_financiero(
 
     # ── Sección: Afiliados sin factura en el período ──
     afiliados_activos = db.query(models.Afiliado).filter_by(activo=True).order_by(models.Afiliado.nombre).all()
-    sin_factura = [a for a in afiliados_activos if a.doc not in docs_con_factura]
+
+    # Período objetivo: filtro explícito o mes/anio actual
+    from datetime import datetime as _dt
+    from models import COL_TZ as _COL_TZ
+    from const import MESES as _MESES
+    _hoy = _dt.now(_COL_TZ)
+    periodo_anio_int = int(anio) if anio and str(anio).isdigit() else _hoy.year
+    periodo_mes_idx  = (_MESES.index(mes) + 1) if mes in _MESES else _hoy.month
+    periodo_key      = (periodo_anio_int, periodo_mes_idx)
+
+    # Primera factura por doc — fallback de piso cuando Afiliado.creado es NULL
+    docs_activos = [a.doc for a in afiliados_activos if a.doc]
+    first_factura_map: dict = {}
+    if docs_activos:
+        for f in db.query(
+            models.Factura.doc, models.Factura.mes, models.Factura.anio
+        ).filter(models.Factura.doc.in_(docs_activos)).all():
+            mes_norm = (f.mes or "").strip().title()
+            anio_norm = str(f.anio or "").strip()
+            if mes_norm in _MESES and anio_norm.isdigit():
+                k = (int(anio_norm), _MESES.index(mes_norm) + 1)
+                prev = first_factura_map.get(f.doc)
+                if prev is None or k < prev:
+                    first_factura_map[f.doc] = k
+
+    def _debio_facturar(a):
+        """True si el afiliado debió tener factura para `periodo_key`.
+
+        Excluye:
+        - Afiliados cuya fecha_afiliacion + 1 mes es posterior al período.
+        - Afiliados cuyo Afiliado.creado + 1 mes es posterior al período.
+        - Afiliados con creado=NULL y primera factura posterior al período.
+        - Afiliados con creado=NULL y sin facturas (recién registrados sin historial).
+        """
+        fa = a.fecha_afiliacion or a.fecha_ingreso or ""
+        if not fa or "-" not in fa:
+            return False
+        try:
+            p = fa.split("-")
+            afil_y, afil_m = int(p[0]), int(p[1])
+        except Exception:
+            return False
+        primer_m = afil_m + 1
+        primer_y = afil_y
+        if primer_m > 12:
+            primer_m, primer_y = 1, primer_y + 1
+        if (primer_y, primer_m) > periodo_key:
+            return False
+        if a.creado:
+            reg_m = a.creado.month + 1
+            reg_y = a.creado.year
+            if reg_m > 12:
+                reg_m, reg_y = 1, reg_y + 1
+            if (reg_y, reg_m) > periodo_key:
+                return False
+        else:
+            first_fact = first_factura_map.get(a.doc)
+            if first_fact:
+                if first_fact > periodo_key:
+                    return False
+            else:
+                return False
+        return True
+
+    sin_factura = [a for a in afiliados_activos
+                   if a.doc not in docs_con_factura and _debio_facturar(a)]
     if sin_factura:
         periodo_label = f"{mes} {anio}".strip() if (mes or anio) else "el período"
         sep_row = ws.max_row + 2
