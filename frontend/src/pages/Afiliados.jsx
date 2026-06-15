@@ -677,6 +677,22 @@ export default function Afiliados() {
   const totalPagado    = factAfil_filtradas.filter(f=>f.estado==='pagado'||f.estado==='planilla_pagada').reduce((s,f)=>s+(f.ingresos||0),0);
   const totalPendiente = factAfil_filtradas.filter(f=>f.estado!=='pagado'&&f.estado!=='planilla_pagada').reduce((s,f)=>s+(f.ingresos||0),0);
 
+  // Coherencia servicio contratado ↔ dato de afiliación (EPS/AFP/CCF).
+  // Bidireccional: si se marca el servicio debe llenarse el dato, y si se llena el dato debe marcarse el servicio.
+  // ARL NO es obligatoria: no bloquea el guardado.
+  const erroresCoherencia = useMemo(() => {
+    const srv = form.servicios || [];
+    const has = (s) => srv.includes(s);
+    const errs = [];
+    if (has('EPS') && !form.eps) errs.push('Marcaste el servicio EPS pero no seleccionaste la EPS.');
+    if (form.eps && !has('EPS')) errs.push('Seleccionaste una EPS pero no marcaste el servicio EPS.');
+    if (has('AFP') && !form.afp) errs.push('Marcaste el servicio AFP pero no seleccionaste la AFP.');
+    if (form.afp && !has('AFP')) errs.push('Seleccionaste una AFP pero no marcaste el servicio AFP.');
+    if (has('CCF') && !form.ccf) errs.push('Marcaste el servicio CCF pero no seleccionaste la CCF (caja).');
+    if (form.ccf && !has('CCF')) errs.push('Seleccionaste una CCF (caja) pero no marcaste el servicio CCF.');
+    return errs;
+  }, [form.servicios, form.eps, form.afp, form.ccf]);
+
   return (
     <div>
       <PageHeader title="👥 Afiliados"
@@ -1601,7 +1617,18 @@ export default function Afiliados() {
           <Sel label="Estado del afiliado" value={form.estado||'ACTIVO'}
             onChange={v=>{ sf('estado',v); sf('estado_srv',v); }}
             options={(listas.estados_srv||ESTADOS_SRV).map(e=>({value:e,label:e}))} />
-          <InputUp label="Fecha afiliación *" type="date" value={form.fecha_afiliacion||''} onChange={v=>sf('fecha_afiliacion',v)} />
+          <div style={{ marginBottom:14 }}>
+            <label style={lbl}>Fecha afiliación *</label>
+            <input type="date" value={form.fecha_afiliacion||''} onChange={e=>sf('fecha_afiliacion',e.target.value)}
+              style={{ ...inp2,
+                border:`1px solid ${!form.fecha_afiliacion ? C.red : C.border}`,
+                boxShadow: !form.fecha_afiliacion ? `0 0 0 2px ${C.red}22` : 'none' }} />
+            {!form.fecha_afiliacion && (
+              <span style={{ fontSize:11, color:C.red, marginTop:3, display:'block' }}>
+                Selecciona la fecha de afiliación para continuar
+              </span>
+            )}
+          </div>
         </div>
 
         <Seccion title="IBC, novedades y detalle" />
@@ -1656,12 +1683,23 @@ export default function Afiliados() {
           )}
         </div>
 
+        {erroresCoherencia.length > 0 && (
+          <div style={{ marginTop:8, background:C.redBg, border:`1px solid ${C.red}`, borderRadius:8,
+            padding:'10px 14px' }}>
+            <div style={{ fontSize:12, fontWeight:700, color:C.red, marginBottom:erroresCoherencia.length>1?6:0 }}>
+              ⚠️ Completa la información de afiliación antes de guardar:
+            </div>
+            <ul style={{ margin:0, paddingLeft:18, fontSize:12, color:C.red, fontWeight:500 }}>
+              {erroresCoherencia.map((e,i) => <li key={i} style={{ marginTop:i?2:0 }}>{e}</li>)}
+            </ul>
+          </div>
+        )}
         <div style={{ display:'flex',justifyContent:'flex-end',gap:10,marginTop:8,
           borderTop:`1px solid ${C.border}`,paddingTop:14 }}>
           <Btn variant="secondary" onClick={()=>setModal(null)}>Cancelar</Btn>
           <Btn onClick={()=>guardar.mutate()}
-            disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim() || !form.cliente_txt?.trim() || !form.fecha_afiliacion}
-            title={!form.empresa?'Selecciona una empresa':!form.nombre?.trim()?'Ingresa el nombre':!form.doc?.trim()?'Ingresa el documento':!form.cliente_txt?.trim()?'Selecciona el cliente':''}>
+            disabled={guardar.isPending || !form.empresa || !form.nombre?.trim() || !form.doc?.trim() || !form.cliente_txt?.trim() || !form.fecha_afiliacion || erroresCoherencia.length > 0}
+            title={!form.empresa?'Selecciona una empresa':!form.nombre?.trim()?'Ingresa el nombre':!form.doc?.trim()?'Ingresa el documento':!form.cliente_txt?.trim()?'Selecciona el cliente':!form.fecha_afiliacion?'Ingresa la fecha de afiliación':erroresCoherencia.length>0?erroresCoherencia[0]:''}>
             {guardar.isPending?'Guardando...':'💾 Guardar afiliado'}
           </Btn>
         </div>

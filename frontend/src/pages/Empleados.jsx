@@ -25,10 +25,12 @@ export default function Empleados() {
   const [confirmState, setConfirmState] = useState({ open: false, title: '', message: '', onConfirm: null });
   const [tab, setTab] = useState('empleados');
   const sf = (k, v) => setForm(f => ({ ...f, [k]: v }));
-  const [mes, setMes] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_emp_filtros'))?.mes ?? MES_ACTUAL; } catch { return MES_ACTUAL; } });
-  const [anio, setAnio] = useState(() => { try { return JSON.parse(localStorage.getItem('bbc_emp_filtros'))?.anio ?? ANIO_ACTUAL; } catch { return ANIO_ACTUAL; } });
+  // Siempre abrir en el mes/año actual — la persistencia en localStorage dejaba la página
+  // pegada al mes de la visita anterior (bbc_emp_filtros, eliminado)
+  const [mes, setMes] = useState(MES_ACTUAL);
+  const [anio, setAnio] = useState(ANIO_ACTUAL);
 
-  useEffect(() => { try { localStorage.setItem('bbc_emp_filtros', JSON.stringify({ mes, anio })); } catch {} }, [mes, anio]);
+  useEffect(() => { try { localStorage.removeItem('bbc_emp_filtros'); } catch {} }, []);
 
   const { data: emps = [], isError: isErrorEmps, refetch: refetchEmps } = useQuery({ queryKey: ['empleados'], queryFn: () => api.get('/empleados').then(r => r.data), staleTime: 300_000 });
   const { data: usuarios = [] } = useQuery({ queryKey: ['usuarios'], queryFn: () => api.get('/usuarios').then(r => r.data), staleTime: 300_000 });
