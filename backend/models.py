@@ -384,6 +384,7 @@ class SeguimientoArl(Base):
     fecha_afiliacion = Column(String(20))   # 'YYYY-MM-DD'
     entidad_arl      = Column(String(20), default='SURA')    # SURA | POSITIVA
     nivel_arl        = Column(String(10), default='N/A')
+    tipo_afiliado    = Column(String(15), default='dependiente')  # dependiente | independiente
     observaciones    = Column(Text, nullable=True)
     estado           = Column(String(20), default='activo')  # activo | retirar | retirado
     creado_en        = Column(DateTime, default=_utcnow)

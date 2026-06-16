@@ -88,6 +88,7 @@ def _ensure_columns():
     _check("config", "mes_inicio_cobro",  "ALTER TABLE config ADD COLUMN mes_inicio_cobro INTEGER")
     _check("config", "anio_inicio_cobro", "ALTER TABLE config ADD COLUMN anio_inicio_cobro INTEGER")
     _check("seguimiento_arl", "entidad_arl", "ALTER TABLE seguimiento_arl ADD COLUMN entidad_arl VARCHAR(20) DEFAULT 'SURA'")
+    _check("seguimiento_arl", "tipo_afiliado", "ALTER TABLE seguimiento_arl ADD COLUMN tipo_afiliado VARCHAR(15) DEFAULT 'dependiente'")
 
     if _missing:
         with engine.begin() as conn:

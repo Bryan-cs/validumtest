@@ -345,6 +345,7 @@ class SeguimientoArlCreate(BaseModel):
     fecha_afiliacion: str = ""   # 'YYYY-MM-DD'
     entidad_arl: str = "SURA"   # SURA | POSITIVA
     nivel_arl: str = "N/A"
+    tipo_afiliado: str = "dependiente"   # dependiente | independiente
     observaciones: Optional[str] = None
 
     @field_validator('fecha_afiliacion')
@@ -368,6 +369,7 @@ class SeguimientoArlUpdate(BaseModel):
     fecha_afiliacion: Optional[str] = None
     entidad_arl: Optional[str] = None
     nivel_arl: Optional[str] = None
+    tipo_afiliado: Optional[str] = None
     observaciones: Optional[str] = None
     estado: Optional[str] = None
 
