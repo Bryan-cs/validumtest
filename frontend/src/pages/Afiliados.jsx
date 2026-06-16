@@ -137,7 +137,7 @@ export default function Afiliados() {
 
   const [arlForm, setArlForm] = useState({
     nombre:'', documento:'', cliente:'', empresa:'',
-    fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', observaciones:''
+    fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', tipo_afiliado:'dependiente', observaciones:''
   });
 
   const setFiltro = (key,vals) => { setFiltros(f=>({...f,[key]:vals})); setPagina(1); setTablePagination(p=>({...p,pageIndex:0})); };
@@ -628,6 +628,15 @@ export default function Afiliados() {
     () => arlFiltroCliente ? segArlData.filter(r => r.cliente === arlFiltroCliente) : segArlData,
     [segArlData, arlFiltroCliente]
   );
+  const arlStats = useMemo(() => {
+    const s = { total:0, activo:0, retirar:0, retirado:0, dependiente:0, independiente:0 };
+    for (const r of segArlFiltrado) {
+      s.total++;
+      s[r.estado] = (s[r.estado] || 0) + 1;
+      if (r.tipo_afiliado === 'independiente') s.independiente++; else s.dependiente++;
+    }
+    return s;
+  }, [segArlFiltrado]);
 
   const SEG_PAGE_SIZE = 50;
   const totalSegPags = Math.ceil(enSeguimientoFiltrado.length / SEG_PAGE_SIZE) || 1;
@@ -647,13 +656,13 @@ export default function Afiliados() {
   function toggleTodosArl() { setArlSeleccionados(todosArlSel ? [] : segArlFiltrado.map(r => r.id)); }
   function toggleUnoArl(id) { setArlSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]); }
   function abrirNuevoArl() {
-    setArlForm({ nombre:'', documento:'', cliente:'', empresa:'', fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', observaciones:'' });
+    setArlForm({ nombre:'', documento:'', cliente:'', empresa:'', fecha_afiliacion:'', entidad_arl:'SURA', nivel_arl:'N/A', tipo_afiliado:'dependiente', observaciones:'' });
     setArlModal('nuevo');
   }
   function abrirEditarArl(row) {
     setArlForm({ nombre:row.nombre, documento:row.documento, cliente:row.cliente||'', empresa:row.empresa||'',
       fecha_afiliacion:row.fecha_afiliacion||'', entidad_arl:row.entidad_arl||'SURA',
-      nivel_arl:row.nivel_arl||'N/A', observaciones:row.observaciones||'',
+      nivel_arl:row.nivel_arl||'N/A', tipo_afiliado:row.tipo_afiliado||'dependiente', observaciones:row.observaciones||'',
       estado: row.estado||'activo' });
     setArlModal(row);
   }
@@ -1347,6 +1356,23 @@ export default function Afiliados() {
       {/* ═══ TAB: SEGUIMIENTO ARL ═══ */}
       {tab === 'arl' && (
         <div>
+          {/* Mini-dashboard reconteo */}
+          <div style={{ display:'flex', gap:10, flexWrap:'wrap', marginBottom:14 }}>
+            {[
+              { label:'Total', value:arlStats.total, color:C.text },
+              { label:'Activos', value:arlStats.activo, color:C.green },
+              { label:'Por retirar', value:arlStats.retirar, color:C.amber },
+              { label:'Retirados', value:arlStats.retirado, color:C.red },
+              { label:'Dependientes', value:arlStats.dependiente, color:C.blue },
+              { label:'Independientes', value:arlStats.independiente, color:C.amber },
+            ].map(c => (
+              <div key={c.label} style={{ flex:'1 1 120px', minWidth:120, background:C.surface,
+                border:`1px solid ${C.border}`, borderLeft:`3px solid ${c.color}`, borderRadius:10, padding:'10px 14px' }}>
+                <div style={{ fontSize:11, fontWeight:600, color:C.text2, textTransform:'uppercase', letterSpacing:'0.04em' }}>{c.label}</div>
+                <div style={{ fontSize:24, fontWeight:800, color:c.color, lineHeight:1.2 }}>{c.value}</div>
+              </div>
+            ))}
+          </div>
           {/* Barra superior */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
@@ -1381,7 +1407,7 @@ export default function Afiliados() {
                   <th style={{ padding:'10px 12px', width:36 }}>
                     <input type="checkbox" checked={todosArlSel} onChange={toggleTodosArl} />
                   </th>
-                  {['Nombre','Documento','Cliente','Empresa','Fecha afiliación','Días','Entidad ARL','Nivel ARL','Estado','Observaciones','Acciones'].map(h => (
+                  {['Nombre','Documento','Cliente','Empresa','Fecha afiliación','Días','Entidad ARL','Nivel ARL','Tipo','Estado','Observaciones','Acciones'].map(h => (
                     <th key={h} style={{ padding:'10px 12px', textAlign:'left', fontSize:11, fontWeight:600,
                       color:C.text2, borderBottom:`1px solid ${C.border}`, whiteSpace:'nowrap' }}>{h}</th>
                   ))}
@@ -1389,7 +1415,7 @@ export default function Afiliados() {
               </thead>
               <tbody>
                 {segArlFiltrado.length === 0 && (
-                  <tr><td colSpan={12} style={{ padding:30, textAlign:'center', color:C.text2 }}>
+                  <tr><td colSpan={13} style={{ padding:30, textAlign:'center', color:C.text2 }}>
                     No hay registros de seguimiento ARL
                   </td></tr>
                 )}
@@ -1424,6 +1450,14 @@ export default function Afiliados() {
                       </td>
                       <td style={{ ...tdc, fontSize:12, fontWeight:600 }}>{row.entidad_arl||'SURA'}</td>
                       <td style={{ ...tdc, fontSize:12 }}>{row.nivel_arl||'N/A'}</td>
+                      <td style={tdc}>
+                        {(() => { const indep = row.tipo_afiliado === 'independiente'; return (
+                          <span style={{ display:'inline-block', fontSize:11, fontWeight:600, borderRadius:10, padding:'2px 9px',
+                            background: indep ? C.amberBg : C.blueBg, color: indep ? C.amber : C.blue, whiteSpace:'nowrap' }}>
+                            {indep ? 'Independiente' : 'Dependiente'}
+                          </span>
+                        ); })()}
+                      </td>
                       <td style={tdc}>{statusBadge(row.estado==='activo'?'ACTIVO':row.estado==='retirar'?'PENDIENTE DE RETIRAR':'RETIRADO')}</td>
                       <td style={{ ...tdc, maxWidth:200 }}>
                         {row.observaciones
@@ -1484,6 +1518,8 @@ export default function Afiliados() {
           options={[{value:'SURA',label:'SURA'},{value:'POSITIVA',label:'POSITIVA'}]} />
         <Sel label="Nivel ARL" value={arlForm.nivel_arl} onChange={v => setArlForm(f=>({...f,nivel_arl:v}))}
           options={['N/A','1','2','3','4','5']} />
+        <Sel label="Tipo de afiliado" value={arlForm.tipo_afiliado} onChange={v => setArlForm(f=>({...f,tipo_afiliado:v}))}
+          options={[{value:'dependiente',label:'Dependiente'},{value:'independiente',label:'Independiente'}]} />
         <div style={{ marginBottom:12 }}>
           <label style={lbl}>Observaciones</label>
           <textarea value={arlForm.observaciones||''} onChange={e => setArlForm(f=>({...f,observaciones:e.target.value}))}
