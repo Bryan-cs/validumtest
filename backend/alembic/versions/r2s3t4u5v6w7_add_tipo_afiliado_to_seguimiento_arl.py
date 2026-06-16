@@ -1,7 +1,7 @@
 """add tipo_afiliado to seguimiento_arl
 
 Revision ID: r2s3t4u5v6w7
-Revises: p1q2r3s4t5u6
+Revises: q2r3s4t5u6v7
 Create Date: 2026-06-16
 
 Campo tipo_afiliado distingue si el afiliado en seguimiento ARL es
@@ -12,7 +12,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = 'r2s3t4u5v6w7'
-down_revision = 'p1q2r3s4t5u6'
+down_revision = 'q2r3s4t5u6v7'
 branch_labels = None
 depends_on = None
 
