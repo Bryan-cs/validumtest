@@ -10,7 +10,7 @@ bcrypt==4.0.1
 slowapi==0.1.9
 apscheduler==3.10.4
 alembic==1.13.3
-pypdf>=4.0.0
+pypdf==6.9.2
 reportlab==4.2.2
 python-dotenv==1.0.1
 redis==5.0.8
