@@ -21,7 +21,7 @@ class Usuario(Base):
     rol         = Column(String(20), default="empleado")   # admin | empleado | cliente
     cliente_ref = Column(String(120), nullable=True)       # para rol=cliente: valor de cliente_txt
     activo      = Column(Boolean, default=True)
-    creado      = Column(DateTime, default=_utcnow)
+    creado      = Column(DateTime(timezone=True), default=_utcnow)
 
 class Afiliado(Base):
     __tablename__ = "afiliados"
@@ -58,8 +58,8 @@ class Afiliado(Base):
     fecha_afiliacion= Column(String(10))
     registrado_por  = Column(String(60))
     activo          = Column(Boolean, default=True)
-    creado          = Column(DateTime, default=_utcnow)
-    actualizado     = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    creado          = Column(DateTime(timezone=True), default=_utcnow)
+    actualizado     = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 from sqlalchemy import UniqueConstraint
 
@@ -92,8 +92,8 @@ class Factura(Base):
     pagado_en        = Column(DateTime(timezone=True), nullable=True)
     monto_pagado     = Column(Numeric(15, 2), default=0)   # acumulado de abonos parciales
     creado_por       = Column(String(60))
-    creado           = Column(DateTime, default=_utcnow)
-    actualizado      = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+    creado           = Column(DateTime(timezone=True), default=_utcnow)
+    actualizado      = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 class Retiro(Base):
     __tablename__ = "retiros"
@@ -110,7 +110,7 @@ class Retiro(Base):
     mes             = Column(String(20))
     anio            = Column(String(4))
     registrado_por  = Column(String(60))
-    creado          = Column(DateTime, default=_utcnow)
+    creado          = Column(DateTime(timezone=True), default=_utcnow)
 
 class Eliminado(Base):
     __tablename__ = "eliminados"
@@ -123,7 +123,7 @@ class Eliminado(Base):
     mes                 = Column(String(20))
     eliminado_por       = Column(String(60))
     estado_planilla     = Column(String(30), nullable=True)  # retiro_pendiente / planilla_hecha / planilla_pagada
-    creado              = Column(DateTime, default=_utcnow)
+    creado              = Column(DateTime(timezone=True), default=_utcnow)
 
 class Empleado(Base):
     __tablename__ = "empleados"
@@ -137,7 +137,7 @@ class Empleado(Base):
     nomina        = Column(Numeric(15, 2), default=0)
     activo        = Column(Boolean, default=True)
     fecha_ingreso = Column(String(10))
-    creado        = Column(DateTime, default=_utcnow)
+    creado        = Column(DateTime(timezone=True), default=_utcnow)
 
 class Gasto(Base):
     __tablename__ = "gastos"
@@ -150,7 +150,7 @@ class Gasto(Base):
     activo = Column(Boolean, default=True)
     mes    = Column(Integer)
     anio   = Column(Integer)
-    creado = Column(DateTime, default=_utcnow)
+    creado = Column(DateTime(timezone=True), default=_utcnow)
 
 class IngresoAdicional(Base):
     __tablename__ = "ingresos_adicionales"
@@ -164,7 +164,7 @@ class IngresoAdicional(Base):
     mes         = Column(Integer)
     anio        = Column(Integer)
     creado_por  = Column(String(60), default="")
-    creado      = Column(DateTime, default=_utcnow)
+    creado      = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class NominaMensual(Base):
@@ -206,7 +206,7 @@ class SolicitudNovedad(Base):
     descripcion      = Column(Text)
     estado           = Column(String(20), default="pendiente", index=True)  # pendiente | atendido
     respuesta        = Column(Text, nullable=True)
-    creado           = Column(DateTime, default=_utcnow)
+    creado           = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class NovedadPago(Base):
@@ -221,7 +221,7 @@ class NovedadPago(Base):
     obs              = Column(Text, default="")
     estado           = Column(String(20), default="pendiente", index=True)  # pendiente | procesado
     respuesta        = Column(Text, nullable=True)
-    creado           = Column(DateTime, default=_utcnow)
+    creado           = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class SolicitudRetiro(Base):
@@ -235,7 +235,7 @@ class SolicitudRetiro(Base):
     obs              = Column(Text, default="")
     estado           = Column(String(20), default="pendiente", index=True)  # pendiente | ejecutado | rechazado
     respuesta        = Column(Text, nullable=True)
-    creado           = Column(DateTime, default=_utcnow)
+    creado           = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class Actividad(Base):
@@ -308,7 +308,7 @@ class PlanillaPago(Base):
     observaciones= Column(Text, default="")
 
     subido_por   = Column(String(60))
-    creado       = Column(DateTime, default=_utcnow)
+    creado       = Column(DateTime(timezone=True), default=_utcnow)
 
 class Documento(Base):
     __tablename__ = "documentos"
@@ -325,7 +325,7 @@ class Documento(Base):
     subido_por   = Column(String(60))
     contexto     = Column(String(60), default="afiliado") # afiliado | tarea | novedad_portal
     contexto_id  = Column(Integer, nullable=True)        # id de tarea o solicitud si aplica
-    creado       = Column(DateTime, default=_utcnow)
+    creado       = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class AvisoCliente(Base):
@@ -340,7 +340,7 @@ class AvisoCliente(Base):
     mensaje     = Column(Text)
     leido       = Column(Boolean, default=False)
     creado_por  = Column(String(60))
-    creado      = Column(DateTime, default=_utcnow)
+    creado      = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class TokenBlacklist(Base):
@@ -387,5 +387,5 @@ class SeguimientoArl(Base):
     tipo_afiliado    = Column(String(15), default='dependiente')  # dependiente | independiente
     observaciones    = Column(Text, nullable=True)
     estado           = Column(String(20), default='activo')  # activo | retirar | retirado
-    creado_en        = Column(DateTime, default=_utcnow)
+    creado_en        = Column(DateTime(timezone=True), default=_utcnow)
     ultima_alerta_en = Column(DateTime(timezone=True), nullable=True)
