@@ -458,6 +458,12 @@ export default function Afiliados() {
   const guardar = useMutation({
     mutationFn: async () => {
       const payload = { ...form };
+      // Limpia valores legacy/delisted (o placeholders como '—') que no existen en su lista
+      // de opciones: el <select> los muestra como '—', así que se persisten como vacíos.
+      const limpiar_ = (v, opts) => ((opts || []).includes(v) ? v : '');
+      payload.eps = limpiar_(payload.eps, listas.eps);
+      payload.afp = limpiar_(payload.afp, listas.afp);
+      payload.ccf = limpiar_(payload.ccf, listas.ccf);
       const res = modal==='nuevo' ? await api.post('/afiliados',payload) : await api.put(`/afiliados/${modal.id}`,payload);
       return res;
     },
@@ -692,15 +698,22 @@ export default function Afiliados() {
   const erroresCoherencia = useMemo(() => {
     const srv = form.servicios || [];
     const has = (s) => srv.includes(s);
+    // Un dato cuenta como "seleccionado" solo si su valor existe en su lista de opciones.
+    // Valores legacy/delisted (o placeholders como '—') que el <select> no puede mostrar
+    // se tratan como vacíos — el campo se ve en '—', así que no debe bloquear el guardado.
+    const set_ = (v, opts) => !!v && (opts || []).includes(v);
+    const tieneEps = set_(form.eps, listas.eps);
+    const tieneAfp = set_(form.afp, listas.afp);
+    const tieneCcf = set_(form.ccf, listas.ccf);
     const errs = [];
-    if (has('EPS') && !form.eps) errs.push('Marcaste el servicio EPS pero no seleccionaste la EPS.');
-    if (form.eps && !has('EPS')) errs.push('Seleccionaste una EPS pero no marcaste el servicio EPS.');
-    if (has('AFP') && !form.afp) errs.push('Marcaste el servicio AFP pero no seleccionaste la AFP.');
-    if (form.afp && !has('AFP')) errs.push('Seleccionaste una AFP pero no marcaste el servicio AFP.');
-    if (has('CCF') && !form.ccf) errs.push('Marcaste el servicio CCF pero no seleccionaste la CCF (caja).');
-    if (form.ccf && !has('CCF')) errs.push('Seleccionaste una CCF (caja) pero no marcaste el servicio CCF.');
+    if (has('EPS') && !tieneEps) errs.push('Marcaste el servicio EPS pero no seleccionaste la EPS.');
+    if (tieneEps && !has('EPS')) errs.push('Seleccionaste una EPS pero no marcaste el servicio EPS.');
+    if (has('AFP') && !tieneAfp) errs.push('Marcaste el servicio AFP pero no seleccionaste la AFP.');
+    if (tieneAfp && !has('AFP')) errs.push('Seleccionaste una AFP pero no marcaste el servicio AFP.');
+    if (has('CCF') && !tieneCcf) errs.push('Marcaste el servicio CCF pero no seleccionaste la CCF (caja).');
+    if (tieneCcf && !has('CCF')) errs.push('Seleccionaste una CCF (caja) pero no marcaste el servicio CCF.');
     return errs;
-  }, [form.servicios, form.eps, form.afp, form.ccf]);
+  }, [form.servicios, form.eps, form.afp, form.ccf, listas.eps, listas.afp, listas.ccf]);
 
   return (
     <div>
