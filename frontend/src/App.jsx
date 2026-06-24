@@ -25,6 +25,7 @@ const NovedadesClientes   = lazy(() => import('./pages/NovedadesClientes'));
 const PlanillasSS         = lazy(() => import('./pages/PlanillasSS'));
 const Finanzas            = lazy(() => import('./pages/Finanzas'));
 const CredencialesPortales = lazy(() => import('./pages/CredencialesPortales'));
+const Leads               = lazy(() => import('./pages/Leads'));
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -109,6 +110,7 @@ export default function App() {
             <Route path="actividad"        element={<PrivateRoute adminOnly><Page><Actividad /></Page></PrivateRoute>} />
             <Route path="novedades-clientes" element={<PrivateRoute><Page><NovedadesClientes /></Page></PrivateRoute>} />
             <Route path="credenciales"       element={<PrivateRoute><Page><CredencialesPortales /></Page></PrivateRoute>} />
+            <Route path="leads"              element={<PrivateRoute><Page><Leads /></Page></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
