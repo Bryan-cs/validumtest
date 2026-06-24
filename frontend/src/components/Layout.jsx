@@ -39,6 +39,13 @@ const navGroups = (rol) => [
     ],
   },
   {
+    id: 'ventas',
+    label: 'VENTAS',
+    items: [
+      { to: '/leads', label: '🤖 Leads (Laura)' },
+    ],
+  },
+  {
     id: 'finanzas',
     label: 'FINANZAS',
     items: [
