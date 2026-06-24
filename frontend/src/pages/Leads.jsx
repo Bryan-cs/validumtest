@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../utils/api';
-import { StatCard, SkeletonCard, ErrorMsg, Card, PageHeader } from '../components/UI';
+import { StatCard, SkeletonCard, ErrorMsg, Card, PageHeader, Modal } from '../components/UI';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip } from 'recharts';
 
 const ESTADOS = ['nuevo', 'interesado', 'caliente', 'cerrado'];
@@ -32,6 +32,7 @@ export default function Leads() {
   const [fDesde, setFDesde] = useState('');
   const [fHasta, setFHasta] = useState('');
   const [page, setPage] = useState(1);
+  const [convId, setConvId] = useState(null);
   const PER = 15;
 
   const { data: stats, isLoading: ls, isError: es, refetch: rs } = useQuery({
@@ -48,6 +49,33 @@ export default function Leads() {
   const mut = useMutation({
     mutationFn: ({ id, estado }) => api.post('/leads/estado', null, { params: { id, estado } }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['leads-list'] }); qc.invalidateQueries({ queryKey: ['leads-stats'] }); },
+  });
+
+  const [reply, setReply] = useState('');
+  const { data: convo, isLoading: lc, isError: ec } = useQuery({
+    queryKey: ['leads-conv', convId],
+    queryFn: () => api.get('/leads/conversation', { params: { id: convId } }).then(r => r.data),
+    enabled: !!convId,
+  });
+  const replyMut = useMutation({
+    mutationFn: ({ id, text }) => api.post('/leads/reply', null, { params: { id, text } }),
+    onSuccess: () => {
+      setReply('');
+      qc.invalidateQueries({ queryKey: ['leads-conv', convId] });
+      qc.invalidateQueries({ queryKey: ['leads-list'] });
+      qc.invalidateQueries({ queryKey: ['leads-stats'] });
+    },
+  });
+  const sendReply = () => { const t = reply.trim(); if (t && convId) replyMut.mutate({ id: convId, text: t }); };
+
+  const invalidateAll = () => { qc.invalidateQueries({ queryKey: ['leads-list'] }); qc.invalidateQueries({ queryKey: ['leads-stats'] }); };
+  const delMut = useMutation({
+    mutationFn: (id) => api.post('/leads/delete', null, { params: { id } }),
+    onSuccess: () => { setConvId(null); invalidateAll(); },
+  });
+  const resetMut = useMutation({
+    mutationFn: () => api.post('/leads/reset'),
+    onSuccess: invalidateAll,
   });
 
   const leads = list?.leads || [];
@@ -92,7 +120,7 @@ export default function Leads() {
 
       {/* KPIs (arriba del todo) */}
       {ls ? (
-        <div className="flex gap-3 flex-wrap mb-4">{Array.from({ length: 8 }).map((_, i) => <SkeletonCard key={i} />)}</div>
+        <div className="flex gap-3 flex-wrap mb-4">{Array.from({ length: 6 }).map((_, i) => <SkeletonCard key={i} />)}</div>
       ) : (
         <div className="flex gap-3 flex-wrap mb-4">
           <StatCard label="Total prospectos" value={total} color="#4F46E5" icon="◈" />
@@ -101,8 +129,6 @@ export default function Leads() {
           <StatCard label="Interesados" value={e.interesado || 0} color="#059669" icon="✓" />
           <StatCard label="Calientes" value={e.caliente || 0} color="#F97316" icon="🔥" />
           <StatCard label="Cerrados" value={e.cerrado || 0} color="#7C3AED" icon="★" />
-          <StatCard label="Tasa de cierre" value={`${conv}%`} color="#4F46E5" icon="%" />
-          <StatCard label="Sin alertar" value={stats?.calientes_sin_alertar || 0} color="#EF4444" icon="!" />
         </div>
       )}
 
@@ -125,6 +151,9 @@ export default function Leads() {
           <select value={fServicio} onChange={ev => setFServicio(ev.target.value)} className={sel}>
             <option value="">Servicio: todos</option>{uniq('servicio_interes').map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          <button disabled={resetMut.isPending}
+            onClick={() => { if (window.confirm('¿Borrar TODOS los prospectos y conversaciones? No se puede deshacer.')) resetMut.mutate(); }}
+            className="h-9 px-3 rounded-lg border border-red-200 text-sm text-red-600 hover:bg-red-50 disabled:opacity-50">🗑 Limpiar todo</button>
         </div>
         {el ? <ErrorMsg message="Error cargando prospectos" onRetry={rl} /> : (
           <div className="overflow-x-auto">
@@ -138,8 +167,14 @@ export default function Leads() {
                 {paged.length ? paged.map(x => (
                   <tr key={x.id} className="border-t hover:bg-muted/40">
                     <td className="py-2.5 px-3">
-                      <div className="font-medium">{x.nombre || '—'}</div>
-                      <div className="text-[11px] text-muted-foreground">{x.telefono || 'sin teléfono'}</div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setConvId(x.id)} title="Ver conversación"
+                          className="shrink-0 h-7 w-7 rounded-lg border bg-card hover:bg-muted text-base leading-none">💬</button>
+                        <div>
+                          <div className="font-medium">{x.nombre || '—'}</div>
+                          <div className={`text-[11px] ${x.telefono ? 'text-muted-foreground' : 'text-amber-600 font-semibold'}`}>{x.telefono || '⚠ sin teléfono'}</div>
+                        </div>
+                      </div>
                     </td>
                     <td className="py-2.5 px-3">{x.ciudad || '—'}</td>
                     <td className="py-2.5 px-3">{x.servicio_interes || '—'}</td>
@@ -148,10 +183,15 @@ export default function Leads() {
                     <td className="py-2.5 px-3">{x.fuente || '—'}</td>
                     <td className="py-2.5 px-3 whitespace-nowrap">{new Date(x.created_at).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</td>
                     <td className="py-2.5 px-3">
-                      <select className={sel} value={x.estado || ''} disabled={mut.isPending}
-                        onChange={ev => mut.mutate({ id: x.id, estado: ev.target.value })}>
-                        {ESTADOS.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      <div className="flex items-center gap-2">
+                        <select className={sel} value={x.estado || ''} disabled={mut.isPending}
+                          onChange={ev => mut.mutate({ id: x.id, estado: ev.target.value })}>
+                          {ESTADOS.map(s => <option key={s} value={s}>{s}</option>)}
+                        </select>
+                        <button title="Eliminar prospecto" disabled={delMut.isPending}
+                          onClick={() => { if (window.confirm('¿Eliminar este prospecto y su conversación? No se puede deshacer.')) delMut.mutate(x.id); }}
+                          className="shrink-0 h-8 w-8 rounded-lg border border-red-200 text-red-500 hover:bg-red-50 disabled:opacity-50">🗑</button>
+                      </div>
                     </td>
                   </tr>
                 )) : <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">Sin prospectos.</td></tr>}
@@ -187,6 +227,46 @@ export default function Leads() {
         </ResponsiveContainer>
       </Card>
 
+      {/* Modal de conversación */}
+      <Modal open={!!convId} onClose={() => setConvId(null)}
+        title={convo?.lead ? `Conversación · ${convo.lead.nombre || 'Sin nombre'}` : 'Conversación'} width={640}>
+        {lc ? (
+          <div className="text-sm text-muted-foreground py-6 text-center">Cargando conversación…</div>
+        ) : ec ? (
+          <ErrorMsg message="No se pudo cargar la conversación" />
+        ) : (
+          <div className="flex flex-col gap-2 max-h-[60vh] overflow-y-auto pr-1">
+            {(convo?.mensajes || []).length ? convo.mensajes.map((m, i) => (
+              <div key={i} className={`max-w-[78%] ${m.role === 'user' ? 'self-start' : 'self-end'}`}>
+                <div className={`px-3 py-2 rounded-2xl text-sm whitespace-pre-wrap ${m.role === 'user' ? 'bg-muted text-foreground rounded-bl-sm' : 'bg-primary text-primary-foreground rounded-br-sm'}`}>
+                  {m.message}
+                </div>
+                <div className={`text-[10px] text-muted-foreground mt-0.5 ${m.role === 'user' ? 'text-left' : 'text-right'}`}>
+                  {m.role === 'user' ? 'Cliente' : 'Laura'} · {new Date(m.timestamp).toLocaleString('es-CO', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            )) : <div className="text-sm text-muted-foreground py-6 text-center">Sin mensajes.</div>}
+          </div>
+        )}
+        {/* Responder (asesor toma el control) */}
+        <div className="flex gap-2 mt-3 pt-3 border-t">
+          <input value={reply} onChange={e => setReply(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') sendReply(); }}
+            placeholder="Responder al cliente…" disabled={replyMut.isPending}
+            className="flex-1 h-10 rounded-lg border bg-card px-3 text-sm" />
+          <button onClick={sendReply} disabled={replyMut.isPending || !reply.trim()}
+            className="h-10 px-4 rounded-lg bg-primary text-primary-foreground text-sm font-medium disabled:opacity-50">
+            {replyMut.isPending ? 'Enviando…' : 'Enviar'}
+          </button>
+        </div>
+        {replyMut.isError && <div className="text-xs text-red-500 mt-2">{replyMut.error?.response?.data?.detail || replyMut.error?.message || 'No se pudo enviar'}</div>}
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-[11px] text-muted-foreground">Al responder, Laura se pausa en este lead (lo tomas tú).</span>
+          <button disabled={delMut.isPending}
+            onClick={() => { if (window.confirm('¿Eliminar este prospecto y su conversación? No se puede deshacer.')) delMut.mutate(convId); }}
+            className="text-xs text-red-500 hover:underline disabled:opacity-50">🗑 Eliminar conversación</button>
+        </div>
+      </Modal>
     </div>
   );
 }

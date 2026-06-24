@@ -50,6 +50,32 @@ async def leads_list(limit: int = Query(100, ge=1, le=100), token=Depends(requir
     return await _laura_request("GET", "/admin/leads", {"limit": limit})
 
 
+@router.get("/conversation")
+async def leads_conversation(id: int, token=Depends(require_admin_or_empleado)):
+    """Historial de mensajes de un prospecto."""
+    return await _laura_request("GET", "/admin/conversation", {"id": id})
+
+
+@router.post("/reply")
+async def leads_reply(id: int, text: str, token=Depends(require_admin_or_empleado)):
+    """El asesor responde manualmente al cliente por Messenger (pausa a Laura)."""
+    if not text.strip():
+        raise HTTPException(400, "text requerido")
+    return await _laura_request("POST", "/admin/reply", {"id": id, "text": text})
+
+
+@router.post("/delete")
+async def leads_delete(id: int, token=Depends(require_admin_or_empleado)):
+    """Borra un prospecto individual y su conversación."""
+    return await _laura_request("POST", "/admin/lead-delete", {"id": id})
+
+
+@router.post("/reset")
+async def leads_reset(token=Depends(require_admin_or_empleado)):
+    """Borra TODOS los prospectos y conversaciones."""
+    return await _laura_request("POST", "/admin/reset", {"confirm": "BORRAR"})
+
+
 @router.post("/estado")
 async def leads_set_estado(id: int, estado: str, token=Depends(require_admin_or_empleado)):
     """Cambia el estado de un prospecto (nuevo/interesado/caliente/cerrado)."""
