@@ -33,7 +33,13 @@ async def _laura_request(method: str, path: str, params: dict | None = None):
         r.raise_for_status()
         return r.json()
     except httpx.HTTPStatusError as e:
-        raise HTTPException(e.response.status_code, f"Laura respondió {e.response.status_code}")
+        # Pasa el detalle real de Laura (ej. "fuera de la ventana de 24h") al frontend.
+        detail = None
+        try:
+            detail = e.response.json().get("error")
+        except Exception:
+            pass
+        raise HTTPException(e.response.status_code, detail or f"Laura respondió {e.response.status_code}")
     except httpx.HTTPError:
         raise HTTPException(502, "No se pudo contactar a Laura")
 
