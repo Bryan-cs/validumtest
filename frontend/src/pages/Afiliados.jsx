@@ -1905,7 +1905,8 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
       a.click();
       URL.revokeObjectURL(objUrl);
     } catch (e) {
-      toast.error('Error descargando archivo');
+      const det = e.response?.data?.detail;
+      toast.error(typeof det === 'string' ? det : 'Error descargando archivo');
     }
   };
 
@@ -1921,8 +1922,9 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
       // Fallback local (dev): blob con content-type real → objectURL
       const res2 = await api.get(`/documentos/${doc.id}/descargar`, { params: { inline: true }, responseType: 'blob' });
       setPreview({ doc, url: URL.createObjectURL(res2.data), esBlob: true });
-    } catch {
-      toast.error('Error cargando la vista previa');
+    } catch (e) {
+      const det = e.response?.data?.detail;
+      toast.error(typeof det === 'string' ? det : 'Error cargando la vista previa');
     } finally {
       setPreviewLoading(false);
     }

@@ -150,6 +150,24 @@ def _get_presigned_url(unique_name: str, filename: str, expires: int = 300, inli
         return None
 
 
+def _file_exists(unique_name: str) -> bool:
+    """Verifica que el archivo exista en R2 (o disco local en dev).
+
+    Evita entregar URLs firmadas hacia keys inexistentes: R2 firmaría igual
+    y el usuario terminaría viendo un XML NoSuchKey (registros DB huérfanos
+    de la época en que el fallback a disco efímero corría en producción).
+    """
+    s3 = _get_s3()
+    if s3:
+        try:
+            s3.head_object(Bucket=_R2_BUCKET, Key=unique_name)
+            return True
+        except Exception:
+            return False
+    filepath = os.path.realpath(os.path.join(UPLOAD_DIR, unique_name))
+    return filepath.startswith(os.path.realpath(UPLOAD_DIR)) and os.path.exists(filepath)
+
+
 def _download_file(unique_name: str):
     """Descarga archivo de R2 o disco local. Retorna (bytes, found)."""
     s3 = _get_s3()
@@ -364,6 +382,9 @@ def descargar_documento(
                 raise HTTPException(403, "No tienes acceso a este documento")
         else:
             raise HTTPException(403, "No tienes acceso a este documento")
+
+    if not _file_exists(doc.ruta):
+        raise HTTPException(404, "El archivo ya no existe en el almacenamiento. Elimina este registro y vuelve a subirlo.")
 
     # R2: URL presignada → descarga directa desde Cloudflare, sin proxying por backend
     presigned = _get_presigned_url(doc.ruta, doc.nombre, inline=inline)
