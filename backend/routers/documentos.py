@@ -114,21 +114,38 @@ def _upload_file(unique_name: str, content: bytes):
         f.write(content)
 
 
-def _get_presigned_url(unique_name: str, filename: str, expires: int = 300) -> str | None:
-    """Genera URL firmada de R2 para descarga directa (evita proxying por el backend)."""
+# Content-types visualizables inline en el browser (vista previa)
+_INLINE_TYPES = {
+    'pdf':  'application/pdf',
+    'jpg':  'image/jpeg',
+    'jpeg': 'image/jpeg',
+    'png':  'image/png',
+    'gif':  'image/gif',
+}
+
+
+def _get_presigned_url(unique_name: str, filename: str, expires: int = 300, inline: bool = False) -> str | None:
+    """Genera URL firmada de R2 para descarga directa (evita proxying por el backend).
+
+    inline=True fuerza Content-Disposition inline + Content-Type real para que el
+    browser renderice el archivo (vista previa) en vez de descargarlo. Solo aplica
+    a tipos visualizables (_INLINE_TYPES); el resto siempre va como attachment.
+    """
     s3 = _get_s3()
     if not s3:
         return None
+    ext = filename.rsplit('.', 1)[-1].lower()
+    content_type = _INLINE_TYPES.get(ext)
+    disposition = 'inline' if (inline and content_type) else 'attachment'
+    params = {
+        'Bucket': _R2_BUCKET,
+        'Key': unique_name,
+        'ResponseContentDisposition': f'{disposition}; filename="{filename}"',
+    }
+    if inline and content_type:
+        params['ResponseContentType'] = content_type
     try:
-        return s3.generate_presigned_url(
-            'get_object',
-            Params={
-                'Bucket': _R2_BUCKET,
-                'Key': unique_name,
-                'ResponseContentDisposition': f'attachment; filename="{filename}"',
-            },
-            ExpiresIn=expires,
-        )
+        return s3.generate_presigned_url('get_object', Params=params, ExpiresIn=expires)
     except Exception:
         return None
 
@@ -294,6 +311,7 @@ def listar_documentos(
 @router.get("/{doc_id}/descargar")
 def descargar_documento(
     doc_id: int,
+    inline: bool = Query(False),
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
@@ -348,7 +366,7 @@ def descargar_documento(
             raise HTTPException(403, "No tienes acceso a este documento")
 
     # R2: URL presignada → descarga directa desde Cloudflare, sin proxying por backend
-    presigned = _get_presigned_url(doc.ruta, doc.nombre)
+    presigned = _get_presigned_url(doc.ruta, doc.nombre, inline=inline)
     if presigned:
         return {"url": presigned, "nombre": doc.nombre}
 
@@ -356,10 +374,15 @@ def descargar_documento(
     content, found = _download_file(doc.ruta)
     if not found:
         raise HTTPException(404, "Archivo no encontrado")
+    inline_type = _INLINE_TYPES.get((doc.tipo or '').lower())
+    if inline and inline_type:
+        media_type, disposition = inline_type, 'inline'
+    else:
+        media_type, disposition = "application/octet-stream", 'attachment'
     return StreamingResponse(
         io.BytesIO(content),
-        media_type="application/octet-stream",
-        headers={"Content-Disposition": f'attachment; filename="{doc.nombre}"'},
+        media_type=media_type,
+        headers={"Content-Disposition": f'{disposition}; filename="{doc.nombre}"'},
     )
 
 
