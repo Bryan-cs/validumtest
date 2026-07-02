@@ -1835,8 +1835,13 @@ const btnPag = {
 };
 
 // ─── TAB DOCUMENTOS ─────────────────────────────────────────────────────────
+const PREVIEWABLE = ['pdf','jpg','jpeg','png','gif'];
+
 function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, setDocDocSel, uploading, setUploading }) {
   const [docConfirm, setDocConfirm] = React.useState({ open: false, title: '', message: '', onConfirm: null });
+  // { doc, url, esBlob } — esBlob=true cuando la URL es un objectURL local (dev) y hay que revocarla al cerrar
+  const [preview, setPreview] = React.useState(null);
+  const [previewLoading, setPreviewLoading] = React.useState(false);
   const sugerencias = docBusqDoc.length >= 2 && !docDocSel
     ? todos.filter(a => `${a.nombre} ${a.doc}`.toLowerCase().includes(docBusqDoc.toLowerCase())).slice(0,8)
     : [];
@@ -1902,6 +1907,32 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
     } catch (e) {
       toast.error('Error descargando archivo');
     }
+  };
+
+  const handlePreview = async (doc) => {
+    if (previewLoading) return;
+    setPreviewLoading(true);
+    try {
+      const res = await api.get(`/documentos/${doc.id}/descargar`, { params: { inline: true } });
+      if (res.data?.url) {
+        setPreview({ doc, url: res.data.url, esBlob: false });
+        return;
+      }
+      // Fallback local (dev): blob con content-type real → objectURL
+      const res2 = await api.get(`/documentos/${doc.id}/descargar`, { params: { inline: true }, responseType: 'blob' });
+      setPreview({ doc, url: URL.createObjectURL(res2.data), esBlob: true });
+    } catch {
+      toast.error('Error cargando la vista previa');
+    } finally {
+      setPreviewLoading(false);
+    }
+  };
+
+  const cerrarPreview = () => {
+    setPreview(p => {
+      if (p?.esBlob) URL.revokeObjectURL(p.url);
+      return null;
+    });
   };
 
   const fmtSize = (bytes) => {
@@ -2010,6 +2041,10 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
                       <td style={{ ...tdc,fontSize:12,color:C.text2 }}>{d.creado ? new Date(d.creado).toLocaleDateString('es-CO') : '—'}</td>
                       <td style={tdc}>
                         <div style={{ display:'flex',gap:5 }}>
+                          {PREVIEWABLE.includes((d.tipo||'').toLowerCase()) && (
+                            <Btn size="sm" variant="secondary" disabled={previewLoading}
+                              onClick={()=>handlePreview(d)}>👁 Vista previa</Btn>
+                          )}
                           <Btn size="sm" variant="secondary" onClick={()=>handleDownload(d)}>⬇ Descargar</Btn>
                           <Btn size="sm" variant="danger" onClick={()=>handleDelete(d.id)}>×</Btn>
                         </div>
@@ -2029,6 +2064,36 @@ function DocumentosTab({ todos, api, qc, docBusqDoc, setDocBusqDoc, docDocSel, s
         onConfirm={docConfirm.onConfirm}
         onCancel={() => setDocConfirm(s => ({ ...s, open: false }))}
       />
+
+      {/* Modal vista previa — overlay nativo (patrón del proyecto, sin Radix) */}
+      {preview && (
+        <div onClick={cerrarPreview}
+          style={{ position:'fixed',inset:0,background:'rgba(11,27,43,0.72)',zIndex:1000,
+            display:'flex',alignItems:'center',justifyContent:'center',padding:20 }}>
+          <div onClick={e=>e.stopPropagation()}
+            style={{ background:C.surface,borderRadius:12,width:'min(960px, 96vw)',height:'min(85vh, 900px)',
+              display:'flex',flexDirection:'column',overflow:'hidden',boxShadow:'0 20px 60px rgba(0,0,0,.35)' }}>
+            <div style={{ display:'flex',alignItems:'center',gap:10,padding:'12px 16px',
+              borderBottom:`1px solid ${C.border}` }}>
+              <span style={{ fontSize:18 }}>{iconByType(preview.doc.tipo)}</span>
+              <div style={{ flex:1,minWidth:0,fontWeight:600,fontSize:14,color:C.text,
+                overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap' }}>
+                {preview.doc.nombre}
+              </div>
+              <Btn size="sm" variant="secondary" onClick={()=>handleDownload(preview.doc)}>⬇ Descargar</Btn>
+              <Btn size="sm" variant="danger" onClick={cerrarPreview}>✕ Cerrar</Btn>
+            </div>
+            <div style={{ flex:1,background:C.surface2,display:'flex',
+              alignItems:'center',justifyContent:'center',overflow:'auto' }}>
+              {preview.doc.tipo === 'pdf'
+                ? <iframe src={preview.url} title={preview.doc.nombre}
+                    style={{ width:'100%',height:'100%',border:'none' }} />
+                : <img src={preview.url} alt={preview.doc.nombre}
+                    style={{ maxWidth:'100%',maxHeight:'100%',objectFit:'contain' }} />}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
