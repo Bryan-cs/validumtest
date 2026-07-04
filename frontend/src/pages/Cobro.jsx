@@ -25,11 +25,15 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 const ESTADO_CONFIG = {
-  VENCIDO: { bg:C.redBg,    fg:C.red,   label:'VENCIDO',    orden:0 },
-  HOY:     { bg:C.greenBg,  fg:C.green, label:'COBRAR HOY', orden:1 },
-  PROXIMO: { bg:C.surface2, fg:C.text2, label:'PRÓXIMO',    orden:2 },
-  COBRADO: { bg:C.blueBg,   fg:C.blue,  label:'COBRADO',    orden:3 },
+  VENCIDO:   { bg:C.redBg,    fg:C.red,   label:'VENCIDO',    orden:0 },
+  HOY:       { bg:C.greenBg,  fg:C.green, label:'COBRAR HOY', orden:1 },
+  PROXIMO:   { bg:C.surface2, fg:C.text2, label:'PRÓXIMO',    orden:2 },
+  FACTURADO: { bg:C.amberBg,  fg:C.amber, label:'FACTURADO',  orden:3 },
+  COBRADO:   { bg:C.blueBg,   fg:C.blue,  label:'COBRADO',    orden:4 },
 };
+
+// Estados que significan "aún no se ha hecho la factura"
+const SIN_FACTURA_ESTADOS = ['VENCIDO', 'HOY', 'PROXIMO'];
 
 const ANIOS = [String(new Date().getFullYear()), String(new Date().getFullYear() - 1)];
 const POR_PAG = 50;
@@ -68,7 +72,7 @@ export default function Cobro() {
 
   const clientesUnicos = useMemo(() => [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort(), [rows]);
   const subtiposUnicos = useMemo(() => [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort(), [rows]);
-  const estadosOpts    = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
+  const estadosOpts    = ['SIN FACTURA','COBRAR HOY','VENCIDO','PRÓXIMO','FACTURADO','COBRADO'];
 
   const hoy = new Date();
   const mesActualNombre = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][hoy.getMonth()];
@@ -86,7 +90,12 @@ export default function Cobro() {
     }
     if (filtros.empresa.length  && !filtros.empresa.includes(r.empresa))    return false;
     if (filtros.cliente.length  && !filtros.cliente.includes(r.cliente))    return false;
-    if (filtros.estado.length   && !filtros.estado.includes(labelEstado))   return false;
+    // 'SIN FACTURA' agrupa los estados sin factura hecha (faltan por facturar)
+    if (filtros.estado.length) {
+      const esSinFactura = SIN_FACTURA_ESTADOS.includes(r.estado);
+      const pasaSinFactura = filtros.estado.includes('SIN FACTURA') && esSinFactura;
+      if (!filtros.estado.includes(labelEstado) && !pasaSinFactura) return false;
+    }
     if (filtros.subtipo.length  && !filtros.subtipo.includes(r.subtipo))    return false;
     return true;
   }), [rows, filtros, mesActualNombre, anioActualStr]);
@@ -94,14 +103,16 @@ export default function Cobro() {
   const totalPags   = Math.max(1, Math.ceil(rowsFiltrados.length / POR_PAG));
   const rowsPagina  = rowsFiltrados.slice((pagina - 1) * POR_PAG, pagina * POR_PAG);
 
-  const { nHoy, nVenc, nCobr, planPend } = useMemo(() => {
-    let nHoy=0, nVenc=0, nCobr=0, planPend=0;
+  const { nHoy, nVenc, nCobr, nFact, nSinFact, planPend } = useMemo(() => {
+    let nHoy=0, nVenc=0, nCobr=0, nFact=0, nSinFact=0, planPend=0;
     for (const r of rowsFiltrados) {
       if (r.estado==='HOY') { nHoy++; planPend+=r.planilla; }
       else if (r.estado==='VENCIDO') { nVenc++; planPend+=r.planilla; }
+      else if (r.estado==='FACTURADO') nFact++;
       else if (r.estado==='COBRADO') nCobr++;
+      if (SIN_FACTURA_ESTADOS.includes(r.estado)) nSinFact++;
     }
-    return { nHoy, nVenc, nCobr, planPend };
+    return { nHoy, nVenc, nCobr, nFact, nSinFact, planPend };
   }, [rowsFiltrados]);
 
 
@@ -116,6 +127,17 @@ export default function Cobro() {
         <StatCard label="Cobrar hoy"       value={nHoy}          color={C.green} />
         <StatCard label="Vencidos"         value={nVenc}         color={C.red} />
         <StatCard label="Planilla pend."   value={fmt(planPend)} color={C.amber} />
+        {/* Cards clickeables: filtro rápido facturado / sin facturar (toggle) */}
+        <div onClick={()=>setFiltro('estado', filtros.estado.includes('SIN FACTURA') ? [] : ['SIN FACTURA'])}
+          style={{ cursor:'pointer', flex:1, minWidth:130, display:'flex',
+            outline: filtros.estado.includes('SIN FACTURA') ? `2px solid ${C.red}` : 'none', borderRadius:12 }}>
+          <StatCard label="Sin factura" value={nSinFact} color={C.red} clickHint="filtrar" style={{ width:'100%' }} />
+        </div>
+        <div onClick={()=>setFiltro('estado', filtros.estado.includes('FACTURADO') ? [] : ['FACTURADO'])}
+          style={{ cursor:'pointer', flex:1, minWidth:130, display:'flex',
+            outline: filtros.estado.includes('FACTURADO') ? `2px solid ${C.amber}` : 'none', borderRadius:12 }}>
+          <StatCard label="Facturados" value={nFact} color={C.amber} clickHint="filtrar" style={{ width:'100%' }} />
+        </div>
         <StatCard label="Cobrados mes"     value={nCobr}         color={C.blue} />
         <StatCard label="Total mostrados"  value={rowsFiltrados.length} color={C.primary} />
       </div>
@@ -244,9 +266,17 @@ export default function Cobro() {
                     </td>
                     <td style={{ ...tdc, textAlign:'right', fontWeight:700, color:C.red, fontSize:14 }}>{fmt(r.planilla)}</td>
                     <td style={tdc}>
-                      <span style={{ background:cfg.bg,color:cfg.fg,borderRadius:10,padding:'3px 12px',fontSize:11,fontWeight:700,whiteSpace:'nowrap' }}>
-                        {cfg.label}
-                      </span>
+                      <div style={{ display:'flex',flexDirection:'column',gap:3,alignItems:'flex-start' }}>
+                        <span style={{ background:cfg.bg,color:cfg.fg,borderRadius:10,padding:'3px 12px',fontSize:11,fontWeight:700,whiteSpace:'nowrap' }}>
+                          {cfg.label}
+                        </span>
+                        {SIN_FACTURA_ESTADOS.includes(r.estado) && (
+                          <span style={{ background:C.surface2,color:C.red,border:`1px dashed ${C.red}`,
+                            borderRadius:10,padding:'1px 8px',fontSize:9,fontWeight:700,whiteSpace:'nowrap' }}>
+                            SIN FACTURA
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td style={{ ...tdc, maxWidth:180 }} title={r.novedades||undefined}>
                       {r.novedades ? (
@@ -260,7 +290,7 @@ export default function Cobro() {
                     <td style={{ ...tdc, width:110 }} onClick={e=>e.stopPropagation()}>
                       <button
                         title="Generar factura"
-                        onClick={e=>{ e.stopPropagation(); setFacturaAfil({ doc: r.doc }); }}
+                        onClick={e=>{ e.stopPropagation(); setFacturaAfil({ doc: r.doc, mes: r.mes, anio: r.anio }); }}
                         style={{ padding:'6px 12px', borderRadius:7, border:'none',
                           background:C.primary, color:'#fff', cursor:'pointer', fontSize:12,
                           fontWeight:700, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:5 }}>

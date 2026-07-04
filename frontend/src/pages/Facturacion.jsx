@@ -72,6 +72,10 @@ export function NuevaFacturaModal({ open, onClose, config, listas, prefill }) {
   useEffect(() => {
     if (open && prefill && prefill.doc) {
       setCedula(prefill.doc);
+      // Desde Cobro cada fila es un periodo específico: prellenar mes/año de la fila
+      // para que la factura cubra ese periodo y no el mes actual por defecto.
+      if (prefill.mes && MESES.includes(prefill.mes)) setMes(prefill.mes);
+      if (prefill.anio) setAnio(String(prefill.anio));
       api.get('/afiliados', { params: { q: prefill.doc } }).then(r => {
         const found = (r.data.items||[]).find(a => a.doc === prefill.doc) || r.data.items?.[0];
         if (found) { setAfiliado(found); setErrorBusq(''); }
