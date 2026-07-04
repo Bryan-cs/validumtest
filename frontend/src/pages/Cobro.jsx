@@ -25,10 +25,11 @@ const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio',
                'Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
 
 const ESTADO_CONFIG = {
-  VENCIDO: { bg:C.redBg,    fg:C.red,   label:'VENCIDO',    orden:0 },
-  HOY:     { bg:C.greenBg,  fg:C.green, label:'COBRAR HOY', orden:1 },
-  PROXIMO: { bg:C.surface2, fg:C.text2, label:'PRÓXIMO',    orden:2 },
-  COBRADO: { bg:C.blueBg,   fg:C.blue,  label:'COBRADO',    orden:3 },
+  VENCIDO:   { bg:C.redBg,    fg:C.red,   label:'VENCIDO',    orden:0 },
+  HOY:       { bg:C.greenBg,  fg:C.green, label:'COBRAR HOY', orden:1 },
+  PROXIMO:   { bg:C.surface2, fg:C.text2, label:'PRÓXIMO',    orden:2 },
+  FACTURADO: { bg:C.amberBg,  fg:C.amber, label:'FACTURADO',  orden:3 },
+  COBRADO:   { bg:C.blueBg,   fg:C.blue,  label:'COBRADO',    orden:4 },
 };
 
 const ANIOS = [String(new Date().getFullYear()), String(new Date().getFullYear() - 1)];
@@ -68,7 +69,7 @@ export default function Cobro() {
 
   const clientesUnicos = useMemo(() => [...new Set(rows.map(r=>r.cliente).filter(Boolean))].sort(), [rows]);
   const subtiposUnicos = useMemo(() => [...new Set(rows.map(r=>r.subtipo).filter(Boolean))].sort(), [rows]);
-  const estadosOpts    = ['COBRAR HOY','VENCIDO','PRÓXIMO','COBRADO'];
+  const estadosOpts    = ['COBRAR HOY','VENCIDO','PRÓXIMO','FACTURADO','COBRADO'];
 
   const hoy = new Date();
   const mesActualNombre = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'][hoy.getMonth()];
@@ -94,14 +95,15 @@ export default function Cobro() {
   const totalPags   = Math.max(1, Math.ceil(rowsFiltrados.length / POR_PAG));
   const rowsPagina  = rowsFiltrados.slice((pagina - 1) * POR_PAG, pagina * POR_PAG);
 
-  const { nHoy, nVenc, nCobr, planPend } = useMemo(() => {
-    let nHoy=0, nVenc=0, nCobr=0, planPend=0;
+  const { nHoy, nVenc, nCobr, nFact, planPend } = useMemo(() => {
+    let nHoy=0, nVenc=0, nCobr=0, nFact=0, planPend=0;
     for (const r of rowsFiltrados) {
       if (r.estado==='HOY') { nHoy++; planPend+=r.planilla; }
       else if (r.estado==='VENCIDO') { nVenc++; planPend+=r.planilla; }
+      else if (r.estado==='FACTURADO') nFact++;
       else if (r.estado==='COBRADO') nCobr++;
     }
-    return { nHoy, nVenc, nCobr, planPend };
+    return { nHoy, nVenc, nCobr, nFact, planPend };
   }, [rowsFiltrados]);
 
 
@@ -116,6 +118,7 @@ export default function Cobro() {
         <StatCard label="Cobrar hoy"       value={nHoy}          color={C.green} />
         <StatCard label="Vencidos"         value={nVenc}         color={C.red} />
         <StatCard label="Planilla pend."   value={fmt(planPend)} color={C.amber} />
+        <StatCard label="Facturados"       value={nFact}         color={C.amber} />
         <StatCard label="Cobrados mes"     value={nCobr}         color={C.blue} />
         <StatCard label="Total mostrados"  value={rowsFiltrados.length} color={C.primary} />
       </div>

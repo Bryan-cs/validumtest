@@ -43,15 +43,26 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
     anios_ventana = list({str(y) for y, _ in meses_ventana})
     meses_ventana_nombres = list({MESES[m-1] for _, m in meses_ventana})
     _pares_validos = {(str(y), MESES[m-1]) for y, m in meses_ventana}
-    facturas_set = set(
-        (f.doc, f.mes, f.anio)
-        for f in db.query(models.Factura.doc, models.Factura.mes, models.Factura.anio)
+    # Facturas del periodo separadas en dos sets:
+    # - pagadas → COBRADO
+    # - cualquier otra (pendiente) → FACTURADO: la factura ya se hizo pero falta el pago.
+    #   Sin este estado, un afiliado con factura pendiente se veía igual que uno sin factura
+    #   y no se sabía a quiénes faltaba facturar.
+    facturas_set = set()
+    facturadas_set = set()
+    for f in (
+        db.query(models.Factura.doc, models.Factura.mes, models.Factura.anio, models.Factura.estado)
         .filter(models.Factura.anio.in_(anios_ventana))
         .filter(models.Factura.mes.in_(meses_ventana_nombres))
-        .filter(models.Factura.estado.in_(["pagado", "planilla_pagada"]))
         .all()
-        if (f.anio, f.mes) in _pares_validos
-    )
+    ):
+        if (f.anio, f.mes) not in _pares_validos:
+            continue
+        key = (f.doc, f.mes, f.anio)
+        if f.estado in ("pagado", "planilla_pagada"):
+            facturas_set.add(key)
+        else:
+            facturadas_set.add(key)
 
     q = db.query(models.Afiliado).filter(
         models.Afiliado.activo == True,
@@ -158,10 +169,13 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
             mes_nombre = MESES[m - 1]
             anio_str   = str(y)
             tiene_fac  = (a.doc, mes_nombre, anio_str) in facturas_set
+            tiene_fac_pend = (a.doc, mes_nombre, anio_str) in facturadas_set
             es_actual  = (y == hoy.year and m == hoy.month)
 
             if tiene_fac:
                 estado = "COBRADO"
+            elif tiene_fac_pend:
+                estado = "FACTURADO"
             elif not es_actual:
                 estado = "VENCIDO"
             else:
@@ -193,7 +207,7 @@ def get_cobro(db, empresa="", cliente="", tipo="", mes="", anio="", doc=""):
                 "estado_srv": a.estado_srv or "",
             })
 
-    orden = {"VENCIDO": 0, "HOY": 1, "PROXIMO": 2, "COBRADO": 3}
+    orden = {"VENCIDO": 0, "HOY": 1, "PROXIMO": 2, "FACTURADO": 3, "COBRADO": 4}
     rows.sort(key=lambda r: (orden.get(r["estado"], 4), r["nombre"], r["anio"], r["mes"]))
     _cache_set(cache_key, rows, ttl=TTL_COBRO)
     return rows
