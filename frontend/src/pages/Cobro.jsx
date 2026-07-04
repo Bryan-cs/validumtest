@@ -127,8 +127,17 @@ export default function Cobro() {
         <StatCard label="Cobrar hoy"       value={nHoy}          color={C.green} />
         <StatCard label="Vencidos"         value={nVenc}         color={C.red} />
         <StatCard label="Planilla pend."   value={fmt(planPend)} color={C.amber} />
-        <StatCard label="Sin factura"      value={nSinFact}      color={C.red} />
-        <StatCard label="Facturados"       value={nFact}         color={C.amber} />
+        {/* Cards clickeables: filtro rápido facturado / sin facturar (toggle) */}
+        <div onClick={()=>setFiltro('estado', filtros.estado.includes('SIN FACTURA') ? [] : ['SIN FACTURA'])}
+          style={{ cursor:'pointer', flex:1, minWidth:130, display:'flex',
+            outline: filtros.estado.includes('SIN FACTURA') ? `2px solid ${C.red}` : 'none', borderRadius:12 }}>
+          <StatCard label="Sin factura" value={nSinFact} color={C.red} clickHint="filtrar" style={{ width:'100%' }} />
+        </div>
+        <div onClick={()=>setFiltro('estado', filtros.estado.includes('FACTURADO') ? [] : ['FACTURADO'])}
+          style={{ cursor:'pointer', flex:1, minWidth:130, display:'flex',
+            outline: filtros.estado.includes('FACTURADO') ? `2px solid ${C.amber}` : 'none', borderRadius:12 }}>
+          <StatCard label="Facturados" value={nFact} color={C.amber} clickHint="filtrar" style={{ width:'100%' }} />
+        </div>
         <StatCard label="Cobrados mes"     value={nCobr}         color={C.blue} />
         <StatCard label="Total mostrados"  value={rowsFiltrados.length} color={C.primary} />
       </div>
@@ -281,7 +290,7 @@ export default function Cobro() {
                     <td style={{ ...tdc, width:110 }} onClick={e=>e.stopPropagation()}>
                       <button
                         title="Generar factura"
-                        onClick={e=>{ e.stopPropagation(); setFacturaAfil({ doc: r.doc }); }}
+                        onClick={e=>{ e.stopPropagation(); setFacturaAfil({ doc: r.doc, mes: r.mes, anio: r.anio }); }}
                         style={{ padding:'6px 12px', borderRadius:7, border:'none',
                           background:C.primary, color:'#fff', cursor:'pointer', fontSize:12,
                           fontWeight:700, whiteSpace:'nowrap', display:'flex', alignItems:'center', gap:5 }}>
