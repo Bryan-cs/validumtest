@@ -3,6 +3,7 @@ import io
 import os
 import json
 from datetime import datetime
+from const import MESES
 from models import COL_TZ
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -128,8 +129,8 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
     servicios = a.get('servicios', [])
 
     parrafo = (
-        f"Por medio del presente documento, la Precooperativa Solidaria de Seguros del Caribe "
-        f"CARSECOOP certifica que el señor(a):"
+        f"Por medio del presente documento, el GRUPO EMPRESARIAL "
+        f"certifica que el señor(a):"
     )
     c.setFont("Helvetica", 10)
     c.setFillColor(colors.black)
@@ -158,9 +159,17 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
         c.drawString(320, y, f"Cliente:  {cliente}")
 
     y -= 30
+    fecha_inicio_txt = ""
+    fecha_raw = a.get('fecha_afiliacion') or a.get('fecha_ingreso')
+    if fecha_raw:
+        try:
+            d = datetime.strptime(str(fecha_raw)[:10], "%Y-%m-%d")
+            fecha_inicio_txt = f" desde el {d.day} de {MESES[d.month - 1].lower()} de {d.year}"
+        except ValueError:
+            pass
     parrafo2 = (
-        "ha iniciado satisfactoriamente su proceso de afiliación al sistema de seguridad social, "
-        "quedando vinculado a los siguientes servicios:"
+        f"ha iniciado satisfactoriamente su proceso de afiliación al sistema de seguridad social"
+        f"{fecha_inicio_txt}, quedando vinculado a los siguientes servicios:"
     )
     lines2 = simpleSplit(parrafo2, "Helvetica", 10, W - 130)
     for line in lines2:
@@ -168,12 +177,16 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
         y -= 14
 
     y -= 8
+    sin_entidad = {"", "N/A", "SIN EPS"}
+    entidades = {"EPS": a.get('eps'), "AFP": a.get('afp'), "CCF": a.get('ccf')}
     for srv in servicios:
+        ent = (entidades.get(srv) or "").strip()
+        etiqueta = f"{srv}:  {ent}" if ent.upper() not in sin_entidad else srv
         c.setFillColor(colors.HexColor("#1E40AF"))
         c.circle(78, y + 3, 3, fill=1, stroke=0)
         c.setFillColor(colors.black)
         c.setFont("Helvetica-Bold", 10)
-        c.drawString(88, y, srv)
+        c.drawString(88, y, etiqueta)
         y -= 16
 
     y -= 14
