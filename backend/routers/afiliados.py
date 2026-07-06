@@ -128,8 +128,8 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
     servicios = a.get('servicios', [])
 
     parrafo = (
-        f"Por medio del presente documento, la Precooperativa Solidaria de Seguros del Caribe "
-        f"CARSECOOP certifica que el señor(a):"
+        f"Por medio del presente documento, el GRUPO EMPRESARIAL "
+        f"certifica que el señor(a):"
     )
     c.setFont("Helvetica", 10)
     c.setFillColor(colors.black)
