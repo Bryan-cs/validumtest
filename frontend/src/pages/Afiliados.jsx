@@ -128,7 +128,8 @@ export default function Afiliados() {
   const [elimMesCol,       setElimMesCol]       = useState('');
   const [elimAnioAfil,     setElimAnioAfil]     = useState('');
 
-  const [arlFiltroCliente, setArlFiltroCliente] = useState('');
+  const [arlBusqueda, setArlBusqueda] = useState('');
+  const [arlFiltros, setArlFiltros] = useState({ cliente:[], empresa:[], mes:[], entidad:[], nivel:[], tipo:[], estado:[] });
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
   const [arlBulkEstado, setArlBulkEstado] = useState('activo');
   const [segPagina, setSegPagina] = useState(1);
@@ -568,7 +569,7 @@ export default function Afiliados() {
 
   // Seguimiento state
   const [segBusqueda, setSegBusqueda] = useState('');
-  const [segFiltros,  setSegFiltros]  = useState({ empresa:[], cliente:[] });
+  const [segFiltros,  setSegFiltros]  = useState({ empresa:[], cliente:[], eps:[], afp:[], arl:[], ccf:[], urgencia:[] });
 
   const activarAfiliado = useMutation({
     mutationFn: (a) => api.put(`/afiliados/${a.id}`, { ...a, estado:'ACTIVO', estado_srv:'ACTIVO' }),
@@ -604,13 +605,6 @@ export default function Afiliados() {
   });
 
   const enSeguimiento = todos.filter(a => (a.estado_srv||a.estado||'').toUpperCase() === 'EN ESPERA DE ACTIVACION');
-  const enSeguimientoFiltrado = enSeguimiento.filter(a => {
-    const q = segBusqueda.toLowerCase();
-    if (segBusqueda && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
-    if (segFiltros.empresa.length && !segFiltros.empresa.includes(a.empresa)) return false;
-    if (segFiltros.cliente.length && !segFiltros.cliente.includes(a.cliente_txt)) return false;
-    return true;
-  });
 
   const diasEnEspera = (a) => {
     if (!a.fecha_afiliacion) return null;
@@ -626,14 +620,72 @@ export default function Afiliados() {
     return { color: C.text2, bg: 'transparent', label: `${dias}d`, nivel: 'ok' };
   };
 
+  const SEG_URGENCIAS = { 'Vencido (>10d)':'critico', 'Urgente (7-10d)':'urgente', 'En plazo (<7d)':'ok' };
+  const segFiltroDefs = useMemo(() => {
+    const uniq = (get) => [...new Set(enSeguimiento.map(get).filter(Boolean))].sort();
+    return [
+      { key:'empresa',  label:'Empresa',  icon:'🏢', options: uniq(a => a.empresa) },
+      { key:'cliente',  label:'Cliente',  icon:'👤', options: uniq(a => a.cliente_txt) },
+      { key:'eps',      label:'EPS',      icon:'🏥', options: uniq(a => a.eps) },
+      { key:'afp',      label:'AFP',      icon:'💰', options: uniq(a => a.afp) },
+      { key:'arl',      label:'ARL',      icon:'🛡️', options: uniq(a => a.arl) },
+      { key:'ccf',      label:'CCF',      icon:'👨‍👩‍👧', options: uniq(a => a.ccf) },
+      { key:'urgencia', label:'Urgencia', icon:'⏱️', options: Object.keys(SEG_URGENCIAS) },
+    ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enSeguimiento]);
+
+  const enSeguimientoFiltrado = enSeguimiento.filter(a => {
+    const q = segBusqueda.toLowerCase();
+    if (segBusqueda && !`${a.nombre} ${a.doc} ${a.empresa} ${a.cliente_txt}`.toLowerCase().includes(q)) return false;
+    if (segFiltros.empresa.length && !segFiltros.empresa.includes(a.empresa)) return false;
+    if (segFiltros.cliente.length && !segFiltros.cliente.includes(a.cliente_txt)) return false;
+    if (segFiltros.eps.length && !segFiltros.eps.includes(a.eps)) return false;
+    if (segFiltros.afp.length && !segFiltros.afp.includes(a.afp)) return false;
+    if (segFiltros.arl.length && !segFiltros.arl.includes(a.arl)) return false;
+    if (segFiltros.ccf.length && !segFiltros.ccf.includes(a.ccf)) return false;
+    if (segFiltros.urgencia.length) {
+      const urg = urgenciaEspera(diasEnEspera(a));
+      if (!urg || !segFiltros.urgencia.some(u => SEG_URGENCIAS[u] === urg.nivel)) return false;
+    }
+    return true;
+  });
+
   const criticos = enSeguimiento.filter(a => { const d=diasEnEspera(a); return d!==null && d>10; }).length;
   const urgentes = enSeguimiento.filter(a => { const d=diasEnEspera(a); return d!==null && d>=7 && d<=10; }).length;
 
   // Seguimiento ARL helpers
-  const segArlFiltrado = useMemo(
-    () => arlFiltroCliente ? segArlData.filter(r => r.cliente === arlFiltroCliente) : segArlData,
-    [segArlData, arlFiltroCliente]
-  );
+  const arlFiltroDefs = useMemo(() => {
+    const uniq = (get) => [...new Set(segArlData.map(get).filter(Boolean))].sort();
+    return [
+      { key:'cliente', label:'Cliente',        icon:'👤', options: uniq(r => r.cliente) },
+      { key:'empresa', label:'Empresa',        icon:'🏢', options: uniq(r => r.empresa) },
+      { key:'mes',     label:'Mes afiliación', icon:'📅', options: uniq(r => (r.fecha_afiliacion || '').slice(0, 7)).reverse() },
+      { key:'entidad', label:'Entidad ARL',    icon:'🛡️', options: uniq(r => r.entidad_arl || 'SURA') },
+      { key:'nivel',   label:'Nivel ARL',      icon:'🔢', options: uniq(r => r.nivel_arl || 'N/A') },
+      { key:'tipo',    label:'Tipo',           icon:'🧾', options: ['dependiente', 'independiente'] },
+      { key:'estado',  label:'Estado',         icon:'🚦', options: ['activo', 'retirar', 'retirado'] },
+    ];
+  }, [segArlData]);
+  const setArlFiltro = (key, vals) => { setArlFiltros(f => ({ ...f, [key]: vals })); setArlSeleccionados([]); setArlPagina(1); };
+  const limpiarArlFiltros = () => {
+    setArlFiltros({ cliente:[], empresa:[], mes:[], entidad:[], nivel:[], tipo:[], estado:[] });
+    setArlBusqueda(''); setArlSeleccionados([]); setArlPagina(1);
+  };
+  const segArlFiltrado = useMemo(() => {
+    const q = arlBusqueda.trim().toLowerCase();
+    return segArlData.filter(r => {
+      if (arlFiltros.cliente.length && !arlFiltros.cliente.includes(r.cliente)) return false;
+      if (arlFiltros.empresa.length && !arlFiltros.empresa.includes(r.empresa)) return false;
+      if (arlFiltros.mes.length && !arlFiltros.mes.includes((r.fecha_afiliacion || '').slice(0, 7))) return false;
+      if (arlFiltros.entidad.length && !arlFiltros.entidad.includes(r.entidad_arl || 'SURA')) return false;
+      if (arlFiltros.nivel.length && !arlFiltros.nivel.includes(r.nivel_arl || 'N/A')) return false;
+      if (arlFiltros.tipo.length && !arlFiltros.tipo.includes(r.tipo_afiliado || 'dependiente')) return false;
+      if (arlFiltros.estado.length && !arlFiltros.estado.includes(r.estado)) return false;
+      if (q && ![r.nombre, r.documento, r.observaciones].some(v => (v || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [segArlData, arlFiltros, arlBusqueda]);
   const arlStats = useMemo(() => {
     const s = { total:0, activo:0, retirar:0, retirado:0, dependiente:0, independiente:0 };
     for (const r of segArlFiltrado) {
@@ -1260,13 +1312,10 @@ export default function Afiliados() {
             style={{ width:'100%',padding:'10px 14px',border:`1px solid ${C.border}`,borderRadius:8,
               fontSize:14,outline:'none',marginBottom:12,boxSizing:'border-box',background:C.surface,color:C.text }} />
           <BarraFiltros
-            filtros={[
-              { key:'empresa', label:'Empresa', icon:'🏢', options: listas.empresas||[] },
-              { key:'cliente', label:'Cliente', icon:'👤', options: clientesUnicos },
-            ]}
+            filtros={segFiltroDefs}
             valores={segFiltros}
             onChange={(key,vals) => { setSegFiltros(f=>({...f,[key]:vals})); setSegPagina(1); }}
-            onLimpiar={() => { setSegFiltros({ empresa:[], cliente:[] }); setSegPagina(1); }}
+            onLimpiar={() => { setSegFiltros({ empresa:[], cliente:[], eps:[], afp:[], arl:[], ccf:[], urgencia:[] }); setSegBusqueda(''); setSegPagina(1); }}
           />
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
@@ -1386,14 +1435,14 @@ export default function Afiliados() {
               </div>
             ))}
           </div>
+          {/* Filtros por campo */}
+          <BarraFiltros filtros={arlFiltroDefs} valores={arlFiltros} onChange={setArlFiltro} onLimpiar={limpiarArlFiltros} />
           {/* Barra superior */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-              <select value={arlFiltroCliente} onChange={e => { setArlFiltroCliente(e.target.value); setArlSeleccionados([]); setArlPagina(1); }}
-                style={{ padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', color:C.text, background:C.surface }}>
-                <option value="">👤 Todos los clientes</option>
-                {clientesUnicos.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <input value={arlBusqueda} onChange={e => { setArlBusqueda(e.target.value); setArlSeleccionados([]); setArlPagina(1); }}
+                placeholder="🔍 Nombre, documento u observaciones..."
+                style={{ padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', color:C.text, background:C.surface, minWidth:260 }} />
               {arlSeleccionados.length > 0 && (
                 <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                   <span style={{ fontSize:12, color:C.text2 }}>{arlSeleccionados.length} seleccionados</span>
