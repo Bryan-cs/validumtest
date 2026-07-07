@@ -128,7 +128,8 @@ export default function Afiliados() {
   const [elimMesCol,       setElimMesCol]       = useState('');
   const [elimAnioAfil,     setElimAnioAfil]     = useState('');
 
-  const [arlFiltroCliente, setArlFiltroCliente] = useState('');
+  const [arlBusqueda, setArlBusqueda] = useState('');
+  const [arlFiltros, setArlFiltros] = useState({ cliente:[], empresa:[], mes:[], entidad:[], nivel:[], tipo:[], estado:[] });
   const [arlSeleccionados, setArlSeleccionados] = useState([]);
   const [arlBulkEstado, setArlBulkEstado] = useState('activo');
   const [segPagina, setSegPagina] = useState(1);
@@ -630,10 +631,37 @@ export default function Afiliados() {
   const urgentes = enSeguimiento.filter(a => { const d=diasEnEspera(a); return d!==null && d>=7 && d<=10; }).length;
 
   // Seguimiento ARL helpers
-  const segArlFiltrado = useMemo(
-    () => arlFiltroCliente ? segArlData.filter(r => r.cliente === arlFiltroCliente) : segArlData,
-    [segArlData, arlFiltroCliente]
-  );
+  const arlFiltroDefs = useMemo(() => {
+    const uniq = (get) => [...new Set(segArlData.map(get).filter(Boolean))].sort();
+    return [
+      { key:'cliente', label:'Cliente',        icon:'👤', options: uniq(r => r.cliente) },
+      { key:'empresa', label:'Empresa',        icon:'🏢', options: uniq(r => r.empresa) },
+      { key:'mes',     label:'Mes afiliación', icon:'📅', options: uniq(r => (r.fecha_afiliacion || '').slice(0, 7)).reverse() },
+      { key:'entidad', label:'Entidad ARL',    icon:'🛡️', options: uniq(r => r.entidad_arl || 'SURA') },
+      { key:'nivel',   label:'Nivel ARL',      icon:'🔢', options: uniq(r => r.nivel_arl || 'N/A') },
+      { key:'tipo',    label:'Tipo',           icon:'🧾', options: ['dependiente', 'independiente'] },
+      { key:'estado',  label:'Estado',         icon:'🚦', options: ['activo', 'retirar', 'retirado'] },
+    ];
+  }, [segArlData]);
+  const setArlFiltro = (key, vals) => { setArlFiltros(f => ({ ...f, [key]: vals })); setArlSeleccionados([]); setArlPagina(1); };
+  const limpiarArlFiltros = () => {
+    setArlFiltros({ cliente:[], empresa:[], mes:[], entidad:[], nivel:[], tipo:[], estado:[] });
+    setArlBusqueda(''); setArlSeleccionados([]); setArlPagina(1);
+  };
+  const segArlFiltrado = useMemo(() => {
+    const q = arlBusqueda.trim().toLowerCase();
+    return segArlData.filter(r => {
+      if (arlFiltros.cliente.length && !arlFiltros.cliente.includes(r.cliente)) return false;
+      if (arlFiltros.empresa.length && !arlFiltros.empresa.includes(r.empresa)) return false;
+      if (arlFiltros.mes.length && !arlFiltros.mes.includes((r.fecha_afiliacion || '').slice(0, 7))) return false;
+      if (arlFiltros.entidad.length && !arlFiltros.entidad.includes(r.entidad_arl || 'SURA')) return false;
+      if (arlFiltros.nivel.length && !arlFiltros.nivel.includes(r.nivel_arl || 'N/A')) return false;
+      if (arlFiltros.tipo.length && !arlFiltros.tipo.includes(r.tipo_afiliado || 'dependiente')) return false;
+      if (arlFiltros.estado.length && !arlFiltros.estado.includes(r.estado)) return false;
+      if (q && ![r.nombre, r.documento, r.observaciones].some(v => (v || '').toLowerCase().includes(q))) return false;
+      return true;
+    });
+  }, [segArlData, arlFiltros, arlBusqueda]);
   const arlStats = useMemo(() => {
     const s = { total:0, activo:0, retirar:0, retirado:0, dependiente:0, independiente:0 };
     for (const r of segArlFiltrado) {
@@ -1386,14 +1414,14 @@ export default function Afiliados() {
               </div>
             ))}
           </div>
+          {/* Filtros por campo */}
+          <BarraFiltros filtros={arlFiltroDefs} valores={arlFiltros} onChange={setArlFiltro} onLimpiar={limpiarArlFiltros} />
           {/* Barra superior */}
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:14, gap:10, flexWrap:'wrap' }}>
             <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
-              <select value={arlFiltroCliente} onChange={e => { setArlFiltroCliente(e.target.value); setArlSeleccionados([]); setArlPagina(1); }}
-                style={{ padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', color:C.text, background:C.surface }}>
-                <option value="">👤 Todos los clientes</option>
-                {clientesUnicos.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+              <input value={arlBusqueda} onChange={e => { setArlBusqueda(e.target.value); setArlSeleccionados([]); setArlPagina(1); }}
+                placeholder="🔍 Nombre, documento u observaciones..."
+                style={{ padding:'8px 12px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:13, outline:'none', color:C.text, background:C.surface, minWidth:260 }} />
               {arlSeleccionados.length > 0 && (
                 <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                   <span style={{ fontSize:12, color:C.text2 }}>{arlSeleccionados.length} seleccionados</span>
