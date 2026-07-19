@@ -291,7 +291,7 @@ class Notificacion(Base):
     )
     id       = Column(Integer, primary_key=True)
     usuario  = Column(String(60), index=True)
-    mensaje  = Column(String(300))
+    mensaje  = Column(Text)  # texto libre: puede incluir notas largas del administrador
     leida    = Column(Boolean, default=False, index=True)
     tarea_id = Column(Integer, nullable=True)
     creado   = Column(DateTime(timezone=True), default=_utcnow)
