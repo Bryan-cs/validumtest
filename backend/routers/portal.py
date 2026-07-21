@@ -3,6 +3,7 @@ import io
 import os
 import json
 from datetime import datetime, timezone
+from const import MESES
 from models import COL_TZ
 from fastapi import APIRouter, HTTPException, Depends
 from fastapi.responses import StreamingResponse
@@ -749,6 +750,22 @@ def portal_reporte(
             models.Afiliado.cliente_txt != "",
         )
     afiliados = query.order_by(models.Afiliado.nombre).limit(2000).all()
+
+    # ── Excluir afiliados en su primer mes ────────────────────────────────────
+    # El primer mes no se factura (se cobra desde el mes siguiente). Si se pide
+    # un período concreto y la fecha de afiliación cae en ese mismo mes/año, el
+    # afiliado no debe aparecer en el reporte de ese período.
+    _mes_num = (MESES.index(mes) + 1) if mes in MESES else None
+    if _mes_num and anio:
+        def _es_primer_mes(a):
+            fa = a.fecha_afiliacion or ""
+            if len(fa) < 7 or fa[:4] != str(anio):
+                return False
+            try:
+                return int(fa[5:7]) == _mes_num
+            except ValueError:
+                return False
+        afiliados = [a for a in afiliados if not _es_primer_mes(a)]
 
     # ── Facturas del período — batch query (evita N+1) ───────────────────────
     PAGADOS = ("pagado", "planilla_pagada")
