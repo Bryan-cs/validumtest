@@ -42,6 +42,7 @@ function fmtTam(bytes) {
 export default function PlanillasSS() {
   const qc = useQueryClient();
   const rol = useAuthStore(s => s.user?.rol);
+  const puedeGestionar = rol === 'admin' || rol === 'empleado';  // adjuntar / quitar archivo
 
   const [filtroCliente, setFiltroCliente] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroCliente ?? ''; } catch { return ''; }
@@ -57,6 +58,7 @@ export default function PlanillasSS() {
 
   const [showModal, setShowModal] = useState(false);
   const [adjuntarPlanillaId, setAdjuntarPlanillaId] = useState(null);
+  const [detalleId, setDetalleId] = useState(null);          // planilla_id abierta en el panel
   const [confirmDel, setConfirmDel] = useState(null);        // planilla_id
   const [confirmDelDoc, setConfirmDelDoc] = useState(null);  // { planilla_id, doc_id, nombre }
   const [previewImg, setPreviewImg] = useState(null);        // { url, nombre }
@@ -92,12 +94,16 @@ export default function PlanillasSS() {
     return arr;
   }, [planillas, sortBy]);
 
+  // Planilla abierta en el panel de detalle — se re-deriva tras cada refetch
+  const detalle = useMemo(() => planillas.find(p => p.id === detalleId) || null, [planillas, detalleId]);
+
   const handleDelete = async () => {
     if (!confirmDel) return;
     try {
       await api.delete(`/planillas/${confirmDel}`);
       qc.invalidateQueries({ queryKey: ['planillas'] });
       toast.success('Planilla eliminada');
+      if (detalleId === confirmDel) setDetalleId(null);
     } catch { toast.error('Error al eliminar'); }
     setConfirmDel(null);
   };
@@ -228,77 +234,42 @@ export default function PlanillasSS() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: 14 }}>
           {planillasOrdenadas.map(p => {
-            const totalTam = (p.archivos || []).reduce((s, a) => s + (a.tamano || 0), 0);
+            const archivos = p.archivos || [];
+            const totalTam = archivos.reduce((s, a) => s + (a.tamano || 0), 0);
             return (
-              <Card key={p.id} style={{ padding: 16 }}>
-                {/* Header de la card */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10 }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 15, color: C.primary, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.cliente_ref}</div>
-                    <span style={{ background: C.blueBg, color: C.blue, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
-                      {p.mes} {p.anio}
-                    </span>
-                  </div>
-                  {/* Acciones */}
-                  <div style={{ display: 'flex', gap: 5, flexShrink: 0, marginLeft: 8 }}>
-                    {rol === 'admin' && (
-                      <Btn variant="secondary" size="sm" onClick={() => setAdjuntarPlanillaId(p.id)} title="Añadir archivos">
-                        + Adjuntar
-                      </Btn>
-                    )}
-                    {rol === 'admin' && (
-                      <Btn variant="danger" size="sm" onClick={() => setConfirmDel(p.id)}>Eliminar</Btn>
-                    )}
-                  </div>
+              <Card key={p.id} style={{ padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {/* Header compacto */}
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: C.primary, marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.cliente_ref}</div>
+                  <span style={{ background: C.blueBg, color: C.blue, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+                    {p.mes} {p.anio}
+                  </span>
                 </div>
 
                 {p.observaciones && (
-                  <div style={{ fontSize: 12, color: C.text2, marginBottom: 8, fontStyle: 'italic' }}>{p.observaciones}</div>
+                  <div style={{ fontSize: 12, color: C.text2, fontStyle: 'italic', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={p.observaciones}>
+                    {p.observaciones}
+                  </div>
                 )}
 
-                {/* Archivos */}
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                  {(p.archivos || []).map(a => (
-                    <div key={a.id} style={{
-                      display: 'flex', alignItems: 'center', gap: 8, fontSize: 12,
-                      background: C.surface2, padding: '6px 10px', borderRadius: 6,
-                    }}>
-                      {/* Thumbnail si es imagen */}
-                      {isImagen(a.nombre) ? (
-                        <span style={{ fontSize: 15, cursor: 'pointer', flexShrink: 0 }}
-                          onClick={() => abrirPreview(a.id, a.nombre)} title="Ver imagen">
-                          🖼️
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: 15, flexShrink: 0 }}>{fileIcon(a.nombre)}</span>
-                      )}
-                      <span
-                        style={{ color: C.blue, cursor: 'pointer', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}
-                        onClick={() => descargarArchivo(a.id, a.nombre)}
-                        title={a.nombre}>
-                        {a.nombre}
-                      </span>
-                      <span style={{ color: C.text2, fontSize: 10, flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtTam(a.tamano)}</span>
-                      {rol === 'admin' && (
-                        <button
-                          onClick={() => setConfirmDelDoc({ planilla_id: p.id, doc_id: a.id, nombre: a.nombre })}
-                          title="Eliminar archivo"
-                          style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: 15, fontWeight: 700, padding: '0 2px', lineHeight: 1, flexShrink: 0 }}>
-                          ×
-                        </button>
-                      )}
+                {/* Resumen de archivos */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.surface2, padding: '10px 12px', borderRadius: 8 }}>
+                  <span style={{ fontSize: 20 }}>📎</span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: C.text }}>
+                      {archivos.length} archivo{archivos.length !== 1 ? 's' : ''}
                     </div>
-                  ))}
+                    <div style={{ fontSize: 11, color: C.text2 }}>{fmtTam(totalTam)}</div>
+                  </div>
                 </div>
 
+                <Btn variant="secondary" size="sm" onClick={() => setDetalleId(p.id)} style={{ width: '100%' }}>
+                  📂 Ver y gestionar archivos
+                </Btn>
+
                 {/* Footer */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 }}>
-                  <div style={{ fontSize: 11, color: C.text2 }}>
-                    {(p.archivos || []).length} archivo{(p.archivos || []).length !== 1 ? 's' : ''} · {fmtTam(totalTam)}
-                  </div>
-                  <div style={{ fontSize: 11, color: C.text2 }}>
-                    {p.subido_por} · {new Date(p.creado).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
-                  </div>
+                <div style={{ fontSize: 11, color: C.text2, textAlign: 'right' }}>
+                  {p.subido_por} · {new Date(p.creado).toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' })}
                 </div>
               </Card>
             );
@@ -324,6 +295,21 @@ export default function PlanillasSS() {
           planillaId={adjuntarPlanillaId}
           onClose={() => setAdjuntarPlanillaId(null)}
           onSuccess={() => { qc.invalidateQueries({ queryKey: ['planillas'] }); setAdjuntarPlanillaId(null); }}
+        />
+      )}
+
+      {/* Panel de detalle: ver / gestionar archivos de una planilla */}
+      {detalle && (
+        <ModalDetallePlanilla
+          planilla={detalle}
+          rol={rol}
+          puedeGestionar={puedeGestionar}
+          onClose={() => setDetalleId(null)}
+          onDescargar={descargarArchivo}
+          onPreview={abrirPreview}
+          onEliminarArchivo={(a) => setConfirmDelDoc({ planilla_id: detalle.id, doc_id: a.id, nombre: a.nombre })}
+          onAdjuntar={() => setAdjuntarPlanillaId(detalle.id)}
+          onEliminarPlanilla={() => setConfirmDel(detalle.id)}
         />
       )}
 
@@ -365,6 +351,76 @@ export default function PlanillasSS() {
   );
 }
 
+function ModalDetallePlanilla({ planilla, rol, puedeGestionar, onClose, onDescargar, onPreview, onEliminarArchivo, onAdjuntar, onEliminarPlanilla }) {
+  const archivos = planilla.archivos || [];
+  const totalTam = archivos.reduce((s, a) => s + (a.tamano || 0), 0);
+  return (
+    <div onClick={onClose}
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ background: C.surface, borderRadius: 14, width: 560, maxWidth: '100%', maxHeight: '88vh', display: 'flex', flexDirection: 'column', boxShadow: '0 20px 60px rgba(0,0,0,.3)' }}>
+        {/* Cabecera */}
+        <div style={{ padding: '20px 24px', borderBottom: `1px solid ${C.border}` }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+            <div style={{ minWidth: 0 }}>
+              <h3 style={{ margin: 0, color: C.primary, fontSize: 17, overflow: 'hidden', textOverflow: 'ellipsis' }}>{planilla.cliente_ref}</h3>
+              <div style={{ marginTop: 6, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                <span style={{ background: C.blueBg, color: C.blue, borderRadius: 6, padding: '2px 8px', fontSize: 11, fontWeight: 600 }}>
+                  {planilla.mes} {planilla.anio}
+                </span>
+                <span style={{ fontSize: 12, color: C.text2 }}>
+                  {archivos.length} archivo{archivos.length !== 1 ? 's' : ''} · {fmtTam(totalTam)}
+                </span>
+              </div>
+            </div>
+            <button onClick={onClose} title="Cerrar"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.text2, fontSize: 22, lineHeight: 1, padding: 0, flexShrink: 0 }}>×</button>
+          </div>
+          {planilla.observaciones && (
+            <div style={{ marginTop: 10, fontSize: 13, color: C.text2, fontStyle: 'italic', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>
+              {planilla.observaciones}
+            </div>
+          )}
+        </div>
+
+        {/* Lista de archivos (scroll) */}
+        <div style={{ padding: '14px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 5 }}>
+          {archivos.length === 0 && (
+            <div style={{ textAlign: 'center', color: C.text2, fontSize: 13, padding: 20 }}>Sin archivos en esta planilla.</div>
+          )}
+          {archivos.map(a => (
+            <div key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, background: C.surface2, padding: '8px 10px', borderRadius: 6 }}>
+              {isImagen(a.nombre) ? (
+                <span style={{ fontSize: 16, cursor: 'pointer', flexShrink: 0 }} onClick={() => onPreview(a.id, a.nombre)} title="Ver imagen">🖼️</span>
+              ) : (
+                <span style={{ fontSize: 16, flexShrink: 0 }}>{fileIcon(a.nombre)}</span>
+              )}
+              <span style={{ color: C.blue, cursor: 'pointer', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}
+                onClick={() => onDescargar(a.id, a.nombre)} title={a.nombre}>
+                {a.nombre}
+              </span>
+              <span style={{ color: C.text2, fontSize: 11, flexShrink: 0, whiteSpace: 'nowrap' }}>{fmtTam(a.tamano)}</span>
+              {puedeGestionar && (
+                <button onClick={() => onEliminarArchivo(a)} title="Eliminar archivo"
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: C.red, fontSize: 17, fontWeight: 700, padding: '0 4px', lineHeight: 1, flexShrink: 0 }}>×</button>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Pie con acciones */}
+        <div style={{ padding: '16px 24px', borderTop: `1px solid ${C.border}`, display: 'flex', gap: 10, justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {puedeGestionar && <Btn size="sm" onClick={onAdjuntar}>+ Agregar archivos</Btn>}
+            {rol === 'admin' && <Btn variant="danger" size="sm" onClick={onEliminarPlanilla}>Eliminar planilla</Btn>}
+          </div>
+          <Btn variant="secondary" size="sm" onClick={onClose}>Cerrar</Btn>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ModalSubirPlanilla({ clientes, clienteInicial = '', mesInicial = '', anioInicial = '', onClose, onSuccess }) {
   const [cliente, setCliente] = useState(clienteInicial);
   const [mes, setMes] = useState(mesInicial || MESES[new Date().getMonth() + 1] || 'Enero');
@@ -387,9 +443,11 @@ function ModalSubirPlanilla({ clientes, clienteInicial = '', mesInicial = '', an
       fd.append('observaciones', obs);
       archivos.forEach(f => fd.append('files', f));
       const res = await api.post('/planillas', fd);
-      const { archivos: guardados = [], omitidos = [] } = res.data;
+      const { archivos: guardados = [], omitidos = [], reutilizada = false } = res.data;
       if (omitidos.length === 0) {
-        toast.success(`Planilla subida — ${guardados.length} archivo${guardados.length !== 1 ? 's' : ''}`);
+        toast.success(reutilizada
+          ? `${guardados.length} archivo${guardados.length !== 1 ? 's' : ''} agregado${guardados.length !== 1 ? 's' : ''} a la planilla existente`
+          : `Planilla subida — ${guardados.length} archivo${guardados.length !== 1 ? 's' : ''}`);
       } else if (guardados.length === 0) {
         toast.error(`No se guardó ningún archivo. ${omitidos.length} omitido${omitidos.length !== 1 ? 's' : ''}`);
         setSubiendo(false); return;
