@@ -874,7 +874,7 @@ def portal_reporte(
         _leyenda = [
             ("Pagada", ok_fill, 2, 3),
             ("Pendiente", pend_fill, 4, 5),
-            ("Sin factura en el período (el primer mes no se factura, se cobra desde el mes siguiente)", no_fill, 6, 15),
+            ("Sin factura", no_fill, 6, 7),
         ]
         legend_vals = [None] * 15
         legend_vals[0] = "COLORES:"
