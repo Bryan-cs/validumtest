@@ -64,15 +64,14 @@ export default function Login() {
     return () => window.removeEventListener('resize', check);
   }, []);
 
-  // RAF-driven parallax — zero React re-renders on mousemove
+  // RAF-driven parallax — solo la foto de fondo.
+  // El formulario NO se inclina: el tilt 3D sobre la tarjeta desviaba de
+  // forma intermitente los clicks de sus botones (ojo mostrar contraseña /
+  // submit) al mover el mouse hacia ellos — se sentía como que "se pegaba".
   const applyParallax = useCallback(() => {
     const { x, y } = mouseRef.current;
     if (photoRef.current) {
       photoRef.current.style.transform = `translate3d(${x * -18}px, ${y * -12}px, 0) scale(1.04)`;
-    }
-    if (formRef.current) {
-      formRef.current.style.transform =
-        `perspective(1600px) rotateX(${y * -3}deg) rotateY(${x * 4}deg) translateZ(20px)`;
     }
   }, []);
 
