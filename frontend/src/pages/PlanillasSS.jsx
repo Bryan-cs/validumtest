@@ -530,7 +530,7 @@ function ModalAdjuntar({ planillaId, onClose, onSuccess }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ background: C.surface, borderRadius: 14, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.3)', maxHeight: '90vh', overflowY: 'auto' }}>
         <h3 style={{ margin: '0 0 16px', color: C.primary, fontSize: 16 }}>Adjuntar archivos a planilla</h3>
         <AreaArchivos archivos={archivos} setArchivos={setArchivos} fileRef={fileRef} lbl={lbl} />
