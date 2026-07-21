@@ -1264,7 +1264,7 @@ export default function PortalCliente() {
                       <tr>
                         {(isMobile
                           ? ['Nombre','Empresa','EPS','Estado','Acciones']
-                          : ['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Acciones']
+                          : ['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle','Acciones']
                         ).map(h => <th key={h} className="pcc-th">{h}</th>)}
                       </tr>
                     </thead>
@@ -1294,6 +1294,13 @@ export default function PortalCliente() {
                             {!isMobile && <td className="pcc-td">{a.afp||'—'}</td>}
                             {!isMobile && <td className="pcc-td">{a.ccf||'—'}</td>}
                             <td className="pcc-td"><ColorBadge color={estadoC} bg={estadoBg}>{a.estado}</ColorBadge></td>
+                            {!isMobile && (
+                              <td className="pcc-td">
+                                {a.detalle
+                                  ? <span style={{ fontSize:12, color:C.text2, display:'block', maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={a.detalle}>{a.detalle}</span>
+                                  : <span style={{ color:C.text2 }}>—</span>}
+                              </td>
+                            )}
                             <td className="pcc-td">
                               <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
                                 <Btn size="sm" onClick={() => setResumenDoc(a.doc)}>Ver</Btn>
