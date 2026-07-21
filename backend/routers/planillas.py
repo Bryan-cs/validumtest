@@ -112,12 +112,22 @@ async def crear_planilla(
         raise HTTPException(500, f"Todos los archivos fallaron al subirse: {[o['motivo'] for o in omitidos]}")
 
     # ── 3. Guardar en DB solo si hay archivos subidos ─────────────────────────
-    planilla = models.PlanillaPago(
-        cliente_ref=cliente_ref, mes=mes, anio=anio,
-        observaciones=observaciones, subido_por=token.get("sub", ""),
-    )
-    db.add(planilla)
-    db.flush()
+    # Si ya existe una planilla para este cliente+mes+año, se agregan los
+    # archivos a esa (evita cards duplicadas del mismo periodo).
+    planilla = (db.query(models.PlanillaPago)
+                .filter_by(cliente_ref=cliente_ref, mes=mes, anio=anio)
+                .order_by(models.PlanillaPago.id.asc())
+                .first())
+    reutilizada = planilla is not None
+    if not planilla:
+        planilla = models.PlanillaPago(
+            cliente_ref=cliente_ref, mes=mes, anio=anio,
+            observaciones=observaciones, subido_por=token.get("sub", ""),
+        )
+        db.add(planilla)
+        db.flush()
+    elif observaciones and not (planilla.observaciones or "").strip():
+        planilla.observaciones = observaciones
 
     for d in docs_pendientes:
         db.add(models.Documento(
@@ -125,10 +135,12 @@ async def crear_planilla(
             tamano=d["tamano"], subido_por=token.get("sub", ""),
             contexto="planilla_pago", contexto_id=planilla.id,
         ))
-    crud._log(db, token.get("sub", ""), "Subió planilla SS", "Facturación",
+    accion = "Agregó archivos a planilla SS" if reutilizada else "Subió planilla SS"
+    crud._log(db, token.get("sub", ""), accion, "Facturación",
               f"{cliente_ref} - {mes} {anio} ({len(subidos)} archivos, {len(omitidos)} omitidos)")
     db.commit()
-    return {"ok": True, "id": planilla.id, "archivos": subidos, "omitidos": omitidos}
+    return {"ok": True, "id": planilla.id, "archivos": subidos,
+            "omitidos": omitidos, "reutilizada": reutilizada}
 
 
 
@@ -199,7 +211,7 @@ async def agregar_archivos(
 
 
 @router.delete("/{planilla_id}/archivos/{doc_id}")
-def eliminar_archivo(planilla_id: int, doc_id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
+def eliminar_archivo(planilla_id: int, doc_id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     doc = db.query(models.Documento).filter_by(id=doc_id, contexto="planilla_pago", contexto_id=planilla_id).first()
     if not doc:
         raise HTTPException(404, "Archivo no encontrado")
