@@ -769,9 +769,6 @@ function TabReportes() {
             <Btn variant="success" onClick={() => descargar('excel')} disabled={!!descargando}>
               {descargando === 'excel' ? 'Generando...' : '⬇ Excel'}
             </Btn>
-            <Btn variant="accent" onClick={() => descargar('pdf')} disabled={!!descargando}>
-              {descargando === 'pdf' ? 'Generando...' : '⬇ PDF'}
-            </Btn>
           </div>
         </div>
       </div>
