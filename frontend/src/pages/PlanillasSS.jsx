@@ -46,17 +46,14 @@ export default function PlanillasSS() {
   const [filtroCliente, setFiltroCliente] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroCliente ?? ''; } catch { return ''; }
   });
-  const [filtroMes, setFiltroMes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroMes ?? ''; } catch { return ''; }
-  });
-  const [filtroAnio, setFiltroAnio] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroAnio ?? ''; } catch { return ''; }
-  });
+  // Mes/año siempre arrancan en el periodo actual (no se persisten)
+  const [filtroMes, setFiltroMes] = useState(MESES[new Date().getMonth() + 1]);
+  const [filtroAnio, setFiltroAnio] = useState(String(anioActual));
   const [sortBy, setSortBy] = useState('fecha_desc');
 
   useEffect(() => {
-    try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente, filtroMes, filtroAnio })); } catch {}
-  }, [filtroCliente, filtroMes, filtroAnio]);
+    try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente })); } catch {}
+  }, [filtroCliente]);
 
   const [showModal, setShowModal] = useState(false);
   const [adjuntarPlanillaId, setAdjuntarPlanillaId] = useState(null);
@@ -74,6 +71,18 @@ export default function PlanillasSS() {
     queryFn: () => api.get('/clientes').then(r => r.data),
     staleTime: 300_000,
   });
+
+  // Planillas del periodo sin filtro de cliente — para el checklist de faltantes
+  const { data: planillasMes = [] } = useQuery({
+    queryKey: ['planillas', '', filtroMes, filtroAnio],
+    queryFn: () => api.get('/planillas', { params: { cliente: '', mes: filtroMes, anio: filtroAnio } }).then(r => r.data.items || []),
+    enabled: !!(filtroMes && filtroAnio),
+  });
+  const clientesConPlanilla = useMemo(() => new Set(planillasMes.map(p => p.cliente_ref)), [planillasMes]);
+  const clientesFaltantes = useMemo(
+    () => clientes.filter(c => !clientesConPlanilla.has(c)),
+    [clientes, clientesConPlanilla]
+  );
 
   const planillasOrdenadas = useMemo(() => {
     const arr = [...planillas];
@@ -132,6 +141,9 @@ export default function PlanillasSS() {
 
   const limpiarFiltros = () => { setFiltroCliente(''); setFiltroMes(''); setFiltroAnio(''); };
   const hayFiltros = filtroCliente || filtroMes || filtroAnio;
+  const mesActual = MESES[new Date().getMonth() + 1];
+  const enMesActual = filtroMes === mesActual && filtroAnio === String(anioActual);
+  const irMesActual = () => { setFiltroMes(mesActual); setFiltroAnio(String(anioActual)); };
 
   return (
     <div>
@@ -169,6 +181,9 @@ export default function PlanillasSS() {
               {SORT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+          {!enMesActual && (
+            <Btn variant="secondary" onClick={irMesActual}>📅 Mes actual</Btn>
+          )}
           {hayFiltros && (
             <Btn variant="secondary" onClick={limpiarFiltros}>↺ Limpiar</Btn>
           )}
@@ -177,6 +192,31 @@ export default function PlanillasSS() {
           {isLoading ? 'Cargando...' : <><strong style={{ color: C.primary }}>{planillas.length}</strong> planilla{planillas.length !== 1 ? 's' : ''}</>}
         </div>
       </Card>
+
+      {/* Checklist: clientes sin planilla en el periodo */}
+      {filtroMes && filtroAnio && clientes.length > 0 && (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+              {clientesFaltantes.length === 0 ? '✅' : '📋'} {clientes.length - clientesFaltantes.length} de {clientes.length} clientes con planilla en {filtroMes} {filtroAnio}
+            </span>
+            <div style={{ flex: 1, minWidth: 120, height: 6, background: C.surface2, borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ width: `${clientes.length ? ((clientes.length - clientesFaltantes.length) / clientes.length) * 100 : 0}%`, height: '100%', background: clientesFaltantes.length === 0 ? C.green : C.amber, transition: 'width .3s' }} />
+            </div>
+          </div>
+          {clientesFaltantes.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+              {clientesFaltantes.map(c => (
+                <button key={c} onClick={() => setShowModal({ cliente: c })}
+                  title={`Subir planilla de ${c}`}
+                  style={{ background: C.amberBg, color: C.amber, border: `1px solid ${C.amber}`, borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  {c} +
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
 
       {/* Lista */}
       {isErrorPlanillas && <ErrorMsg message="Error al cargar planillas" onRetry={refetchPlanillas} />}
@@ -270,6 +310,9 @@ export default function PlanillasSS() {
       {showModal && (
         <ModalSubirPlanilla
           clientes={clientes}
+          clienteInicial={showModal?.cliente || ''}
+          mesInicial={filtroMes}
+          anioInicial={filtroAnio}
           onClose={() => setShowModal(false)}
           onSuccess={() => { qc.invalidateQueries({ queryKey: ['planillas'] }); setShowModal(false); }}
         />
@@ -322,10 +365,10 @@ export default function PlanillasSS() {
   );
 }
 
-function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
-  const [cliente, setCliente] = useState('');
-  const [mes, setMes] = useState(MESES[new Date().getMonth() + 1] || 'Enero');
-  const [anio, setAnio] = useState(String(anioActual));
+function ModalSubirPlanilla({ clientes, clienteInicial = '', mesInicial = '', anioInicial = '', onClose, onSuccess }) {
+  const [cliente, setCliente] = useState(clienteInicial);
+  const [mes, setMes] = useState(mesInicial || MESES[new Date().getMonth() + 1] || 'Enero');
+  const [anio, setAnio] = useState(anioInicial || String(anioActual));
   const [obs, setObs] = useState('');
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
