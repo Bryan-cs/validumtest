@@ -72,6 +72,18 @@ export default function PlanillasSS() {
     staleTime: 300_000,
   });
 
+  // Planillas del periodo sin filtro de cliente — para el checklist de faltantes
+  const { data: planillasMes = [] } = useQuery({
+    queryKey: ['planillas', '', filtroMes, filtroAnio],
+    queryFn: () => api.get('/planillas', { params: { cliente: '', mes: filtroMes, anio: filtroAnio } }).then(r => r.data.items || []),
+    enabled: !!(filtroMes && filtroAnio),
+  });
+  const clientesConPlanilla = useMemo(() => new Set(planillasMes.map(p => p.cliente_ref)), [planillasMes]);
+  const clientesFaltantes = useMemo(
+    () => clientes.filter(c => !clientesConPlanilla.has(c)),
+    [clientes, clientesConPlanilla]
+  );
+
   const planillasOrdenadas = useMemo(() => {
     const arr = [...planillas];
     if (sortBy === 'fecha_asc') arr.sort((a, b) => new Date(a.creado) - new Date(b.creado));
@@ -181,6 +193,31 @@ export default function PlanillasSS() {
         </div>
       </Card>
 
+      {/* Checklist: clientes sin planilla en el periodo */}
+      {filtroMes && filtroAnio && clientes.length > 0 && (
+        <Card style={{ marginBottom: 16 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+              {clientesFaltantes.length === 0 ? '✅' : '📋'} {clientes.length - clientesFaltantes.length} de {clientes.length} clientes con planilla en {filtroMes} {filtroAnio}
+            </span>
+            <div style={{ flex: 1, minWidth: 120, height: 6, background: C.surface2, borderRadius: 4, overflow: 'hidden' }}>
+              <div style={{ width: `${clientes.length ? ((clientes.length - clientesFaltantes.length) / clientes.length) * 100 : 0}%`, height: '100%', background: clientesFaltantes.length === 0 ? C.green : C.amber, transition: 'width .3s' }} />
+            </div>
+          </div>
+          {clientesFaltantes.length > 0 && (
+            <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
+              {clientesFaltantes.map(c => (
+                <button key={c} onClick={() => setShowModal({ cliente: c })}
+                  title={`Subir planilla de ${c}`}
+                  style={{ background: C.amberBg, color: C.amber, border: `1px solid ${C.amber}`, borderRadius: 20, padding: '3px 12px', fontSize: 12, fontWeight: 600, cursor: 'pointer' }}>
+                  {c} +
+                </button>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
       {/* Lista */}
       {isErrorPlanillas && <ErrorMsg message="Error al cargar planillas" onRetry={refetchPlanillas} />}
       {!isErrorPlanillas && planillas.length === 0 && !isLoading ? (
@@ -273,6 +310,9 @@ export default function PlanillasSS() {
       {showModal && (
         <ModalSubirPlanilla
           clientes={clientes}
+          clienteInicial={showModal?.cliente || ''}
+          mesInicial={filtroMes}
+          anioInicial={filtroAnio}
           onClose={() => setShowModal(false)}
           onSuccess={() => { qc.invalidateQueries({ queryKey: ['planillas'] }); setShowModal(false); }}
         />
@@ -325,10 +365,10 @@ export default function PlanillasSS() {
   );
 }
 
-function ModalSubirPlanilla({ clientes, onClose, onSuccess }) {
-  const [cliente, setCliente] = useState('');
-  const [mes, setMes] = useState(MESES[new Date().getMonth() + 1] || 'Enero');
-  const [anio, setAnio] = useState(String(anioActual));
+function ModalSubirPlanilla({ clientes, clienteInicial = '', mesInicial = '', anioInicial = '', onClose, onSuccess }) {
+  const [cliente, setCliente] = useState(clienteInicial);
+  const [mes, setMes] = useState(mesInicial || MESES[new Date().getMonth() + 1] || 'Enero');
+  const [anio, setAnio] = useState(anioInicial || String(anioActual));
   const [obs, setObs] = useState('');
   const [archivos, setArchivos] = useState([]);
   const [subiendo, setSubiendo] = useState(false);
