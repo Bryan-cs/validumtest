@@ -46,17 +46,14 @@ export default function PlanillasSS() {
   const [filtroCliente, setFiltroCliente] = useState(() => {
     try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroCliente ?? ''; } catch { return ''; }
   });
-  const [filtroMes, setFiltroMes] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroMes ?? ''; } catch { return ''; }
-  });
-  const [filtroAnio, setFiltroAnio] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('bbc_planillas_filtros'))?.filtroAnio ?? ''; } catch { return ''; }
-  });
+  // Mes/año siempre arrancan en el periodo actual (no se persisten)
+  const [filtroMes, setFiltroMes] = useState(MESES[new Date().getMonth() + 1]);
+  const [filtroAnio, setFiltroAnio] = useState(String(anioActual));
   const [sortBy, setSortBy] = useState('fecha_desc');
 
   useEffect(() => {
-    try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente, filtroMes, filtroAnio })); } catch {}
-  }, [filtroCliente, filtroMes, filtroAnio]);
+    try { localStorage.setItem('bbc_planillas_filtros', JSON.stringify({ filtroCliente })); } catch {}
+  }, [filtroCliente]);
 
   const [showModal, setShowModal] = useState(false);
   const [adjuntarPlanillaId, setAdjuntarPlanillaId] = useState(null);
@@ -132,6 +129,9 @@ export default function PlanillasSS() {
 
   const limpiarFiltros = () => { setFiltroCliente(''); setFiltroMes(''); setFiltroAnio(''); };
   const hayFiltros = filtroCliente || filtroMes || filtroAnio;
+  const mesActual = MESES[new Date().getMonth() + 1];
+  const enMesActual = filtroMes === mesActual && filtroAnio === String(anioActual);
+  const irMesActual = () => { setFiltroMes(mesActual); setFiltroAnio(String(anioActual)); };
 
   return (
     <div>
@@ -169,6 +169,9 @@ export default function PlanillasSS() {
               {SORT_OPTS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
+          {!enMesActual && (
+            <Btn variant="secondary" onClick={irMesActual}>📅 Mes actual</Btn>
+          )}
           {hayFiltros && (
             <Btn variant="secondary" onClick={limpiarFiltros}>↺ Limpiar</Btn>
           )}
