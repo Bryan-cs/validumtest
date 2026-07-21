@@ -852,7 +852,29 @@ def portal_reporte(
         ws["A3"].font = Font(bold=True, size=11)
         ws["A3"].alignment = center
 
-        ws.append([])  # fila 4 vacía
+        # Convenciones de color — bien visible, justo sobre la tabla.
+        # Se appendea con contenido para que max_row avance (una fila vacía no cuenta).
+        _leyenda = [
+            ("Pagada", ok_fill, 2, 3),
+            ("Pendiente", pend_fill, 4, 5),
+            ("Sin factura en el período (el primer mes no se factura, se cobra desde el mes siguiente)", no_fill, 6, 15),
+        ]
+        legend_vals = [None] * 15
+        legend_vals[0] = "COLORES:"
+        for label, _fill, c1, _c2 in _leyenda:
+            legend_vals[c1 - 1] = label
+        ws.append(legend_vals)
+        leyenda_row = ws.max_row
+        ws.cell(row=leyenda_row, column=1).font = Font(bold=True, size=11, color="1B3A6B")
+        for label, fill, c1, c2 in _leyenda:
+            ws.merge_cells(start_row=leyenda_row, start_column=c1, end_row=leyenda_row, end_column=c2)
+            cell = ws.cell(row=leyenda_row, column=c1)
+            cell.fill = fill
+            cell.font = Font(bold=True, size=10)
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+            cell.border = thin
+        ws.row_dimensions[leyenda_row].height = 22
+        ws.append([])  # fila espaciadora
 
         # Cabecera
         headers = ["Nombre", "Documento", "Tipo Doc", "Empresa",
