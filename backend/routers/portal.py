@@ -788,6 +788,7 @@ def portal_reporte(
                     "valor": f.ingresos or 0,
                     "banco": f.banco or "",
                     "fecha_pago": f.pagado_en.replace(tzinfo=timezone.utc).astimezone(COL_TZ).strftime("%Y-%m-%d") if f.pagado_en else "",
+                    "detalle": a.detalle or "",
                     "sin_factura": False,
                 })
         else:
@@ -799,7 +800,7 @@ def portal_reporte(
                 "estado_afil": a.estado,
                 "periodo": f"{mes} {anio}".strip() if (mes or anio) else "Sin período",
                 "codigo": "", "estado_factura": "Sin factura", "valor": 0,
-                "banco": "", "fecha_pago": "", "sin_factura": True,
+                "banco": "", "fecha_pago": "", "detalle": a.detalle or "", "sin_factura": True,
             })
 
     # ── Totales ───────────────────────────────────────────────────────────────
@@ -834,19 +835,19 @@ def portal_reporte(
         money_fmt = '#,##0'
 
         # Título
-        ws.merge_cells("A1:N1")
+        ws.merge_cells("A1:O1")
         ws["A1"] = f"Reporte de Afiliados — {cliente_label} — {periodo_label}"
         ws["A1"].font = Font(bold=True, size=14, color="1B3A6B")
         ws["A1"].alignment = center
 
-        ws.merge_cells("A2:N2")
+        ws.merge_cells("A2:O2")
         ws["A2"] = f"Generado: {fecha_gen}  |  Total afiliados: {total_afil}  |  Con factura: {len(con_factura)}  |  Sin factura: {len(sin_factura)}"
         ws["A2"].font = Font(italic=True, size=10, color="555555")
         ws["A2"].alignment = center
 
         # Resumen financiero
         ws.append([])
-        ws.merge_cells("A3:N3")
+        ws.merge_cells("A3:O3")
         ws["A3"] = f"Total pagado: ${total_pagado:,.0f}   |   Total pendiente: ${total_pendiente:,.0f}"
         ws["A3"].font = Font(bold=True, size=11)
         ws["A3"].alignment = center
@@ -854,10 +855,11 @@ def portal_reporte(
         ws.append([])  # fila 4 vacía
 
         # Cabecera
-        headers = ["Nombre", "Documento", "Tipo Doc", "Empresa", "Cargo",
+        headers = ["Nombre", "Documento", "Tipo Doc", "Empresa",
                    "EPS", "AFP", "ARL", "CCF", "Servicios",
-                   "Estado Afiliado", "Período", "Código", "Estado Factura",
-                   "Valor ($)", "Banco", "Fecha Pago"]
+                   "Estado Afiliado", "Período", "Estado Factura",
+                   "Valor ($)", "Banco", "Detalle"]
+        valor_col = headers.index("Valor ($)") + 1
         ws.append(headers)
         hdr_row = ws.max_row
         for col, _ in enumerate(headers, 1):
@@ -870,10 +872,10 @@ def portal_reporte(
         # Filas de datos
         for r in reporte:
             row = [
-                r["nombre"], r["doc"], r["tipo_doc"], r["empresa"], r["cargo"],
+                r["nombre"], r["doc"], r["tipo_doc"], r["empresa"],
                 r["eps"], r["afp"], r["arl"], r["ccf"], r["servicios"],
-                r["estado_afil"], r["periodo"], r["codigo"], r["estado_factura"],
-                r["valor"], r["banco"], r["fecha_pago"],
+                r["estado_afil"], r["periodo"], r["estado_factura"],
+                r["valor"], r["banco"], r["detalle"],
             ]
             ws.append(row)
             dr = ws.max_row
@@ -888,11 +890,11 @@ def portal_reporte(
                 cell = ws.cell(row=dr, column=col)
                 cell.fill = fill
                 cell.border = thin
-                if col == 15:  # Valor
+                if col == valor_col:
                     cell.number_format = money_fmt
 
         # Anchos de columna
-        col_widths = [32, 14, 9, 20, 16, 12, 12, 12, 12, 22, 14, 14, 12, 16, 14, 14, 12]
+        col_widths = [32, 14, 9, 20, 12, 12, 12, 12, 22, 14, 14, 16, 14, 14, 34]
         for i, w in enumerate(col_widths, 1):
             ws.column_dimensions[openpyxl.utils.get_column_letter(i)].width = w
 
