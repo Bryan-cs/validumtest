@@ -530,7 +530,7 @@ function ModalAdjuntar({ planillaId, onClose, onSuccess }) {
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.5)', zIndex: 1500, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ background: C.surface, borderRadius: 14, padding: 28, width: 460, boxShadow: '0 20px 60px rgba(0,0,0,.3)', maxHeight: '90vh', overflowY: 'auto' }}>
         <h3 style={{ margin: '0 0 16px', color: C.primary, fontSize: 16 }}>Adjuntar archivos a planilla</h3>
         <AreaArchivos archivos={archivos} setArchivos={setArchivos} fileRef={fileRef} lbl={lbl} />
@@ -546,14 +546,17 @@ function ModalAdjuntar({ planillaId, onClose, onSuccess }) {
 }
 
 function AreaArchivos({ archivos, setArchivos, fileRef, lbl }) {
+  const abrirSelector = () => fileRef.current?.click();
   return (
     <div style={{ marginBottom: 16 }}>
       <label style={lbl}>Archivos *</label>
-      <label htmlFor="planilla-file-input" style={{
-        display: 'block', border: `2px dashed ${C.border}`, borderRadius: 8, padding: 14,
-        textAlign: 'center', background: C.surface2, cursor: 'pointer',
-      }}>
-        <input id="planilla-file-input" ref={fileRef} type="file" multiple
+      <div onClick={abrirSelector} role="button" tabIndex={0}
+        onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); abrirSelector(); } }}
+        style={{
+          border: `2px dashed ${C.border}`, borderRadius: 8, padding: 14,
+          textAlign: 'center', background: C.surface2, cursor: 'pointer',
+        }}>
+        <input ref={fileRef} type="file" multiple
           accept=".pdf,.jpg,.jpeg,.png,.xls,.xlsx"
           style={{ display: 'none' }}
           onChange={e => {
@@ -563,7 +566,7 @@ function AreaArchivos({ archivos, setArchivos, fileRef, lbl }) {
           }} />
         <div style={{ fontSize: 13, color: C.text2 }}>📂 Clic para seleccionar archivos</div>
         <div style={{ fontSize: 11, color: C.text2, marginTop: 4 }}>PDF, JPG, PNG, XLS · máx. 10 MB c/u</div>
-      </label>
+      </div>
       {archivos.length > 0 && (
         <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {archivos.map((f, i) => (
