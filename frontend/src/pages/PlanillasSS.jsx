@@ -61,6 +61,8 @@ export default function PlanillasSS() {
   const [detalleId, setDetalleId] = useState(null);          // planilla_id abierta en el panel
   const [confirmDel, setConfirmDel] = useState(null);        // planilla_id
   const [confirmDelDoc, setConfirmDelDoc] = useState(null);  // { planilla_id, doc_id, nombre }
+  const [confirmUnir, setConfirmUnir] = useState(false);     // unir duplicados
+  const [uniendo, setUniendo] = useState(false);
   const [previewImg, setPreviewImg] = useState(null);        // { url, nombre }
 
   const { data: planillas = [], isLoading, isError: isErrorPlanillas, refetch: refetchPlanillas } = useQuery({
@@ -96,6 +98,32 @@ export default function PlanillasSS() {
 
   // Planilla abierta en el panel de detalle — se re-deriva tras cada refetch
   const detalle = useMemo(() => planillas.find(p => p.id === detalleId) || null, [planillas, detalleId]);
+
+  // Grupos duplicados (mismo cliente+mes+año) en la vista actual
+  const gruposDuplicados = useMemo(() => {
+    const cuenta = {};
+    for (const p of planillas) {
+      const k = `${p.cliente_ref}|${p.mes}|${p.anio}`;
+      cuenta[k] = (cuenta[k] || 0) + 1;
+    }
+    return Object.values(cuenta).filter(n => n > 1).length;
+  }, [planillas]);
+
+  const unirDuplicados = async () => {
+    if (uniendo) return;
+    setUniendo(true);
+    try {
+      const res = await api.post('/planillas/consolidar');
+      const { grupos = 0, planillas_eliminadas = 0 } = res.data;
+      qc.invalidateQueries({ queryKey: ['planillas'] });
+      if (grupos === 0) toast.info('No había planillas duplicadas');
+      else toast.success(`${grupos} grupo${grupos !== 1 ? 's' : ''} unido${grupos !== 1 ? 's' : ''} — ${planillas_eliminadas} planilla${planillas_eliminadas !== 1 ? 's' : ''} consolidada${planillas_eliminadas !== 1 ? 's' : ''}`);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'Error al unir duplicados');
+    }
+    setUniendo(false);
+    setConfirmUnir(false);
+  };
 
   const handleDelete = async () => {
     if (!confirmDel) return;
@@ -224,6 +252,26 @@ export default function PlanillasSS() {
         </Card>
       )}
 
+      {/* Banner: planillas duplicadas */}
+      {rol === 'admin' && gruposDuplicados > 0 && (
+        <Card style={{ marginBottom: 16, borderLeft: `3px solid ${C.amber}` }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            <span style={{ fontSize: 20 }}>⚠️</span>
+            <div style={{ flex: 1, minWidth: 180 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
+                {gruposDuplicados} cliente{gruposDuplicados !== 1 ? 's' : ''} con planillas duplicadas del mismo periodo
+              </div>
+              <div style={{ fontSize: 12, color: C.text2 }}>
+                Únelas en una sola card. No se borra ningún archivo — solo se consolidan.
+              </div>
+            </div>
+            <Btn variant="primary" size="sm" onClick={() => setConfirmUnir(true)} disabled={uniendo}>
+              {uniendo ? 'Uniendo...' : '🔗 Unir duplicados'}
+            </Btn>
+          </div>
+        </Card>
+      )}
+
       {/* Lista */}
       {isErrorPlanillas && <ErrorMsg message="Error al cargar planillas" onRetry={refetchPlanillas} />}
       {!isErrorPlanillas && planillas.length === 0 && !isLoading ? (
@@ -336,6 +384,16 @@ export default function PlanillasSS() {
         variant="danger"
         onConfirm={handleDelete}
         onCancel={() => setConfirmDel(null)}
+      />
+
+      <ConfirmModal
+        open={confirmUnir}
+        title="Unir planillas duplicadas"
+        message="Cada cliente con varias planillas del mismo mes/año quedará en una sola card (la más antigua), con todos sus archivos juntos. No se elimina ningún archivo. ¿Continuar?"
+        confirmLabel={uniendo ? 'Uniendo...' : 'Unir'}
+        variant="primary"
+        onConfirm={unirDuplicados}
+        onCancel={() => setConfirmUnir(false)}
       />
 
       <ConfirmModal
