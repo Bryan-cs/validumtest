@@ -210,6 +210,41 @@ async def agregar_archivos(
     return {"ok": True, "archivos": subidos, "omitidos": omitidos}
 
 
+@router.post("/consolidar")
+def consolidar_duplicadas(db: Session = Depends(get_db), token=Depends(require_admin)):
+    """Une planillas duplicadas del mismo cliente+mes+año en una sola (la más
+    antigua). Reasigna los documentos (mueve contexto_id) y borra las planillas
+    vacías. NO borra archivos de R2 — solo cambia el puntero en la DB."""
+    from sqlalchemy import func
+    dups = (db.query(models.PlanillaPago.cliente_ref, models.PlanillaPago.mes, models.PlanillaPago.anio)
+            .group_by(models.PlanillaPago.cliente_ref, models.PlanillaPago.mes, models.PlanillaPago.anio)
+            .having(func.count(models.PlanillaPago.id) > 1)
+            .all())
+    grupos, eliminadas = 0, 0
+    for cliente_ref, mes, anio in dups:
+        planillas = (db.query(models.PlanillaPago)
+                     .filter_by(cliente_ref=cliente_ref, mes=mes, anio=anio)
+                     .order_by(models.PlanillaPago.id.asc())
+                     .all())
+        if len(planillas) < 2:
+            continue
+        principal = planillas[0]
+        for extra in planillas[1:]:
+            (db.query(models.Documento)
+             .filter_by(contexto="planilla_pago", contexto_id=extra.id)
+             .update({"contexto_id": principal.id}, synchronize_session=False))
+            if extra.observaciones and not (principal.observaciones or "").strip():
+                principal.observaciones = extra.observaciones
+            db.delete(extra)
+            eliminadas += 1
+        grupos += 1
+    if grupos:
+        crud._log(db, token.get("sub", ""), "Unió planillas duplicadas", "Facturación",
+                  f"{grupos} grupos, {eliminadas} planillas eliminadas")
+    db.commit()
+    return {"ok": True, "grupos": grupos, "planillas_eliminadas": eliminadas}
+
+
 @router.delete("/{planilla_id}/archivos/{doc_id}")
 def eliminar_archivo(planilla_id: int, doc_id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     doc = db.query(models.Documento).filter_by(id=doc_id, contexto="planilla_pago", contexto_id=planilla_id).first()
