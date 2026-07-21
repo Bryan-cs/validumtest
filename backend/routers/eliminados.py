@@ -1,5 +1,6 @@
 import json
 from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
 import models, crud
@@ -73,6 +74,29 @@ def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verif
         db.rollback()
         raise HTTPException(500, "Error al eliminar")
     return {"ok": True}
+
+
+_ESTADOS_PLANILLA_VALIDOS = {"retiro_pendiente", "planilla_hecha", "planilla_pagada", ""}
+
+
+class BulkEstadoPlanilla(BaseModel):
+    ids: list[int]
+    estado: str = ""
+
+
+@router.patch("/bulk/estado-planilla")
+def set_estado_planilla_bulk(body: BulkEstadoPlanilla, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Cambia el estado de planilla de varios retirados a la vez."""
+    if body.estado not in _ESTADOS_PLANILLA_VALIDOS:
+        raise HTTPException(400, "Estado inválido")
+    if not body.ids:
+        return {"ok": True, "actualizados": 0, "estado_planilla": body.estado or None}
+    nuevo = body.estado or None
+    n = (db.query(models.Eliminado)
+         .filter(models.Eliminado.id.in_(body.ids))
+         .update({"estado_planilla": nuevo}, synchronize_session=False))
+    db.commit()
+    return {"ok": True, "actualizados": n, "estado_planilla": nuevo}
 
 
 @router.patch("/{id}/estado-planilla")
