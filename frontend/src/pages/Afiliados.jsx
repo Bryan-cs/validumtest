@@ -17,6 +17,13 @@ import {
 
 const SERVICIOS = ['EPS','AFP','CCF','ARL 1','ARL 2','ARL 3','ARL 4','ARL 5'];
 
+const ESTADOS_PLANILLA = [
+  { value: '',                 label: '—',                bg: 'transparent', fg: C.text2,  border: C.border },
+  { value: 'retiro_pendiente', label: 'Retiro pendiente', bg: C.amberBg,     fg: C.amber,  border: C.amber },
+  { value: 'planilla_hecha',   label: 'Planilla hecha',   bg: C.blueBg,      fg: C.blue,   border: C.blue },
+  { value: 'planilla_pagada',  label: 'Planilla pagada',  bg: '#DCFCE7',     fg: '#166534', border: '#16a34a' },
+];
+
 function EmpresaBadge({ nombre }) {
   if (!nombre) return <span style={{ color: C.text2 }}>—</span>;
   const s = empresaStyle(nombre);
@@ -127,6 +134,8 @@ export default function Afiliados() {
   const [elimEmpresa,      setElimEmpresa]      = useState('');
   const [elimMesCol,       setElimMesCol]       = useState('');
   const [elimAnioAfil,     setElimAnioAfil]     = useState('');
+  const [elimSeleccionados, setElimSeleccionados] = useState([]);   // ids seleccionados para acción masiva
+  const [elimBulkEstado,    setElimBulkEstado]    = useState('planilla_pagada');
 
   const [arlBusqueda, setArlBusqueda] = useState('');
   const [arlFiltros, setArlFiltros] = useState({ cliente:[], empresa:[], mes:[], entidad:[], nivel:[], tipo:[], estado:[] });
@@ -221,6 +230,30 @@ export default function Afiliados() {
   const elimEmpresaOpts     = useMemo(()=>[...new Set(eliminados.map(e=>e.empresa||'').filter(Boolean))].sort(),[eliminados]);
   const elimMesColOpts      = useMemo(()=>[...new Set(eliminados.map(e=>e.mes||'').filter(Boolean))].sort(),[eliminados]);
   const elimAnioAfilOpts    = useMemo(()=>[...new Set(eliminados.map(e=>(e.fecha_afiliacion||'').slice(0,4)).filter(Boolean))].sort().reverse(),[eliminados]);
+
+  const eliminadosFiltrados = useMemo(() => eliminados.filter(e => {
+    if (buscarElim) {
+      const q = buscarElim.toLowerCase();
+      if (!((e.nombre||'').toLowerCase().includes(q) ||
+            (e.doc||'').toLowerCase().includes(q) ||
+            (e.empresa||'').toLowerCase().includes(q))) return false;
+    }
+    if (elimAnio && (e.fecha_eliminacion||'').slice(0,4) !== elimAnio) return false;
+    if (elimMes && (e.fecha_eliminacion||'').slice(5,7) !== elimMes) return false;
+    if (elimDia && (e.fecha_eliminacion||'').slice(8,10) !== elimDia) return false;
+    if (elimEmpresa && (e.empresa||'') !== elimEmpresa) return false;
+    if (elimEps && (e.eps||'') !== elimEps) return false;
+    if (elimCcf && (e.ccf||'') !== elimCcf) return false;
+    if (elimAnioAfil && (e.fecha_afiliacion||'').slice(0,4) !== elimAnioAfil) return false;
+    if (elimMesCol && (e.mes||'') !== elimMesCol) return false;
+    if (elimRetiradorPor && (e.eliminado_por||'') !== elimRetiradorPor) return false;
+    if (elimEstadoFilt && (e.estado_planilla||'') !== elimEstadoFilt) return false;
+    return true;
+  }), [eliminados, buscarElim, elimAnio, elimMes, elimDia, elimEmpresa, elimEps, elimCcf, elimAnioAfil, elimMesCol, elimRetiradorPor, elimEstadoFilt]);
+
+  const elimTodosSel = eliminadosFiltrados.length > 0 && elimSeleccionados.length === eliminadosFiltrados.length;
+  const toggleTodosElim = () => setElimSeleccionados(elimTodosSel ? [] : eliminadosFiltrados.map(e => e.id));
+  const toggleUnoElim = (id) => setElimSeleccionados(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
 
   // Facturas del afiliado seleccionado en tab pagos
   // Si el afiliado fue retirado no está en `todos` — buscarlo en eliminados como fallback
@@ -539,6 +572,19 @@ export default function Afiliados() {
       );
     },
     onError: e => { const d = e.response?.data?.detail; toast.error(typeof d === 'string' ? d : 'Error al actualizar estado'); },
+  });
+
+  const actualizarEstadoPlanillaBulk = useMutation({
+    mutationFn: ({ ids, estado }) => api.patch('/eliminados/bulk/estado-planilla', { ids, estado }).then(r => r.data),
+    onSuccess: (res, variables) => {
+      const nuevo = res.estado_planilla ?? null;
+      qc.setQueryData(['eliminados'], prev =>
+        prev?.map(e => variables.ids.includes(e.id) ? { ...e, estado_planilla: nuevo } : e)
+      );
+      setElimSeleccionados([]);
+      toast.success(`${res.actualizados} registro${res.actualizados !== 1 ? 's' : ''} actualizado${res.actualizados !== 1 ? 's' : ''}`);
+    },
+    onError: e => { const d = e.response?.data?.detail; toast.error(typeof d === 'string' ? d : 'Error al actualizar estados'); },
   });
 
   const confirmarBorradoPermanente = async (e) => {
@@ -1025,10 +1071,32 @@ export default function Afiliados() {
               </div>
             );
           })()}
+          {/* Barra de acción masiva */}
+          {elimSeleccionados.length > 0 && (
+            <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', background:C.blueBg,
+              border:`1px solid ${C.primary}`, borderRadius:10, padding:'10px 14px', marginBottom:10 }}>
+              <span style={{ fontSize:13, fontWeight:700, color:C.primary }}>
+                {elimSeleccionados.length} seleccionado{elimSeleccionados.length !== 1 ? 's' : ''}
+              </span>
+              <span style={{ fontSize:12, color:C.text2 }}>Cambiar estado planilla a:</span>
+              <select value={elimBulkEstado} onChange={e => setElimBulkEstado(e.target.value)}
+                style={{ padding:'6px 10px', border:`1px solid ${C.border}`, borderRadius:7, fontSize:12, outline:'none', color:C.text, background:C.surface }}>
+                {ESTADOS_PLANILLA.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+              <Btn size="sm" variant="primary" disabled={actualizarEstadoPlanillaBulk.isPending}
+                onClick={() => actualizarEstadoPlanillaBulk.mutate({ ids: elimSeleccionados, estado: elimBulkEstado })}>
+                {actualizarEstadoPlanillaBulk.isPending ? 'Aplicando...' : 'Aplicar a todos'}
+              </Btn>
+              <Btn size="sm" variant="secondary" onClick={() => setElimSeleccionados([])}>Cancelar</Btn>
+            </div>
+          )}
           <div style={{ overflowX:'auto', borderRadius:10, border:`1px solid ${C.border}` }}>
             <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
               <thead>
                 <tr style={{ background:C.surface2 }}>
+                  <th style={{ padding:'11px 12px', width:36, background:C.surface2, borderBottom:`2px solid ${C.border}` }}>
+                    <input type="checkbox" checked={elimTodosSel} onChange={toggleTodosElim} title="Seleccionar todos" />
+                  </th>
                   {['Nombre','Empresa','Tipo doc','Documento','EPS','CCF','Fecha afiliación','Mes','Fecha retiro','Retirado por','Estado planilla','Acciones'].map(h=>(
                     <th key={h} style={{ padding:'11px 12px',textAlign:'left',fontSize:11,fontWeight:700,
                       color:C.text,background:C.surface2,borderBottom:`2px solid ${C.border}`,whiteSpace:'nowrap',textTransform:'uppercase',letterSpacing:'0.03em' }}>{h}</th>
@@ -1036,34 +1104,23 @@ export default function Afiliados() {
                 </tr>
               </thead>
               <tbody>
-                {loadElim && <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
+                {loadElim && <tr><td colSpan={13} style={{ padding:20,textAlign:'center',color:C.text2 }}>Cargando...</td></tr>}
                 {!loadElim && eliminados.length===0 && (
-                  <tr><td colSpan={12} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros retirados</td></tr>
+                  <tr><td colSpan={13} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin registros retirados</td></tr>
                 )}
-                {eliminados.filter(e => {
-                  if (buscarElim) {
-                    const q = buscarElim.toLowerCase();
-                    if (!((e.nombre||'').toLowerCase().includes(q) ||
-                          (e.doc||'').toLowerCase().includes(q) ||
-                          (e.empresa||'').toLowerCase().includes(q))) return false;
-                  }
-                  if (elimAnio && (e.fecha_eliminacion||'').slice(0,4) !== elimAnio) return false;
-                  if (elimMes && (e.fecha_eliminacion||'').slice(5,7) !== elimMes) return false;
-                  if (elimDia && (e.fecha_eliminacion||'').slice(8,10) !== elimDia) return false;
-                  if (elimEmpresa && (e.empresa||'') !== elimEmpresa) return false;
-                  if (elimEps && (e.eps||'') !== elimEps) return false;
-                  if (elimCcf && (e.ccf||'') !== elimCcf) return false;
-                  if (elimAnioAfil && (e.fecha_afiliacion||'').slice(0,4) !== elimAnioAfil) return false;
-                  if (elimMesCol && (e.mes||'') !== elimMesCol) return false;
-                  if (elimRetiradorPor && (e.eliminado_por||'') !== elimRetiradorPor) return false;
-                  if (elimEstadoFilt && (e.estado_planilla||'') !== elimEstadoFilt) return false;
-                  return true;
-                }).map(e=>(
+                {!loadElim && eliminados.length > 0 && eliminadosFiltrados.length === 0 && (
+                  <tr><td colSpan={13} style={{ padding:20,textAlign:'center',color:C.text2 }}>Sin resultados para los filtros</td></tr>
+                )}
+                {eliminadosFiltrados.map(e=>(
                   <tr key={e.id} style={{ borderBottom:`1px solid ${C.border}`,
                     background: e.estado_planilla === 'retiro_pendiente' ? C.amberBg
                       : e.estado_planilla === 'planilla_hecha' ? C.blueBg
                       : e.estado_planilla === 'planilla_pagada' ? '#DCFCE7'
                       : C.redBg }}>
+                    <td style={{ ...tdc, textAlign:'center' }}>
+                      <input type="checkbox" checked={elimSeleccionados.includes(e.id)}
+                        onChange={() => toggleUnoElim(e.id)} onClick={ev => ev.stopPropagation()} />
+                    </td>
                     <td style={{ ...tdc, fontWeight:600, color: e.estado_planilla === 'retiro_pendiente' ? C.amber : e.estado_planilla === 'planilla_hecha' ? C.blue : e.estado_planilla === 'planilla_pagada' ? '#166534' : C.red }}>{e.nombre}</td>
                     <td style={tdc}>{e.empresa||'—'}</td>
                     <td style={{ ...tdc,fontSize:11 }}>{e.tipo_doc||'—'}</td>
@@ -1076,12 +1133,6 @@ export default function Afiliados() {
                     <td style={tdc}>{e.eliminado_por||'—'}</td>
                     <td style={tdc}>
                       {(() => {
-                        const ESTADOS_PLANILLA = [
-                          { value: '',                  label: '—',                  bg: 'transparent', fg: C.text2, border: C.border },
-                          { value: 'retiro_pendiente',  label: 'Retiro pendiente',   bg: C.amberBg,     fg: C.amber,  border: C.amber },
-                          { value: 'planilla_hecha',    label: 'Planilla hecha',     bg: C.blueBg,      fg: C.blue,   border: C.blue },
-                          { value: 'planilla_pagada',   label: 'Planilla pagada',    bg: '#DCFCE7',     fg: '#166534', border: '#16a34a' },
-                        ];
                         const actual = ESTADOS_PLANILLA.find(s => s.value === (e.estado_planilla || '')) || ESTADOS_PLANILLA[0];
                         return (
                           <select
