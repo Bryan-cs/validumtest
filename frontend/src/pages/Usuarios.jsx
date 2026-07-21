@@ -53,6 +53,12 @@ export default function Usuarios() {
     onError:(e)=>{ const d=e?.response?.data?.detail; setPwErr(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); },
   });
 
+  const toggleVerDetalle = useMutation({
+    mutationFn:({id,valor})=>api.patch(`/usuarios/${id}/ver-detalle`, null, { params:{ valor } }).then(r=>r.data),
+    onSuccess:(res,{id})=>{ qc.setQueryData(['usuarios'], prev => prev?.map(u => u.id===id ? {...u, ver_detalle: res.ver_detalle} : u)); toast.success('Permiso de detalle actualizado'); },
+    onError:()=>toast.error('Error al actualizar permiso'),
+  });
+
   const [userSorting, setUserSorting] = useState([]);
 
   const userColumns = useMemo(() => [
@@ -99,6 +105,24 @@ export default function Usuarios() {
       cell: ({ row }) => <span style={{ color: row.original.activo ? C.green : C.red, fontWeight: 600 }}>{row.original.activo ? 'Activo' : 'Inactivo'}</span>,
     },
     {
+      id: 'ver_detalle',
+      header: 'Ver detalle',
+      enableSorting: false,
+      cell: ({ row }) => {
+        const u = row.original;
+        const on = !!u.ver_detalle;
+        return (
+          <button onClick={() => toggleVerDetalle.mutate({ id: u.id, valor: !on })}
+            disabled={toggleVerDetalle.isPending}
+            title="Ver la columna Detalle de afiliados en el portal"
+            style={{ cursor:'pointer', border:`1px solid ${on?'#16a34a':C.border}`, background:on?'#DCFCE7':C.surface,
+              color:on?'#166534':C.text2, borderRadius:20, padding:'2px 12px', fontSize:11, fontWeight:700 }}>
+            {on ? '✓ Sí' : '✗ No'}
+          </button>
+        );
+      },
+    },
+    {
       id: 'acciones',
       header: '',
       enableSorting: false,
@@ -112,7 +136,7 @@ export default function Usuarios() {
         );
       },
     },
-  ], [eliminar.isPending]);
+  ], [eliminar.isPending, toggleVerDetalle.isPending]);
 
   const userTable = useReactTable({
     data: users,

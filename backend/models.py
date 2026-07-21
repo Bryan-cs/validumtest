@@ -20,6 +20,7 @@ class Usuario(Base):
     password    = Column(String(120), nullable=True)
     rol         = Column(String(20), default="empleado")   # admin | empleado | cliente
     cliente_ref = Column(String(120), nullable=True)       # para rol=cliente: valor de cliente_txt
+    ver_detalle = Column(Boolean, default=False)           # portal: puede ver la columna "Detalle" de afiliados
     activo      = Column(Boolean, default=True)
     creado      = Column(DateTime(timezone=True), default=_utcnow)
 

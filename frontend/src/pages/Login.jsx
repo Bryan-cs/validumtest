@@ -111,7 +111,7 @@ export default function Login() {
     setLoading(true);
     try {
       const { data } = await api.post('/auth/login', { username, password, remember_me: rememberMe });
-      login(data.access_token, { username: data.username, nombre: data.nombre, rol: data.rol, cliente_ref: data.cliente_ref }, rememberMe);
+      login(data.access_token, { username: data.username, nombre: data.nombre, rol: data.rol, cliente_ref: data.cliente_ref, ver_detalle: data.ver_detalle }, rememberMe);
       navigate(data.rol === 'cliente' ? '/portal' : '/');
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Error al iniciar sesión');

@@ -30,6 +30,14 @@ def change_usuario_password(id: int, data: schemas.UsuarioPasswordUpdate,
     return {"ok": True}
 
 
+@router.patch("/{id}/ver-detalle")
+def set_usuario_ver_detalle(id: int, valor: bool, db: Session = Depends(get_db), token=Depends(require_admin)):
+    u = crud.set_ver_detalle(db, id, valor, user=token.get("sub", "admin"))
+    if not u:
+        raise HTTPException(404, "Usuario no encontrado")
+    return {"ok": True, "ver_detalle": bool(u.ver_detalle)}
+
+
 @router.delete("/{id}")
 def delete_usuario(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     u = crud.get_usuario(db, id)

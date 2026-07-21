@@ -89,6 +89,9 @@ def _ensure_columns():
     _check("config", "anio_inicio_cobro", "ALTER TABLE config ADD COLUMN anio_inicio_cobro INTEGER")
     _check("seguimiento_arl", "entidad_arl", "ALTER TABLE seguimiento_arl ADD COLUMN entidad_arl VARCHAR(20) DEFAULT 'SURA'")
     _check("seguimiento_arl", "tipo_afiliado", "ALTER TABLE seguimiento_arl ADD COLUMN tipo_afiliado VARCHAR(15) DEFAULT 'dependiente'")
+    _check("usuarios", "ver_detalle", "ALTER TABLE usuarios ADD COLUMN ver_detalle BOOLEAN DEFAULT FALSE")
+
+    ver_detalle_recien_agregada = any(t == "usuarios" and c == "ver_detalle" for t, c, _ in _missing)
 
     if _missing:
         with engine.begin() as conn:
@@ -98,6 +101,16 @@ def _ensure_columns():
                 except Exception as e:
                     import logging
                     logging.getLogger("bbcfile").warning(f"_ensure_columns: no se pudo agregar {table}.{col}: {e}")
+
+    # Al crear la columna por primera vez, habilitar "ver_detalle" para el usuario
+    # de portal solicitado (una sola vez; luego el admin lo gestiona desde Usuarios).
+    if ver_detalle_recien_agregada:
+        try:
+            with engine.begin() as conn:
+                conn.execute(text("UPDATE usuarios SET ver_detalle = TRUE WHERE username = '79360051'"))
+        except Exception as e:
+            import logging
+            logging.getLogger("bbcfile").warning(f"No se pudo habilitar ver_detalle inicial: {e}")
     # Ampliar columnas que quedaron cortas
     _ensure_column_types()
     # Crear índices nuevos si no existen
