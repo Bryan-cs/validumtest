@@ -110,6 +110,8 @@ def _ensure_column_types():
     alterations = [
         # subtipo era VARCHAR(10), necesita VARCHAR(50) para valores como 'SIN CONSULTAR'
         ("postgresql", "ALTER TABLE afiliados ALTER COLUMN subtipo TYPE VARCHAR(50)"),
+        # mensaje era VARCHAR(300); notas del admin en novedades de pago lo desbordan
+        ("postgresql", "ALTER TABLE notificaciones ALTER COLUMN mensaje TYPE TEXT"),
         ("sqlite",     "SELECT 1"),  # SQLite ignora el límite de VARCHAR, no necesita migración
     ]
     with engine.begin() as conn:
