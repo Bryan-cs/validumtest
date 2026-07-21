@@ -1052,6 +1052,7 @@ export default function PortalCliente() {
   const [filtroEmpresa, setFiltroEmpresa] = useState('');
   const [tab, setTab] = useState('afiliados');
   const [resumenDoc, setResumenDoc] = useState(null);
+  const [detalleTexto, setDetalleTexto] = useState(null);   // { nombre, texto } — ver detalle completo
   const [retiroAfil, setRetiroAfil] = useState(null);
   const [novedadAfil, setNovedadAfil] = useState(null);
   const [showNovedadModal, setShowNovedadModal] = useState(false);
@@ -1074,6 +1075,7 @@ export default function PortalCliente() {
   useEffect(() => {
     const handler = (e) => {
       if (e.key !== 'Escape') return;
+      if (detalleTexto) { setDetalleTexto(null); return; }
       if (resumenDoc) { setResumenDoc(null); return; }
       if (showNovedadModal) { setShowNovedadModal(false); return; }
       if (retiroAfil) { setRetiroAfil(null); return; }
@@ -1081,7 +1083,7 @@ export default function PortalCliente() {
     };
     document.addEventListener('keydown', handler);
     return () => document.removeEventListener('keydown', handler);
-  }, [resumenDoc, showNovedadModal, retiroAfil, novedadAfil]);
+  }, [detalleTexto, resumenDoc, showNovedadModal, retiroAfil, novedadAfil]);
 
   const { data: _avisosCount=[] } = useQuery({
     queryKey: ['portal-avisos'],
@@ -1296,9 +1298,17 @@ export default function PortalCliente() {
                             <td className="pcc-td"><ColorBadge color={estadoC} bg={estadoBg}>{a.estado}</ColorBadge></td>
                             {!isMobile && (
                               <td className="pcc-td">
-                                {a.detalle
-                                  ? <span style={{ fontSize:12, color:C.text2, display:'block', maxWidth:200, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={a.detalle}>{a.detalle}</span>
-                                  : <span style={{ color:C.text2 }}>—</span>}
+                                {a.detalle ? (
+                                  <div style={{ display:'flex', alignItems:'center', gap:6, maxWidth:230 }}>
+                                    <span style={{ fontSize:13, color:C.text, fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={a.detalle}>{a.detalle}</span>
+                                    {a.detalle.length > 30 && (
+                                      <button onClick={() => setDetalleTexto({ nombre:a.nombre, texto:a.detalle })}
+                                        style={{ flexShrink:0, background:C.blueBg, color:C.blue, border:`1px solid ${C.blue}`, borderRadius:6, padding:'2px 8px', fontSize:11, fontWeight:700, cursor:'pointer', whiteSpace:'nowrap' }}>
+                                        ver
+                                      </button>
+                                    )}
+                                  </div>
+                                ) : <span style={{ color:C.text2 }}>—</span>}
                               </td>
                             )}
                             <td className="pcc-td">
@@ -1375,6 +1385,20 @@ export default function PortalCliente() {
 
         {/* Modales */}
         {resumenDoc && <ModalResumen doc={resumenDoc} onClose={() => setResumenDoc(null)} />}
+
+        {detalleTexto && (
+          <div className="pcc-ov" onClick={() => setDetalleTexto(null)}>
+            <div className="pcc-modal" style={{ width:480, maxWidth:'100%' }} onClick={e => e.stopPropagation()}>
+              <div className="pcc-mhd">
+                <h3 className="pcc-mtitle">Detalle — {detalleTexto.nombre}</h3>
+                <button className="pcc-mx" onClick={() => setDetalleTexto(null)}>×</button>
+              </div>
+              <div style={{ fontSize:14, color:C.text, whiteSpace:'pre-wrap', wordBreak:'break-word', lineHeight:1.6 }}>
+                {detalleTexto.texto}
+              </div>
+            </div>
+          </div>
+        )}
 
         {showNovedadModal && (
           <ModalNovedadPago
