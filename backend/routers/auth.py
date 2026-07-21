@@ -170,7 +170,8 @@ def login(request: Request, response: Response, data: schemas.LoginRequest, db: 
         user.password = crud.hash_password(data.password)
         db.commit()
 
-    token_data = {"sub": user.username, "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
+    token_data = {"sub": user.username, "rol": user.rol, "nombre": user.nombre,
+                  "cliente_ref": user.cliente_ref or "", "ver_detalle": bool(user.ver_detalle)}
     access_token = create_token(token_data)
     rt = create_token(
         {**token_data, "type": "refresh"},
@@ -184,6 +185,7 @@ def login(request: Request, response: Response, data: schemas.LoginRequest, db: 
         "nombre": user.nombre,
         "username": user.username,
         "cliente_ref": user.cliente_ref or "",
+        "ver_detalle": bool(user.ver_detalle),
     }
 
 
@@ -228,7 +230,8 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         expires_at = datetime.fromtimestamp(payload.get("exp", 0), tz=timezone.utc)
         _blacklist_jti(db, jti, expires_at)
 
-    claims = {"sub": user.username, "rol": user.rol, "nombre": user.nombre, "cliente_ref": user.cliente_ref or ""}
+    claims = {"sub": user.username, "rol": user.rol, "nombre": user.nombre,
+              "cliente_ref": user.cliente_ref or "", "ver_detalle": bool(user.ver_detalle)}
     new_access = create_token(claims)
     new_refresh = create_token(
         {**claims, "type": "refresh"},

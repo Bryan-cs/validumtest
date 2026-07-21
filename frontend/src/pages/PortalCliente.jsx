@@ -1033,6 +1033,7 @@ function CampanaNotif() {
 // ── Portal Principal ──────────────────────────────────────────────────────────
 export default function PortalCliente() {
   const { user, logout } = useAuthStore();
+  const verDetalle = !!user?.ver_detalle || user?.rol === 'admin';
   const navigate = useNavigate();
   const qc = useQueryClient();
 
@@ -1263,7 +1264,7 @@ export default function PortalCliente() {
                       <tr>
                         {(isMobile
                           ? ['Nombre','Empresa','EPS','Estado','Acciones']
-                          : ['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado','Detalle','Acciones']
+                          : ['Nombre','Documento','Empresa','EPS','AFP','CCF','Estado', ...(verDetalle ? ['Detalle'] : []), 'Acciones']
                         ).map(h => <th key={h} className="pcc-th">{h}</th>)}
                       </tr>
                     </thead>
@@ -1293,7 +1294,7 @@ export default function PortalCliente() {
                             {!isMobile && <td className="pcc-td">{a.afp||'—'}</td>}
                             {!isMobile && <td className="pcc-td">{a.ccf||'—'}</td>}
                             <td className="pcc-td"><ColorBadge color={estadoC} bg={estadoBg}>{a.estado}</ColorBadge></td>
-                            {!isMobile && (
+                            {!isMobile && verDetalle && (
                               <td className="pcc-td">
                                 {a.detalle ? (
                                   <div style={{ display:'flex', alignItems:'center', gap:6, maxWidth:230 }}>

@@ -12,7 +12,18 @@ def get_usuario(db, id):
     return db.query(models.Usuario).filter_by(id=id).first()
 
 def get_usuarios(db):
-    return [{"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"activo":u.activo,"cliente_ref":u.cliente_ref} for u in db.query(models.Usuario).all()]
+    return [{"id":u.id,"nombre":u.nombre,"username":u.username,"rol":u.rol,"activo":u.activo,"cliente_ref":u.cliente_ref,"ver_detalle":bool(u.ver_detalle)} for u in db.query(models.Usuario).all()]
+
+def set_ver_detalle(db, id: int, valor: bool, user: str = ""):
+    u = db.query(models.Usuario).filter_by(id=id).first()
+    if not u:
+        return None
+    u.ver_detalle = bool(valor)
+    _log(db, user, ("habilitó" if valor else "deshabilitó") + " ver detalle en portal", "Usuarios", u.username)
+    from routers.deps import invalidate_user_cache
+    invalidate_user_cache(u.username)
+    db.commit(); db.refresh(u)
+    return u
 
 def create_usuario(db, data: schemas.UsuarioCreate):
     u = models.Usuario(nombre=data.nombre, username=data.username.lower(), password=hash_password(data.password), rol=data.rol, cliente_ref=data.cliente_ref)
