@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
+import { ValidumBadge } from '../components/ValidumLogo';
 
 /* ─────────────────────────────────────────────────────────────────────────────
-   Login Validum — foto de fondo, gradientes animados, orbes flotantes,
-   acento índigo→cian, entradas escalonadas. Coherente con la consola.
+   Login Validum — colores de marca: navy #1D3F72 + lima #C8D72B.
+   Foto de fondo, gradientes/orbes animados, entradas escalonadas.
    ──────────────────────────────────────────────────────────────────────────── */
 const PHOTO = 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=1400&q=75&auto=format&fit=crop';
 
@@ -15,16 +16,16 @@ const ESTILOS = `
 
 .lg-root {
   --card:  #FFFFFF;
-  --ink:   #1B1E24;
-  --muted: #8A9099;
-  --line:  #E9EBEF;
-  --dark:  #14161C;
-  --a1:    #6366F1;   /* índigo */
-  --a2:    #06B6D4;   /* cian   */
-  --green: #10B981;
+  --ink:   #16233B;
+  --muted: #8A93A3;
+  --line:  #E4E8EF;
+  --navy:  #1D3F72;
+  --navy-d:#14294D;
+  --lime:  #C8D72B;
+  --lime-d:#AEBE1E;
   --red:   #F05252;
   min-height: 100vh; display: flex;
-  background: #EEF0F5; color: var(--ink);
+  background: #EDF0F5; color: var(--ink);
   font-family: 'Figtree', sans-serif; -webkit-font-smoothing: antialiased;
 }
 @keyframes lgUp    { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
@@ -32,8 +33,7 @@ const ESTILOS = `
 @keyframes lgShake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-8px); } 40%,80% { transform: translateX(8px); } }
 @keyframes lgFloat { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(24px,-30px) scale(1.12); } }
 @keyframes lgFloat2{ 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-30px,26px) scale(1.18); } }
-@keyframes lgShine { 0% { transform: translateX(-120%) skewX(-18deg); } 100% { transform: translateX(220%) skewX(-18deg); } }
-@keyframes lgPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,.45); } 50% { box-shadow: 0 0 0 10px rgba(99,102,241,0); } }
+@keyframes lgShine { 0% { transform: translateX(-120%) skewX(-18deg); } 100% { transform: translateX(240%) skewX(-18deg); } }
 @keyframes lgGrad  { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
 
 /* ── Panel de marca ── */
@@ -42,72 +42,50 @@ const ESTILOS = `
   display: flex; flex-direction: column; justify-content: space-between;
   padding: 46px 50px; color: #fff;
   background:
-    linear-gradient(155deg, rgba(20,22,28,.72), rgba(30,27,75,.82) 55%, rgba(8,47,73,.9)),
-    url('${PHOTO}') center/cover no-repeat, var(--dark);
+    linear-gradient(155deg, rgba(20,41,77,.78), rgba(29,63,114,.86) 55%, rgba(12,26,48,.94)),
+    url('${PHOTO}') center/cover no-repeat, var(--navy-d);
 }
-/* Malla de gradiente animada por encima de la foto */
 .lg-brandpane::before {
   content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
-  background: linear-gradient(110deg, transparent, rgba(99,102,241,.35), rgba(6,182,212,.28), transparent);
-  background-size: 200% 100%; animation: lgGrad 9s linear infinite;
-  mix-blend-mode: screen;
+  background: linear-gradient(110deg, transparent, rgba(200,215,43,.28), rgba(46,90,150,.35), transparent);
+  background-size: 200% 100%; animation: lgGrad 10s linear infinite; mix-blend-mode: screen;
 }
-.lg-orb { position: absolute; border-radius: 999px; filter: blur(46px); pointer-events: none; opacity: .55; }
-.lg-orb--1 { width: 300px; height: 300px; top: -60px; right: -40px; background: radial-gradient(circle, #6366F1, transparent 70%); animation: lgFloat 11s ease-in-out infinite; }
-.lg-orb--2 { width: 260px; height: 260px; bottom: -50px; left: -30px; background: radial-gradient(circle, #06B6D4, transparent 70%); animation: lgFloat2 13s ease-in-out infinite; }
+.lg-orb { position: absolute; border-radius: 999px; filter: blur(48px); pointer-events: none; }
+.lg-orb--1 { width: 300px; height: 300px; top: -60px; right: -40px; opacity: .5; background: radial-gradient(circle, #3A6BB0, transparent 70%); animation: lgFloat 11s ease-in-out infinite; }
+.lg-orb--2 { width: 260px; height: 260px; bottom: -50px; left: -30px; opacity: .4; background: radial-gradient(circle, #C8D72B, transparent 70%); animation: lgFloat2 13s ease-in-out infinite; }
 
 .lg-brand { display: flex; align-items: center; gap: 13px; position: relative; z-index: 2; animation: lgIn .5s ease both; }
-.lg-logo {
-  width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center;
-  font-weight: 900; font-size: 21px; color: #fff;
-  background: linear-gradient(135deg, var(--a1), var(--a2));
-  box-shadow: 0 8px 26px -6px rgba(99,102,241,.6);
-}
 .lg-brand-name { font-size: 19px; font-weight: 800; letter-spacing: -.3px; }
-.lg-brand-sub  { font-size: 11px; color: rgba(255,255,255,.6); font-weight: 500; margin-top: 1px; letter-spacing: .3px; }
+.lg-brand-sub  { font-size: 11px; color: rgba(255,255,255,.62); font-weight: 500; margin-top: 1px; letter-spacing: .3px; }
 
 .lg-hero { position: relative; z-index: 2; }
-.lg-hero h1 {
-  font-size: clamp(30px, 3.2vw, 44px); font-weight: 900; letter-spacing: -1px; line-height: 1.08;
-  margin: 0 0 16px; animation: lgUp .6s .1s ease both;
-}
-.lg-hero h1 em {
-  font-style: normal;
-  background: linear-gradient(100deg, #A5B4FC, #67E8F9); -webkit-background-clip: text;
-  background-clip: text; color: transparent;
-}
-.lg-hero p  { color: rgba(255,255,255,.72); font-size: 14.5px; line-height: 1.65; max-width: 40ch; margin: 0 0 28px; animation: lgUp .6s .2s ease both; }
+.lg-hero h1 { font-size: clamp(30px, 3.2vw, 44px); font-weight: 900; letter-spacing: -1px; line-height: 1.08; margin: 0 0 16px; animation: lgUp .6s .1s ease both; }
+.lg-hero h1 em { font-style: normal; color: var(--lime); }
+.lg-hero p  { color: rgba(255,255,255,.74); font-size: 14.5px; line-height: 1.65; max-width: 40ch; margin: 0 0 28px; animation: lgUp .6s .2s ease both; }
 .lg-feats { display: flex; flex-direction: column; gap: 13px; }
-.lg-feat { display: flex; align-items: center; gap: 12px; font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.9); animation: lgIn .5s ease both; }
+.lg-feat { display: flex; align-items: center; gap: 12px; font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.92); animation: lgIn .5s ease both; }
 .lg-feat-ico {
-  width: 28px; height: 28px; border-radius: 9px; flex: none; color: #fff;
-  background: linear-gradient(135deg, rgba(99,102,241,.9), rgba(6,182,212,.9));
-  display: grid; place-items: center; box-shadow: 0 4px 12px -4px rgba(6,182,212,.6);
+  width: 28px; height: 28px; border-radius: 9px; flex: none; color: var(--navy);
+  background: var(--lime); display: grid; place-items: center;
+  box-shadow: 0 4px 12px -4px rgba(200,215,43,.6);
 }
-.lg-foot { position: relative; z-index: 2; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: rgba(255,255,255,.42); letter-spacing: .6px; animation: lgUp .6s .4s ease both; }
+.lg-foot { position: relative; z-index: 2; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: rgba(255,255,255,.44); letter-spacing: .6px; animation: lgUp .6s .4s ease both; }
 
 /* ── Formulario ── */
 .lg-formpane { flex: 1; display: flex; align-items: center; justify-content: center; padding: 28px; position: relative; }
 .lg-formpane::before {
   content: ''; position: absolute; width: 340px; height: 340px; border-radius: 999px;
-  background: radial-gradient(circle, rgba(99,102,241,.10), transparent 70%); top: 8%; right: 4%;
+  background: radial-gradient(circle, rgba(29,63,114,.09), transparent 70%); top: 8%; right: 4%;
   animation: lgFloat 14s ease-in-out infinite; pointer-events: none;
 }
 .lg-card {
   position: relative; background: var(--card); border-radius: 22px; width: 404px; max-width: 100%;
   padding: 38px; overflow: hidden;
-  box-shadow: 0 1px 3px rgba(16,24,40,.06), 0 24px 60px -18px rgba(30,27,75,.25);
+  box-shadow: 0 1px 3px rgba(16,24,40,.06), 0 24px 60px -18px rgba(20,41,77,.28);
   animation: lgUp .55s .1s ease both;
 }
-.lg-card::before {   /* barra superior de acento */
-  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
-  background: linear-gradient(90deg, var(--a1), var(--a2));
-}
-.lg-card-logo {
-  width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; color: #fff;
-  font-weight: 900; font-size: 22px; margin-bottom: 20px;
-  background: linear-gradient(135deg, var(--a1), var(--a2)); box-shadow: 0 8px 24px -8px rgba(99,102,241,.55);
-}
+.lg-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(90deg, var(--navy), var(--lime)); }
+.lg-card-badge { margin-bottom: 20px; }
 .lg-title { font-size: 24px; font-weight: 800; letter-spacing: -.5px; margin: 0 0 5px; }
 .lg-sub   { font-size: 13px; color: var(--muted); margin: 0 0 26px; }
 .lg-label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 7px; }
@@ -116,46 +94,37 @@ const ESTILOS = `
 .lg-field:nth-of-type(2) { animation-delay: .26s; }
 .lg-input {
   width: 100%; box-sizing: border-box; padding: 12px 14px; font-family: inherit; font-size: 14px;
-  background: #F7F8FB; color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px;
+  background: #F6F8FB; color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px;
   outline: none; transition: border-color .2s, box-shadow .2s, background .2s;
 }
-.lg-input::placeholder { color: #B4B9C2; }
-.lg-input:focus { border-color: var(--a1); background: #fff; box-shadow: 0 0 0 4px rgba(99,102,241,.12); }
+.lg-input::placeholder { color: #B4BAC5; }
+.lg-input:focus { border-color: var(--navy); background: #fff; box-shadow: 0 0 0 4px rgba(29,63,114,.11); }
 .lg-passwrap { position: relative; }
 .lg-eye {
   position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
   background: none; border: none; cursor: pointer; color: var(--muted);
   width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; transition: all .2s;
 }
-.lg-eye:hover { background: #EEF0F6; color: var(--a1); }
+.lg-eye:hover { background: #EEF1F6; color: var(--navy); }
 .lg-remember { display: flex; align-items: center; gap: 9px; margin: 6px 0 22px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; color: var(--muted); animation: lgUp .5s .32s ease both; }
-.lg-check {
-  width: 19px; height: 19px; border-radius: 6px; border: 1.5px solid var(--line);
-  display: grid; place-items: center; transition: all .2s; background: #fff; flex: none; color: #fff;
-}
-.lg-check[data-on="true"] { background: linear-gradient(135deg, var(--a1), var(--a2)); border-color: transparent; }
+.lg-check { width: 19px; height: 19px; border-radius: 6px; border: 1.5px solid var(--line); display: grid; place-items: center; transition: all .2s; background: #fff; flex: none; color: var(--lime); }
+.lg-check[data-on="true"] { background: var(--navy); border-color: var(--navy); }
 .lg-btn {
   position: relative; overflow: hidden; width: 100%; padding: 13px; font-family: inherit; font-size: 14.5px; font-weight: 700;
   color: #fff; border: none; border-radius: 12px; cursor: pointer;
-  background: linear-gradient(120deg, var(--a1), var(--a2)); background-size: 180% 100%;
-  transition: background-position .4s, transform .15s, box-shadow .25s;
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-  animation: lgUp .5s .38s ease both;
+  background: linear-gradient(120deg, var(--navy), var(--navy-d));
+  transition: transform .15s, box-shadow .25s, filter .2s;
+  display: flex; align-items: center; justify-content: center; gap: 8px; animation: lgUp .5s .38s ease both;
 }
-.lg-btn:hover { background-position: 100% 50%; box-shadow: 0 12px 26px -10px rgba(99,102,241,.6); }
+.lg-btn span { color: var(--lime); font-weight: 800; }
+.lg-btn:hover { box-shadow: 0 12px 26px -10px rgba(29,63,114,.6); filter: brightness(1.08); }
 .lg-btn:active { transform: translateY(1px); }
 .lg-btn:disabled { opacity: .7; cursor: wait; }
-.lg-btn::after {   /* barrido de brillo */
-  content: ''; position: absolute; top: 0; left: 0; width: 40%; height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
-}
-.lg-btn:hover::after { animation: lgShine .8s ease; }
+.lg-btn::after { content: ''; position: absolute; top: 0; left: 0; width: 40%; height: 100%; background: linear-gradient(90deg, transparent, rgba(200,215,43,.5), transparent); }
+.lg-btn:hover::after { animation: lgShine .85s ease; }
 
-@media (max-width: 880px) {
-  .lg-brandpane { display: none; }
-  .lg-formpane::before { display: none; }
-}
-@media (min-width: 881px) { .lg-card-logo { display: none; } }
+@media (max-width: 880px) { .lg-brandpane { display: none; } .lg-formpane::before { display: none; } }
+@media (min-width: 881px) { .lg-card-badge { display: none; } }
 `;
 
 const IcoCheck = () => (
@@ -185,7 +154,6 @@ export default function Login() {
   const navigate  = useNavigate();
   const cardRef   = useRef(null);
 
-  // Precargar la foto (evita parpadeo al entrar)
   useEffect(() => { const i = new Image(); i.src = PHOTO; }, []);
 
   const shake = () => {
@@ -221,10 +189,10 @@ export default function Login() {
         <div className="lg-orb lg-orb--2" />
 
         <div className="lg-brand">
-          <div className="lg-logo">V</div>
+          <ValidumBadge size={46} radius={13} />
           <div>
             <div className="lg-brand-name">Validum</div>
-            <div className="lg-brand-sub">Seguridad social · Colombia</div>
+            <div className="lg-brand-sub">Grupo Empresarial · Colombia</div>
           </div>
         </div>
 
@@ -252,7 +220,7 @@ export default function Login() {
       {/* Formulario */}
       <div className="lg-formpane">
         <form ref={cardRef} className="lg-card" onSubmit={handleSubmit}>
-          <div className="lg-card-logo">V</div>
+          <ValidumBadge size={48} radius={14} style={{ marginBottom: 20 }} className="lg-card-badge" />
           <h2 className="lg-title">Inicia sesión</h2>
           <p className="lg-sub">Ingresa con tus credenciales corporativas.</p>
 

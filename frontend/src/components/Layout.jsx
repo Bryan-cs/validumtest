@@ -7,6 +7,7 @@ import api from '../utils/api';
 import { playBeep } from '../utils/audio';
 import WelcomeModal from './WelcomeModal';
 import useAppBadge from '../hooks/useAppBadge';
+import { ValidumBadge } from './ValidumLogo';
 
 
 const SIDEBAR_MIN = 48;
@@ -338,10 +339,10 @@ export default function Layout() {
         }}>
         {/* Logo */}
         <div style={{ padding: collapsed ? '14px 0 16px' : '14px 16px 16px', display:'flex', alignItems:'center', gap:10, whiteSpace:'nowrap', overflow:'hidden', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-          <div style={{ width:30, height:30, borderRadius:8, background:'linear-gradient(135deg,#f9fafb,#d1d5db)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:11, fontWeight:800, color:'#111827', flexShrink:0 }}>BB</div>
+          <ValidumBadge size={30} radius={8} />
           {!collapsed && (
             <span style={{ fontFamily:"'Syne', sans-serif", fontSize:16, fontWeight:800, color:'#F9FAFB', letterSpacing:'-.3px' }}>
-              BBC File
+              Validum
             </span>
           )}
         </div>
@@ -653,7 +654,7 @@ export default function Layout() {
               fontSize: 22, padding: 4, lineHeight: 1, display: 'flex', alignItems: 'center',
             }}>☰</button>
             <span style={{ fontFamily:"'Syne',sans-serif", fontSize: 15, fontWeight: 800, color: '#F9FAFB', letterSpacing: '-.3px' }}>
-              BBC File
+              Validum
             </span>
             {noLeidas > 0 && (
               <span style={{

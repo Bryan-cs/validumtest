@@ -5,6 +5,7 @@ import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as ReTooltip, BarChar
 import { toast } from 'sonner';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
+import { ValidumBadge } from '../components/ValidumLogo';
 
 /* ─────────────────────────────────────────────────────────────────────────────
    Panel Superadmin — dashboard claro estilo admin clásico:
@@ -435,7 +436,7 @@ export default function Organizaciones() {
       {/* Topbar */}
       <div className="sa-top">
         <div className="sa-brand">
-          <div className="sa-logo">V</div>
+          <ValidumBadge size={38} radius={10} />
           <div>
             <div className="sa-brand-name">Validum</div>
             <div className="sa-brand-sub">Consola central</div>
