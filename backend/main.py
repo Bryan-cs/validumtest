@@ -302,7 +302,6 @@ from routers import config as config_router
 from routers import dashboard as dashboard_router
 from routers import cobro as cobro_router
 from routers import actividad as actividad_router
-from routers import news as news_router
 from routers import credenciales as credenciales_router
 from routers import organizaciones as organizaciones_router
 
@@ -333,7 +332,6 @@ app.include_router(config_router.router, dependencies=_TENANT)
 app.include_router(dashboard_router.router, dependencies=_TENANT)
 app.include_router(cobro_router.router, dependencies=_TENANT)
 app.include_router(actividad_router.router, dependencies=_TENANT)
-app.include_router(news_router.router)   # ticker público (RSS global, no es dato tenant)
 app.include_router(credenciales_router.router, dependencies=_TENANT)
 
 

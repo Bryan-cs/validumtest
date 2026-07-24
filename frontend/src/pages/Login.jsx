@@ -1,107 +1,198 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import api from '../utils/api';
 import useAuthStore from '../hooks/useAuth';
 
-// ── Palette: Navy & Gold ──────────────────────────────────────────────────────
-const P = {
-  overlay:  'rgba(11,27,43,0.55)',
-  overlayE: 'rgba(11,27,43,0.92)',
-  ink:      '#0B1B2B',
-  accent:   '#E6CFA3',
-  accentD:  '#B6884B',
-  cream:    '#FBFAF6',
-  muted:    '#34495C',
-  statusG:  '#5EE2A0',
-};
+/* ─────────────────────────────────────────────────────────────────────────────
+   Login Validum — foto de fondo, gradientes animados, orbes flotantes,
+   acento índigo→cian, entradas escalonadas. Coherente con la consola.
+   ──────────────────────────────────────────────────────────────────────────── */
+const PHOTO = 'https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=1400&q=75&auto=format&fit=crop';
 
-// Desktop: 1600px max (cubre pantallas hasta 2K). Mobile: 900px (suficiente bajo overlay+blur).
-// q=70 vs 85 = ~30% menos KB, sin diferencia visible bajo el filtro brightness(0.52).
-const PHOTO_DESKTOP = 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=1600&q=70&auto=format&fit=crop&fm=webp';
-const PHOTO_MOBILE  = 'https://images.unsplash.com/photo-1582213782179-e0d53f98f2ca?w=900&q=70&auto=format&fit=crop&fm=webp';
+const ESTILOS = `
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap');
 
-// ── Live news ticker ──────────────────────────────────────────────────────────
-function useNews() {
-  const [items, setItems]   = useState([]);
-  const [status, setStatus] = useState('loading');
-
-  const load = useCallback(() => {
-    api.get('/news/ticker')
-      .then(r => {
-        setItems(r.data);
-        setStatus(r.data.length ? 'ok' : 'empty');
-      })
-      .catch(() => setStatus('empty'));
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-  useEffect(() => { const t = setInterval(load, 600_000); return () => clearInterval(t); }, [load]);
-  return { items, status };
+.lg-root {
+  --card:  #FFFFFF;
+  --ink:   #1B1E24;
+  --muted: #8A9099;
+  --line:  #E9EBEF;
+  --dark:  #14161C;
+  --a1:    #6366F1;   /* índigo */
+  --a2:    #06B6D4;   /* cian   */
+  --green: #10B981;
+  --red:   #F05252;
+  min-height: 100vh; display: flex;
+  background: #EEF0F5; color: var(--ink);
+  font-family: 'Figtree', sans-serif; -webkit-font-smoothing: antialiased;
 }
+@keyframes lgUp    { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+@keyframes lgIn    { from { opacity: 0; transform: translateX(-18px); } to { opacity: 1; transform: none; } }
+@keyframes lgShake { 0%,100% { transform: translateX(0); } 20%,60% { transform: translateX(-8px); } 40%,80% { transform: translateX(8px); } }
+@keyframes lgFloat { 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(24px,-30px) scale(1.12); } }
+@keyframes lgFloat2{ 0%,100% { transform: translate(0,0) scale(1); } 50% { transform: translate(-30px,26px) scale(1.18); } }
+@keyframes lgShine { 0% { transform: translateX(-120%) skewX(-18deg); } 100% { transform: translateX(220%) skewX(-18deg); } }
+@keyframes lgPulse { 0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,.45); } 50% { box-shadow: 0 0 0 10px rgba(99,102,241,0); } }
+@keyframes lgGrad  { 0% { background-position: 0% 50%; } 100% { background-position: 200% 50%; } }
 
-// ── Main component ────────────────────────────────────────────────────────────
+/* ── Panel de marca ── */
+.lg-brandpane {
+  width: 46%; min-width: 400px; position: relative; overflow: hidden;
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 46px 50px; color: #fff;
+  background:
+    linear-gradient(155deg, rgba(20,22,28,.72), rgba(30,27,75,.82) 55%, rgba(8,47,73,.9)),
+    url('${PHOTO}') center/cover no-repeat, var(--dark);
+}
+/* Malla de gradiente animada por encima de la foto */
+.lg-brandpane::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background: linear-gradient(110deg, transparent, rgba(99,102,241,.35), rgba(6,182,212,.28), transparent);
+  background-size: 200% 100%; animation: lgGrad 9s linear infinite;
+  mix-blend-mode: screen;
+}
+.lg-orb { position: absolute; border-radius: 999px; filter: blur(46px); pointer-events: none; opacity: .55; }
+.lg-orb--1 { width: 300px; height: 300px; top: -60px; right: -40px; background: radial-gradient(circle, #6366F1, transparent 70%); animation: lgFloat 11s ease-in-out infinite; }
+.lg-orb--2 { width: 260px; height: 260px; bottom: -50px; left: -30px; background: radial-gradient(circle, #06B6D4, transparent 70%); animation: lgFloat2 13s ease-in-out infinite; }
+
+.lg-brand { display: flex; align-items: center; gap: 13px; position: relative; z-index: 2; animation: lgIn .5s ease both; }
+.lg-logo {
+  width: 46px; height: 46px; border-radius: 13px; display: grid; place-items: center;
+  font-weight: 900; font-size: 21px; color: #fff;
+  background: linear-gradient(135deg, var(--a1), var(--a2));
+  box-shadow: 0 8px 26px -6px rgba(99,102,241,.6);
+}
+.lg-brand-name { font-size: 19px; font-weight: 800; letter-spacing: -.3px; }
+.lg-brand-sub  { font-size: 11px; color: rgba(255,255,255,.6); font-weight: 500; margin-top: 1px; letter-spacing: .3px; }
+
+.lg-hero { position: relative; z-index: 2; }
+.lg-hero h1 {
+  font-size: clamp(30px, 3.2vw, 44px); font-weight: 900; letter-spacing: -1px; line-height: 1.08;
+  margin: 0 0 16px; animation: lgUp .6s .1s ease both;
+}
+.lg-hero h1 em {
+  font-style: normal;
+  background: linear-gradient(100deg, #A5B4FC, #67E8F9); -webkit-background-clip: text;
+  background-clip: text; color: transparent;
+}
+.lg-hero p  { color: rgba(255,255,255,.72); font-size: 14.5px; line-height: 1.65; max-width: 40ch; margin: 0 0 28px; animation: lgUp .6s .2s ease both; }
+.lg-feats { display: flex; flex-direction: column; gap: 13px; }
+.lg-feat { display: flex; align-items: center; gap: 12px; font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.9); animation: lgIn .5s ease both; }
+.lg-feat-ico {
+  width: 28px; height: 28px; border-radius: 9px; flex: none; color: #fff;
+  background: linear-gradient(135deg, rgba(99,102,241,.9), rgba(6,182,212,.9));
+  display: grid; place-items: center; box-shadow: 0 4px 12px -4px rgba(6,182,212,.6);
+}
+.lg-foot { position: relative; z-index: 2; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: rgba(255,255,255,.42); letter-spacing: .6px; animation: lgUp .6s .4s ease both; }
+
+/* ── Formulario ── */
+.lg-formpane { flex: 1; display: flex; align-items: center; justify-content: center; padding: 28px; position: relative; }
+.lg-formpane::before {
+  content: ''; position: absolute; width: 340px; height: 340px; border-radius: 999px;
+  background: radial-gradient(circle, rgba(99,102,241,.10), transparent 70%); top: 8%; right: 4%;
+  animation: lgFloat 14s ease-in-out infinite; pointer-events: none;
+}
+.lg-card {
+  position: relative; background: var(--card); border-radius: 22px; width: 404px; max-width: 100%;
+  padding: 38px; overflow: hidden;
+  box-shadow: 0 1px 3px rgba(16,24,40,.06), 0 24px 60px -18px rgba(30,27,75,.25);
+  animation: lgUp .55s .1s ease both;
+}
+.lg-card::before {   /* barra superior de acento */
+  content: ''; position: absolute; top: 0; left: 0; right: 0; height: 4px;
+  background: linear-gradient(90deg, var(--a1), var(--a2));
+}
+.lg-card-logo {
+  width: 48px; height: 48px; border-radius: 14px; display: grid; place-items: center; color: #fff;
+  font-weight: 900; font-size: 22px; margin-bottom: 20px;
+  background: linear-gradient(135deg, var(--a1), var(--a2)); box-shadow: 0 8px 24px -8px rgba(99,102,241,.55);
+}
+.lg-title { font-size: 24px; font-weight: 800; letter-spacing: -.5px; margin: 0 0 5px; }
+.lg-sub   { font-size: 13px; color: var(--muted); margin: 0 0 26px; }
+.lg-label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 7px; }
+.lg-field { margin-bottom: 16px; animation: lgUp .5s ease both; }
+.lg-field:nth-of-type(1) { animation-delay: .18s; }
+.lg-field:nth-of-type(2) { animation-delay: .26s; }
+.lg-input {
+  width: 100%; box-sizing: border-box; padding: 12px 14px; font-family: inherit; font-size: 14px;
+  background: #F7F8FB; color: var(--ink); border: 1.5px solid var(--line); border-radius: 12px;
+  outline: none; transition: border-color .2s, box-shadow .2s, background .2s;
+}
+.lg-input::placeholder { color: #B4B9C2; }
+.lg-input:focus { border-color: var(--a1); background: #fff; box-shadow: 0 0 0 4px rgba(99,102,241,.12); }
+.lg-passwrap { position: relative; }
+.lg-eye {
+  position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; cursor: pointer; color: var(--muted);
+  width: 34px; height: 34px; border-radius: 9px; display: grid; place-items: center; transition: all .2s;
+}
+.lg-eye:hover { background: #EEF0F6; color: var(--a1); }
+.lg-remember { display: flex; align-items: center; gap: 9px; margin: 6px 0 22px; cursor: pointer; user-select: none; font-size: 13px; font-weight: 600; color: var(--muted); animation: lgUp .5s .32s ease both; }
+.lg-check {
+  width: 19px; height: 19px; border-radius: 6px; border: 1.5px solid var(--line);
+  display: grid; place-items: center; transition: all .2s; background: #fff; flex: none; color: #fff;
+}
+.lg-check[data-on="true"] { background: linear-gradient(135deg, var(--a1), var(--a2)); border-color: transparent; }
+.lg-btn {
+  position: relative; overflow: hidden; width: 100%; padding: 13px; font-family: inherit; font-size: 14.5px; font-weight: 700;
+  color: #fff; border: none; border-radius: 12px; cursor: pointer;
+  background: linear-gradient(120deg, var(--a1), var(--a2)); background-size: 180% 100%;
+  transition: background-position .4s, transform .15s, box-shadow .25s;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  animation: lgUp .5s .38s ease both;
+}
+.lg-btn:hover { background-position: 100% 50%; box-shadow: 0 12px 26px -10px rgba(99,102,241,.6); }
+.lg-btn:active { transform: translateY(1px); }
+.lg-btn:disabled { opacity: .7; cursor: wait; }
+.lg-btn::after {   /* barrido de brillo */
+  content: ''; position: absolute; top: 0; left: 0; width: 40%; height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.4), transparent);
+}
+.lg-btn:hover::after { animation: lgShine .8s ease; }
+
+@media (max-width: 880px) {
+  .lg-brandpane { display: none; }
+  .lg-formpane::before { display: none; }
+}
+@media (min-width: 881px) { .lg-card-logo { display: none; } }
+`;
+
+const IcoCheck = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round">
+    <polyline points="20 6 9 17 4 12" />
+  </svg>
+);
+const IcoEye = ({ off }) => off ? (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+    <path d="M14.12 14.12a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" />
+  </svg>
+) : (
+  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+  </svg>
+);
+
 export default function Login() {
-  const [username,    setUsername]    = useState('');
-  const [password,    setPassword]    = useState('');
-  const [loading,     setLoading]     = useState(false);
-  const [showPass,    setShowPass]    = useState(false);
-  const [rememberMe,  setRememberMe]  = useState(true);
-  const { login }  = useAuthStore();
-  const navigate   = useNavigate();
-  const formRef    = useRef(null);
-  const stageRef   = useRef(null);
-  const photoRef   = useRef(null);
-  const mouseRef   = useRef({ x: 0, y: 0 });
-  const rafRef     = useRef(null);
-  const [isMobile, setIsMobile] = useState(false);
-  const { items: news, status: newsStatus } = useNews();
+  const [username,   setUsername]   = useState('');
+  const [password,   setPassword]   = useState('');
+  const [loading,    setLoading]    = useState(false);
+  const [showPass,   setShowPass]   = useState(false);
+  const [rememberMe, setRememberMe] = useState(true);
+  const { login } = useAuthStore();
+  const navigate  = useNavigate();
+  const cardRef   = useRef(null);
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 820);
-    check();
-    window.addEventListener('resize', check);
-    return () => window.removeEventListener('resize', check);
-  }, []);
-
-  // RAF-driven parallax — solo la foto de fondo.
-  // El formulario NO se inclina: el tilt 3D sobre la tarjeta desviaba de
-  // forma intermitente los clicks de sus botones (ojo mostrar contraseña /
-  // submit) al mover el mouse hacia ellos — se sentía como que "se pegaba".
-  const applyParallax = useCallback(() => {
-    const { x, y } = mouseRef.current;
-    if (photoRef.current) {
-      photoRef.current.style.transform = `translate3d(${x * -18}px, ${y * -12}px, 0) scale(1.04)`;
-    }
-  }, []);
-
-  const onMouseMove = useCallback((e) => {
-    if (isMobile) return;
-    const r = stageRef.current?.getBoundingClientRect();
-    if (!r) return;
-    mouseRef.current = {
-      x: ((e.clientX - r.left) / r.width  - 0.5) * 2,
-      y: ((e.clientY - r.top)  / r.height - 0.5) * 2,
-    };
-    if (rafRef.current) return;
-    rafRef.current = requestAnimationFrame(() => {
-      applyParallax();
-      rafRef.current = null;
-    });
-  }, [isMobile, applyParallax]);
-
-  const onMouseLeave = useCallback(() => {
-    mouseRef.current = { x: 0, y: 0 };
-    applyParallax();
-  }, [applyParallax]);
-
-  useEffect(() => () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); }, []);
+  // Precargar la foto (evita parpadeo al entrar)
+  useEffect(() => { const i = new Image(); i.src = PHOTO; }, []);
 
   const shake = () => {
-    if (!formRef.current) return;
-    formRef.current.style.animation = 'none';
-    void formRef.current.offsetWidth;
-    formRef.current.style.animation = 'edShake 0.4s';
+    if (!cardRef.current) return;
+    cardRef.current.style.animation = 'none';
+    void cardRef.current.offsetWidth;
+    cardRef.current.style.animation = 'lgShake .4s';
   };
 
   const handleSubmit = async (e) => {
@@ -120,518 +211,81 @@ export default function Login() {
     }
   };
 
-  const tickerLoop = news.length ? [...news, ...news] : [];
-
   return (
-    <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300;0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Manrope:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+    <div className="lg-root">
+      <style>{ESTILOS}</style>
 
-        *, *::before, *::after { box-sizing: border-box; }
+      {/* Panel de marca */}
+      <div className="lg-brandpane">
+        <div className="lg-orb lg-orb--1" />
+        <div className="lg-orb lg-orb--2" />
 
-        @keyframes edShake {
-          10%,90%      { transform: translateX(-1px); }
-          20%,80%      { transform: translateX(2px); }
-          30%,50%,70%  { transform: translateX(-4px); }
-          40%,60%      { transform: translateX(4px); }
-        }
-        @keyframes edSpin     { from { transform: rotate(0deg); }  to { transform: rotate(360deg); } }
-        @keyframes edFadeUp   { from { opacity:0; transform:translateY(14px); } to { opacity:1; transform:translateY(0); } }
-        @keyframes edFadeIn   { from { opacity:0; } to { opacity:1; } }
-        @keyframes edPulse    { 0%,100% { opacity:1; } 50% { opacity:0.35; } }
-        @keyframes edShine    { from { transform: translateX(-120%) skewX(-20deg); } to { transform: translateX(220%) skewX(-20deg); } }
-@keyframes edTicker   { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+        <div className="lg-brand">
+          <div className="lg-logo">V</div>
+          <div>
+            <div className="lg-brand-name">Validum</div>
+            <div className="lg-brand-sub">Seguridad social · Colombia</div>
+          </div>
+        </div>
 
-        .ed-input {
-          width: 100%; padding: 13px 15px;
-          background: rgba(255,255,255,0.92); color: #0B1B2B;
-          border: 1px solid rgba(11,27,43,0.22); border-radius: 10px;
-          font-size: 14px; font-family: 'Manrope', sans-serif;
-          outline: none; transition: border-color .2s, box-shadow .2s;
-        }
-        .ed-input:focus { border-color: #0B1B2B; box-shadow: 0 0 0 3px rgba(11,27,43,0.10); }
-        .ed-input::placeholder { color: #8BA0B0; }
-        .ed-input:disabled { background: rgba(11,27,43,0.06); opacity: 0.7; }
-
-        /* Facebook buttons — editorial Navy/Gold palette */
-        .ed-trap {
-          position: relative;
-          width: 112px; height: 44px;
-          overflow: hidden; border-radius: 8px;
-          border: 1.5px solid rgba(11,27,43,0.22);
-          background: rgba(11,27,43,0.04);
-          display: inline-flex; align-items: center; justify-content: center;
-          cursor: pointer; text-decoration: none;
-          transition: border-color .22s, box-shadow .22s;
-        }
-        .ed-trap::before {
-          content: '';
-          position: absolute; inset: 0;
-          background: #0B1B2B;
-          transform: translateY(102%);
-          transition: transform .3s cubic-bezier(0.22,1,0.36,1);
-        }
-        .ed-trap:hover {
-          border-color: #0B1B2B;
-          box-shadow: 0 6px 18px rgba(11,27,43,0.20);
-        }
-        .ed-trap:hover::before { transform: translateY(0); }
-        .ed-trap:hover .ed-trap-lbl { color: #E6CFA3; }
-
-        .ed-trap-lbl {
-          position: relative; z-index: 1;
-          color: #34495C; font-size: 10.5px; font-weight: 700;
-          font-family: 'Manrope', sans-serif;
-          letter-spacing: 0.1em; text-transform: uppercase;
-          transition: color .22s;
-        }
-
-        @media (max-width: 819px) {
-          .ed-trap { flex: 1; width: auto; }
-        }
-      `}</style>
-
-      <div
-        ref={stageRef}
-        onMouseMove={onMouseMove}
-        onMouseLeave={onMouseLeave}
-        style={{
-          width: '100vw', height: '100vh', position: 'relative',
-          overflow: isMobile ? 'auto' : 'hidden',
-          background: P.ink, perspective: '1600px',
-          fontFamily: "'Manrope', system-ui, sans-serif", color: P.cream,
-        }}
-      >
-        {/* Background photo — fetchpriority high + WebP + tamaño según viewport */}
-        <img
-          ref={photoRef}
-          src={isMobile ? PHOTO_MOBILE : PHOTO_DESKTOP}
-          alt=""
-          fetchpriority="high"
-          decoding="async"
-          loading="eager"
-          style={{
-            position: isMobile ? 'fixed' : 'absolute',
-            inset: '-4%', width: '108%', height: '108%',
-            objectFit: 'cover',
-            filter: 'saturate(0.9) brightness(0.52)',
-            transform: 'translate3d(0,0,0) scale(1.04)',
-            transition: 'transform 0.5s cubic-bezier(0.22,1,0.36,1)',
-            willChange: 'transform',
-          }}
-        />
-
-
-
-        {/* Color wash gradients */}
-        <div style={{
-          position: isMobile ? 'fixed' : 'absolute', inset: 0, zIndex: 1,
-          background: isMobile
-            ? `linear-gradient(180deg, ${P.overlay} 0%, ${P.overlayE} 100%)`
-            : `linear-gradient(90deg, ${P.overlay} 0%, rgba(0,0,0,0.05) 35%, ${P.overlay} 75%, ${P.overlayE} 100%)`,
-        }} />
-        <div style={{
-          position: isMobile ? 'fixed' : 'absolute', inset: 0, zIndex: 1,
-          background: `radial-gradient(ellipse at 25% 60%, transparent 0%, ${P.overlay} 75%)`,
-        }} />
-
-        {/* Brand bar */}
-        <div style={{
-          position: 'relative', zIndex: 2,
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: isMobile ? '14px 16px' : '28px 56px', flexWrap: 'wrap', gap: 12,
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div style={{ width: isMobile ? 36 : 44, height: isMobile ? 41 : 50, flexShrink: 0, filter: `drop-shadow(0 4px 10px ${P.ink}55)` }}>
-              <svg viewBox="0 0 40 46" width={isMobile ? 36 : 44} height={isMobile ? 41 : 50} style={{ display: 'block' }}>
-                <path d="M20 2 L36 7 V22 C36 31 29.5 39 20 44 C10.5 39 4 31 4 22 V7 Z"
-                  fill="none" stroke="#3DD68C" strokeWidth="2" strokeLinejoin="round" />
-                <path d="M13.5 22 L18 27 L27 17"
-                  fill="none" stroke="#3DD68C" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </div>
-            <div style={{ lineHeight: 1.1 }}>
-              <div style={{ fontFamily: "'Newsreader', serif", fontSize: isMobile ? 20 : 24, fontWeight: 600, color: P.cream, letterSpacing: '-0.018em' }}>
-                BBC File
+        <div className="lg-hero">
+          <h1>Todas tus <em>organizaciones</em>,<br />un solo mando.</h1>
+          <p>
+            Afiliaciones, novedades, planillas y facturación — cada organización con sus
+            datos, en una sola plataforma potente y ordenada.
+          </p>
+          <div className="lg-feats">
+            {['Datos 100% aislados por organización',
+              'Gestión de afiliados y novedades',
+              'Facturación y reportes por organización',
+              'Portal del cliente integrado'].map((f, i) => (
+              <div key={f} className="lg-feat" style={{ animationDelay: `${0.3 + i * 0.1}s` }}>
+                <span className="lg-feat-ico"><IcoCheck /></span>{f}
               </div>
-              {!isMobile && (
-                <div style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.22em', marginTop: 4, color: P.accent }}>
-                  SOFTWARE DE GESTIÓN · CO
-                </div>
-              )}
+            ))}
+          </div>
+        </div>
+
+        <div className="lg-foot">© {new Date().getFullYear()} VALIDUM · TODOS LOS DERECHOS RESERVADOS</div>
+      </div>
+
+      {/* Formulario */}
+      <div className="lg-formpane">
+        <form ref={cardRef} className="lg-card" onSubmit={handleSubmit}>
+          <div className="lg-card-logo">V</div>
+          <h2 className="lg-title">Inicia sesión</h2>
+          <p className="lg-sub">Ingresa con tus credenciales corporativas.</p>
+
+          <div className="lg-field">
+            <label className="lg-label">Usuario</label>
+            <input className="lg-input" autoFocus autoComplete="username"
+                   value={username} onChange={e => setUsername(e.target.value)} placeholder="tu usuario" />
+          </div>
+
+          <div className="lg-field">
+            <label className="lg-label">Contraseña</label>
+            <div className="lg-passwrap">
+              <input className="lg-input" type={showPass ? 'text' : 'password'} autoComplete="current-password"
+                     style={{ paddingRight: 44 }}
+                     value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+              <button type="button" className="lg-eye" onClick={() => setShowPass(v => !v)}
+                      aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}>
+                <IcoEye off={showPass} />
+              </button>
             </div>
           </div>
 
-          {!isMobile ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <a href="https://landing-page-bbc-file.vercel.app" target="_blank" rel="noopener noreferrer"
-                onMouseEnter={e => { e.currentTarget.style.background = `${P.accent}22`; e.currentTarget.style.transform = 'translateY(-1px)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = `${P.accent}10`; e.currentTarget.style.transform = 'none'; }}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: 8,
-                  padding: '7px 14px', border: `1px solid ${P.accent}55`, borderRadius: 999,
-                  fontSize: 10.5, letterSpacing: '0.16em',
-                  fontFamily: "'JetBrains Mono', monospace",
-                  color: P.accent, textDecoration: 'none',
-                  background: `${P.accent}10`, transition: 'all 0.2s',
-                }}
-              >
-                CONOCE EL SISTEMA <span aria-hidden="true">→</span>
-              </a>
-              <div style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                display: 'flex', alignItems: 'center', gap: 10,
-                padding: '7px 14px', border: `1px solid ${P.cream}22`,
-                borderRadius: 999, fontSize: 10.5, letterSpacing: '0.18em', color: P.cream,
-              }}>
-                <span style={{ width: 7, height: 7, borderRadius: '50%', background: P.statusG, boxShadow: `0 0 10px ${P.statusG}` }} />
-                SISTEMA OPERATIVO
-              </div>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: P.statusG, boxShadow: `0 0 8px ${P.statusG}` }} />
-              <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 9, letterSpacing: '0.18em', color: P.statusG }}>EN LÍNEA</span>
-            </div>
-          )}
-        </div>
-
-        {/* Main content grid */}
-        <div style={{
-          position: 'relative', zIndex: 2,
-          display: 'grid',
-          gridTemplateColumns: isMobile ? '1fr' : '1fr 460px',
-          gap: isMobile ? 28 : 56,
-          padding: isMobile ? '16px 16px 80px' : '0 56px',
-          height: isMobile ? 'auto' : 'calc(100% - 154px)',
-          minHeight: isMobile ? 'calc(100vh - 60px)' : 'auto',
-          alignItems: 'center',
-        }}>
-
-          {/* Editorial hero — desktop only */}
-          {!isMobile && <LoginHero isMobile={isMobile} />}
-
-          {/* Glass login card */}
-          <form
-            ref={formRef}
-            onSubmit={handleSubmit}
-            style={{
-              background: 'rgba(251,250,246,0.97)',
-              borderRadius: 18,
-              padding: isMobile ? '26px 22px 22px' : '34px 32px 26px',
-              boxShadow: '0 30px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.15) inset',
-              border: '1px solid rgba(0,0,0,0.12)',
-              animation: 'edFadeUp 0.8s 0.25s both',
-              color: P.ink, width: '100%', boxSizing: 'border-box',
-              transformStyle: 'preserve-3d',
-              transition: 'transform 0.35s cubic-bezier(0.22,1,0.36,1)',
-              willChange: 'transform',
-            }}
-          >
-            {isMobile && (
-              <div style={{ fontFamily: "'Newsreader', serif", fontSize: 22, lineHeight: 1.15, color: P.ink, letterSpacing: '-0.02em', marginBottom: 16 }}>
-                Gestiona la seguridad social,{' '}
-                <em style={{ color: P.accentD }}>simplificada.</em>
-              </div>
-            )}
-            <div style={{ fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.22em', color: P.accentD, marginBottom: 10, fontSize: isMobile ? 9 : 11 }}>
-              BIENVENIDO DE VUELTA
-            </div>
-            <div style={{ fontFamily: "'Newsreader', serif", fontSize: isMobile ? 30 : 38, lineHeight: 1.02, color: P.ink, letterSpacing: '-0.02em', marginBottom: 6 }}>
-              Inicia sesión
-            </div>
-            <div style={{ fontSize: 13, color: P.muted, marginBottom: isMobile ? 16 : 22 }}>
-              Ingresa con tus credenciales corporativas.
-            </div>
-
-            {/* Usuario */}
-            <div style={{ marginBottom: 14 }}>
-              <label style={{
-                display: 'block', marginBottom: 7,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10, letterSpacing: '0.16em', color: '#000',
-              }}>USUARIO</label>
-              <input
-                className="ed-input"
-                value={username}
-                onChange={e => setUsername(e.target.value)}
-                placeholder="usuario"
-                autoFocus
-                disabled={loading}
-              />
-            </div>
-
-            {/* Contraseña */}
-            <div style={{ marginBottom: 14 }}>
-              <label style={{
-                display: 'block', marginBottom: 7,
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: 10, letterSpacing: '0.16em', color: '#000',
-              }}>CONTRASEÑA</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  className="ed-input"
-                  type={showPass ? 'text' : 'password'}
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  placeholder="••••••••••"
-                  disabled={loading}
-                  style={{ paddingRight: 44 }}
-                />
-                <button type="button" onClick={() => setShowPass(v => !v)}
-                  aria-label={showPass ? 'Ocultar contraseña' : 'Mostrar contraseña'}
-                  style={{
-                    position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
-                    width: 28, height: 28, border: 'none', background: 'transparent',
-                    color: showPass ? P.ink : P.muted, cursor: 'pointer',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    zIndex: 1, padding: 0, transition: 'color .15s',
-                  }}
-                >
-                  {showPass ? (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/>
-                      <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/>
-                      <line x1="1" y1="1" x2="23" y2="23"/>
-                    </svg>
-                  ) : (
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                      <circle cx="12" cy="12" r="3"/>
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Recordar sesión */}
-            <label style={{
-              display: 'flex', alignItems: 'center', gap: 9,
-              marginBottom: 16, cursor: 'pointer', userSelect: 'none',
-            }}>
-              <div
-                onClick={() => setRememberMe(v => !v)}
-                style={{
-                  width: 18, height: 18, borderRadius: 5, flexShrink: 0,
-                  border: `1.5px solid ${rememberMe ? P.ink : 'rgba(11,27,43,0.30)'}`,
-                  background: rememberMe ? P.ink : 'transparent',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  transition: 'all .15s', cursor: 'pointer',
-                }}
-              >
-                {rememberMe && (
-                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none">
-                    <path d="M2 6l3 3 5-5" stroke="#FBFAF6" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                )}
-              </div>
-              <span style={{ fontSize: 12.5, color: P.muted, fontFamily: "'Manrope', sans-serif" }}
-                onClick={() => setRememberMe(v => !v)}>
-                Recordar sesión
-              </span>
-            </label>
-
-            <SubmitBtn loading={loading} P={P} />
-
-            {/* Social — 3 Facebook trapdoor buttons */}
-            <div style={{
-              marginTop: 20, paddingTop: 16,
-              borderTop: `1px solid ${P.ink}14`,
-              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#1877F2">
-                  <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
-                </svg>
-                <span style={{
-                  fontFamily: "'Manrope', sans-serif",
-                  fontSize: 12, fontWeight: 700, letterSpacing: '0.06em',
-                  color: '#1877F2',
-                }}>
-                  SÍGUENOS EN FACEBOOK
-                </span>
-              </div>
-              <div style={{ display: 'flex', gap: 8, width: '100%', justifyContent: 'center' }}>
-                <a href="https://www.facebook.com/TechPlanetEsal" target="_blank" rel="noreferrer" className="ed-trap">
-                  <span className="ed-trap-lbl">Techplanet</span>
-                </a>
-                <a href="https://www.facebook.com/profile.php?id=61584899039203" target="_blank" rel="noreferrer" className="ed-trap">
-                  <span className="ed-trap-lbl">Protsecoop</span>
-                </a>
-                <a href="https://www.facebook.com/profile.php?id=61586640354662" target="_blank" rel="noreferrer" className="ed-trap">
-                  <span className="ed-trap-lbl">Carsecoop</span>
-                </a>
-              </div>
-            </div>
-
-            <div style={{
-              marginTop: 14, paddingTop: 10,
-              borderTop: `1px solid ${P.ink}14`,
-              textAlign: 'center', fontSize: 11, color: P.muted,
-              fontFamily: "'JetBrains Mono', monospace", letterSpacing: '0.06em',
-            }}>
-              © 2026 BBC File · Todos los derechos reservados
-            </div>
-          </form>
-        </div>
-
-        {/* News ticker */}
-        <div style={{
-          position: isMobile ? 'fixed' : 'absolute', left: 0, right: 0, bottom: 0, zIndex: 3,
-          height: 48, display: 'flex', alignItems: 'center',
-          background: 'rgba(11,27,43,0.88)',
-          borderTop: `1px solid ${P.cream}1c`,
-          animation: 'edFadeIn 0.6s 0.6s both',
-        }}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: 10,
-            padding: '0 22px', borderRight: `1px solid ${P.cream}1c`,
-            height: '100%', flexShrink: 0,
-          }}>
-            <span style={{
-              width: 8, height: 8, borderRadius: '50%',
-              background: newsStatus === 'ok' ? P.statusG : P.accent,
-              boxShadow: `0 0 10px ${newsStatus === 'ok' ? P.statusG : P.accent}`,
-              animation: newsStatus === 'loading' ? 'edPulse 1.2s infinite' : 'none',
-            }} />
-            <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: '0.22em', color: P.cream, fontWeight: 700 }}>
-              EN VIVO · DEL SECTOR
-            </span>
+          <div className="lg-remember" onClick={() => setRememberMe(v => !v)}>
+            <span className="lg-check" data-on={rememberMe}>{rememberMe && <IcoCheck />}</span>
+            Recordar sesión
           </div>
 
-          <div style={{
-            flex: 1, overflow: 'hidden', position: 'relative',
-            maskImage: 'linear-gradient(90deg, transparent, black 4%, black 96%, transparent)',
-            WebkitMaskImage: 'linear-gradient(90deg, transparent, black 4%, black 96%, transparent)',
-          }}>
-            {newsStatus === 'loading' ? (
-              <div style={{ padding: '0 20px', fontFamily: "'Newsreader', serif", fontStyle: 'italic', color: `${P.cream}88`, fontSize: 13 }}>
-                Cargando noticias del sector…
-              </div>
-            ) : tickerLoop.length > 0 ? (
-              <div style={{ display: 'inline-flex', whiteSpace: 'nowrap', alignItems: 'center', animation: 'edTicker 150s linear infinite' }}>
-                {tickerLoop.map((it, i) => (
-                  <button key={i}
-                    onClick={() => { try { window.open(it.link, '_blank', 'noopener,noreferrer'); } catch(_){} }}
-                    style={{ background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 14, padding: '0 26px' }}
-                  >
-                    <span style={{ fontFamily: "'JetBrains Mono', monospace", fontSize: 10, letterSpacing: '0.18em', color: P.accent, fontWeight: 700 }}>
-                      {it.source.toUpperCase()}
-                    </span>
-                    <span style={{ width: 3, height: 3, background: `${P.cream}55`, borderRadius: '50%' }} />
-                    <span style={{ fontFamily: "'Newsreader', serif", fontSize: 14, color: P.cream, letterSpacing: '-0.005em' }}>
-                      {it.title.replace(/ - [^-]+$/, '').slice(0, 110)}
-                    </span>
-                    <span style={{ color: `${P.cream}44`, fontSize: 12 }}>·</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <div style={{ padding: '0 20px', fontFamily: "'Newsreader', serif", fontStyle: 'italic', color: `${P.cream}88`, fontSize: 13 }}>
-                Sin noticias disponibles en este momento.
-              </div>
-            )}
-          </div>
-        </div>
+          <button type="submit" className="lg-btn" disabled={loading}>
+            {loading ? 'Ingresando…' : 'Ingresar al sistema'}
+            {!loading && <span aria-hidden>→</span>}
+          </button>
+        </form>
       </div>
-    </>
-  );
-}
-
-const LoginHero = React.memo(function LoginHero({ isMobile }) {
-  return (
-    <div style={{ maxWidth: 620, animation: 'edFadeUp 0.8s 0.1s both' }}>
-      <div style={{
-        fontFamily: "'JetBrains Mono', monospace",
-        letterSpacing: '0.22em', color: P.cream,
-        marginBottom: isMobile ? 14 : 22, fontSize: isMobile ? 13 : 14,
-      }}>BBC FILE</div>
-      <div style={{
-        fontFamily: "'Newsreader', 'Iowan Old Style', Georgia, serif",
-        fontSize: isMobile ? 44 : 72, lineHeight: 0.98,
-        letterSpacing: '-0.03em', fontWeight: 400,
-        marginBottom: isMobile ? 18 : 26,
-      }}>
-        Gestiona la seguridad social,<br />
-        <span style={{ fontStyle: 'italic', color: P.accent }}>simplificada.</span>
-      </div>
-      <div style={{ lineHeight: 1.62, color: P.cream, maxWidth: 480, fontSize: isMobile ? 15 : 18 }}>
-        Afiliaciones, novedades, planillas y reportes en una sola plataforma para tu empresa y tu equipo.
-      </div>
-      <ul style={{
-        listStyle: 'none', padding: 0, margin: isMobile ? '20px 0 0' : '30px 0 0',
-        display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr',
-        gap: isMobile ? '10px' : '12px 28px', maxWidth: 520,
-      }}>
-        {['Gestión de afiliados y novedades', 'Control de retiros y planillas', 'Portal cliente integrado', 'Reportes y facturación'].map((feat, i) => (
-          <li key={i} style={{
-            display: 'flex', alignItems: 'center', gap: 12,
-            color: P.cream, fontSize: 14.5, lineHeight: 1.35,
-            animation: `edFadeUp 0.5s ${0.35 + i * 0.1}s both`,
-          }}>
-            <span style={{
-              width: 22, height: 22, borderRadius: '50%',
-              background: `${P.accent}28`, color: P.accent,
-              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, border: `1px solid ${P.accent}55`,
-            }}>
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none">
-                <path d="M3 8.5L6.5 12L13 4.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-              </svg>
-            </span>
-            {feat}
-          </li>
-        ))}
-      </ul>
     </div>
-  );
-});
-
-function SubmitBtn({ loading, P }) {
-  const [hover, setHover] = useState(false);
-  return (
-    <button
-      type="submit"
-      disabled={loading}
-      onMouseEnter={() => setHover(true)}
-      onMouseLeave={() => setHover(false)}
-      style={{
-        width: '100%', marginTop: 10, padding: '15px',
-        background: P.ink, color: P.cream,
-        border: 'none', borderRadius: 10,
-        fontSize: 14.5, fontFamily: "'Manrope', sans-serif",
-        fontWeight: 600, letterSpacing: '0.01em',
-        cursor: loading ? 'not-allowed' : 'pointer',
-        opacity: loading ? 0.8 : 1,
-        boxShadow: hover && !loading ? `0 14px 30px ${P.ink}66` : `0 4px 12px ${P.ink}22`,
-        transform: hover && !loading ? 'translateY(-2px)' : 'none',
-        transition: 'all 0.22s',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
-        position: 'relative', overflow: 'hidden',
-      }}
-    >
-      {hover && !loading && (
-        <span aria-hidden="true" style={{
-          position: 'absolute', top: 0, left: 0, width: '40%', height: '100%',
-          background: `linear-gradient(90deg, transparent, ${P.accent}55, transparent)`,
-          animation: 'edShine 0.9s ease-out', pointerEvents: 'none',
-        }} />
-      )}
-      {loading && <Spinner P={P} />}
-      <span style={{ position: 'relative' }}>
-        {loading ? 'Verificando…' : 'Ingresar al sistema'}
-      </span>
-      {!loading && <span style={{ marginLeft: 6, opacity: 0.7, position: 'relative' }}>→</span>}
-    </button>
-  );
-}
-
-function Spinner({ P }) {
-  return (
-    <span style={{
-      display: 'inline-block', width: 14, height: 14, borderRadius: '50%',
-      border: `2px solid ${P.cream}55`, borderTopColor: P.cream,
-      animation: 'edSpin 0.7s linear infinite',
-    }} />
   );
 }
