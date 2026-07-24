@@ -94,6 +94,7 @@ def _ensure_columns():
     _check("seguimiento_arl", "entidad_arl", "ALTER TABLE seguimiento_arl ADD COLUMN entidad_arl VARCHAR(20) DEFAULT 'SURA'")
     _check("seguimiento_arl", "tipo_afiliado", "ALTER TABLE seguimiento_arl ADD COLUMN tipo_afiliado VARCHAR(15) DEFAULT 'dependiente'")
     _check("usuarios", "ver_detalle", "ALTER TABLE usuarios ADD COLUMN ver_detalle BOOLEAN DEFAULT FALSE")
+    _check("organizaciones", "precio_afiliado", "ALTER TABLE organizaciones ADD COLUMN precio_afiliado NUMERIC(12,2) DEFAULT 30000")
 
     ver_detalle_recien_agregada = any(t == "usuarios" and c == "ver_detalle" for t, c, _ in _missing)
 

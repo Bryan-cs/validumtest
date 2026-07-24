@@ -67,6 +67,18 @@ def client():
 
     from main import app
     app.dependency_overrides[get_db] = override_get_db
+    # Deshabilitar rate limiting en tests: la suite completa hace >20 logins/min desde la misma
+    # IP (testclient) y dispararía 429 en los últimos archivos (falsos negativos por orden).
+    # Hay DOS instancias de Limiter: la global (app.state) y la propia de routers/auth.py.
+    try:
+        app.state.limiter.enabled = False
+    except AttributeError:
+        pass
+    try:
+        import routers.auth as _auth_mod
+        _auth_mod._limiter.enabled = False
+    except (ImportError, AttributeError):
+        pass
 
     with TestClient(app) as c:
         yield c

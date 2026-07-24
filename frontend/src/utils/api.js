@@ -14,11 +14,6 @@ api.interceptors.request.use(config => {
     if (stored) state = JSON.parse(stored)?.state;
   } catch { /* ignorar */ }
   if (state?.token) config.headers.Authorization = `Bearer ${state.token}`;
-  // Multi-tenant god mode: el superadmin envía la organización activa que está viendo.
-  // El backend IGNORA este header para usuarios normales (usan su propia org del token).
-  if (state?.user?.rol === 'superadmin' && state?.orgActiva?.id) {
-    config.headers['X-Org-Id'] = String(state.orgActiva.id);
-  }
   return config;
 });
 
@@ -27,6 +22,10 @@ let _refreshPromise = null; // Promise compartida — evita múltiples refresh e
 
 // Resetear flag cuando se navega a /login exitosamente
 export function resetRedirectFlag() { _redirigiendo = false; }
+
+// Llamar al INICIAR logout: suprime el refresh/redirect del interceptor para que las peticiones
+// en vuelo que devuelvan 401 (token ya revocado) NO disparen recargas en cascada (flicker/loop).
+export function beginLogout() { _redirigiendo = true; }
 
 api.interceptors.response.use(
   res => res,
@@ -58,10 +57,13 @@ api.interceptors.response.use(
         originalRequest.headers.Authorization = `Bearer ${newToken}`;
         return api(originalRequest);
       } catch {
-        // Refresh falló — redirigir a login
-        _redirigiendo = true;
-        localStorage.removeItem('bbc-auth');
-        window.location.href = '/login';
+        // Refresh falló — redirigir a login UNA sola vez (idempotente, evita loop de recargas).
+        if (!_redirigiendo) {
+          _redirigiendo = true;
+          try { localStorage.removeItem('bbc-auth'); } catch {}
+          try { sessionStorage.removeItem('bbc-auth'); } catch {}
+          if (window.location.pathname !== '/login') window.location.replace('/login');
+        }
       }
     }
     return Promise.reject(err);

@@ -446,6 +446,14 @@ class OrganizacionUpdate(BaseModel):
     nombre: Optional[str] = None
     slug: Optional[str] = None
     activo: Optional[bool] = None
+    precio_afiliado: Optional[float] = None   # COP por afiliado activo/mes
+
+    @field_validator('precio_afiliado')
+    @classmethod
+    def precio_no_negativo(cls, v):
+        if v is not None and v < 0:
+            raise ValueError('El precio por afiliado no puede ser negativo')
+        return v
 
 
 class OrganizacionOut(BaseModel):

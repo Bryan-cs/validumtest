@@ -280,8 +280,8 @@ def portal_update_novedad_estado(
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
-    if token.get("rol") not in ("admin", "empleado"):
-        raise HTTPException(403, "Solo administradores o empleados pueden actualizar el estado")
+    if token.get("rol") != "admin":
+        raise HTTPException(403, "Solo administradores pueden actualizar el estado")
     nov = db.query(models.NovedadPago).filter_by(id=id).first()
     if not nov:
         raise HTTPException(404, "Novedad no encontrada")
@@ -379,8 +379,8 @@ def portal_update_solicitud_estado(
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
-    if token.get("rol") not in ("admin", "empleado"):
-        raise HTTPException(403, "Solo administradores o empleados pueden actualizar el estado")
+    if token.get("rol") != "admin":
+        raise HTTPException(403, "Solo administradores pueden actualizar el estado")
     sol = db.query(models.SolicitudRetiro).filter_by(id=id).first()
     if not sol:
         raise HTTPException(404, "Solicitud no encontrada")
@@ -551,8 +551,8 @@ def portal_update_novedad_afil_estado(
     db: Session = Depends(get_db),
     token=Depends(verify_token),
 ):
-    if token.get("rol") not in ("admin", "empleado"):
-        raise HTTPException(403, "Solo administradores o empleados pueden actualizar el estado")
+    if token.get("rol") != "admin":
+        raise HTTPException(403, "Solo administradores pueden actualizar el estado")
     s = db.query(models.SolicitudNovedad).filter_by(id=id).first()
     if not s:
         raise HTTPException(404, "Solicitud no encontrada")
@@ -627,8 +627,8 @@ def portal_planillas(mes: str = "", anio: str = "",
 @router.post("/avisos", status_code=201)
 def crear_aviso(body: schemas.AvisoClienteCreate, db: Session = Depends(get_db), token=Depends(verify_token)):
     """Admin crea un aviso dirigido a un cliente específico."""
-    if token.get("rol") not in ("admin", "empleado"):
-        raise HTTPException(status_code=403, detail="Solo administradores o empleados pueden crear avisos")
+    if token.get("rol") != "admin":
+        raise HTTPException(status_code=403, detail="Solo administradores pueden crear avisos")
     aviso = models.AvisoCliente(
         cliente_ref=body.cliente_ref.strip(),
         titulo=body.titulo.strip(),

@@ -38,7 +38,7 @@ def list_facturas(
 
 @router.post("", status_code=201)
 def create_factura(data: schemas.FacturaCreate,
-                   db: Session = Depends(get_db), token=Depends(verify_token)):
+                   db: Session = Depends(get_db), token=Depends(require_admin)):
     data.creado_por = token.get("sub", "sistema")
     if not data.anio:
         data.anio = str(datetime.now(COL_TZ).year)
@@ -47,7 +47,7 @@ def create_factura(data: schemas.FacturaCreate,
 
 @router.put("/{id}")
 def update_factura(id: int, data: schemas.FacturaUpdate,
-                   db: Session = Depends(get_db), token=Depends(verify_token)):
+                   db: Session = Depends(get_db), token=Depends(require_admin)):
     f = crud.get_factura(db, id)
     if not f:
         raise HTTPException(404, "Factura no encontrada")
@@ -56,7 +56,7 @@ def update_factura(id: int, data: schemas.FacturaUpdate,
 
 @router.patch("/{id}/pagar")
 def pagar_factura(id: int, banco: str = "", monto: float = None,
-                  db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
+                  db: Session = Depends(get_db), token=Depends(require_admin)):
     f = crud.get_factura(db, id)
     if not f:
         raise HTTPException(404, "Factura no encontrada")
@@ -93,12 +93,10 @@ def planilla_pagada(id: int, db: Session = Depends(get_db), token=Depends(requir
 
 @router.delete("/{id}")
 def delete_factura(id: int, force: bool = False,
-                   db: Session = Depends(get_db), token=Depends(verify_token)):
+                   db: Session = Depends(get_db), token=Depends(require_admin)):
     f = crud.get_factura(db, id)
     if not f:
         raise HTTPException(404, "Factura no encontrada")
-    if force and token.get("rol") != "admin":
-        raise HTTPException(403, "Solo un administrador puede forzar la eliminación")
     if f.estado in ("pagado", "planilla_pagada") and not force:
         raise HTTPException(400,
             "No se puede eliminar una factura pagada. "

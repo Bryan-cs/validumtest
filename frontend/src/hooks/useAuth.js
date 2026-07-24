@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import { resetRedirectFlag } from '../utils/api';
+import { resetRedirectFlag, beginLogout } from '../utils/api';
 
 const STORAGE_KEY = 'bbc-auth';
 
@@ -52,28 +52,26 @@ const useAuthStore = create(
       user:  null,
       rememberMe: true,
       _hasHydrated: false,
-      // Multi-tenant: organización que el superadmin está viendo en "god mode".
-      // Se envía como header X-Org-Id en cada petición (ver utils/api.js).
-      orgActiva: null,   // { id, nombre } | null
 
       setHasHydrated: (v) => set({ _hasHydrated: v }),
 
       login: (token, user, rememberMe = true) => {
         resetRedirectFlag();
         // Set rememberMe primero para que el storage adapter elija el destino correcto.
-        set({ rememberMe, token, user, orgActiva: null });
+        set({ rememberMe, token, user });
       },
 
       setToken: (token) => set({ token }),
 
-      setOrgActiva: (org) => set({ orgActiva: org }),
-
       logout: async () => {
+        // Suprimir el interceptor ANTES de cualquier cosa: las peticiones en vuelo que devuelvan
+        // 401 (token ya revocado) no deben disparar refresh/redirect en cascada (flicker/loop).
+        beginLogout();
         try {
           const { default: api } = await import('../utils/api');
           await api.post('/auth/logout');
         } catch { /* si falla el servidor, igual limpiar localmente */ }
-        set({ token: null, user: null, rememberMe: true, orgActiva: null });
+        set({ token: null, user: null, rememberMe: true });
         try { localStorage.removeItem(STORAGE_KEY); } catch {}
         try { sessionStorage.removeItem(STORAGE_KEY); } catch {}
       },
@@ -81,7 +79,7 @@ const useAuthStore = create(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => dualStorage),
-      partialize: (state) => ({ token: state.token, user: state.user, rememberMe: state.rememberMe, orgActiva: state.orgActiva }),
+      partialize: (state) => ({ token: state.token, user: state.user, rememberMe: state.rememberMe }),
       onRehydrateStorage: () => (state) => {
         if (state && !_tokenValido(state.token)) {
           state.token = null;

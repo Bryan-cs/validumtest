@@ -6,7 +6,7 @@ from typing import List
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from sqlalchemy.orm import Session
 from database import get_db
-from routers.deps import require_admin, require_admin_or_empleado
+from routers.deps import require_admin
 import models, crud
 from utils.planillas_query import list_planillas_with_docs
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/planillas", tags=["planillas"])
 @router.get("")
 def listar_planillas(cliente: str = "", mes: str = "", anio: str = "",
                      skip: int = 0, limit: int = 300,
-                     db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
+                     db: Session = Depends(get_db), token=Depends(require_admin)):
     q = db.query(models.PlanillaPago).order_by(models.PlanillaPago.id.desc())
     if cliente: q = q.filter(models.PlanillaPago.cliente_ref == cliente)
     if mes:     q = q.filter(models.PlanillaPago.mes == mes)
@@ -34,7 +34,7 @@ async def crear_planilla(
     observaciones: str = Form(""),
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    token=Depends(require_admin_or_empleado),
+    token=Depends(require_admin),
 ):
     import asyncio
     from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE, _validar_magic
@@ -149,7 +149,7 @@ async def agregar_archivos(
     planilla_id: int,
     files: List[UploadFile] = File(...),
     db: Session = Depends(get_db),
-    token=Depends(require_admin_or_empleado),
+    token=Depends(require_admin),
 ):
     import asyncio
     from routers.documentos import _get_s3, _R2_BUCKET, ALLOWED_EXT, MAX_SIZE, _validar_magic
@@ -246,7 +246,7 @@ def consolidar_duplicadas(db: Session = Depends(get_db), token=Depends(require_a
 
 
 @router.delete("/{planilla_id}/archivos/{doc_id}")
-def eliminar_archivo(planilla_id: int, doc_id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
+def eliminar_archivo(planilla_id: int, doc_id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
     doc = db.query(models.Documento).filter_by(id=doc_id, contexto="planilla_pago", contexto_id=planilla_id).first()
     if not doc:
         raise HTTPException(404, "Archivo no encontrado")

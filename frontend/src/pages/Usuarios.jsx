@@ -24,14 +24,12 @@ export default function Usuarios() {
   const [confirmState, setConfirmState] = useState({ open: false, title: '', message: '', onConfirm: null });
 
   const { data: users=[], isError: isErrorUsers, refetch: refetchUsers } = useQuery({ queryKey:['usuarios'], queryFn:()=>api.get('/usuarios').then(r=>r.data), staleTime: 300_000 });
-  const { data: clientes=[] } = useQuery({ queryKey:['clientes-lista'], queryFn:()=>api.get('/clientes').then(r=>r.data), staleTime: 300_000 });
 
   const crear = useMutation({
     mutationFn:()=>{
       if(!form.nombre||!form.username||!form.password){setErr('Todos los campos son obligatorios.');return Promise.reject();}
       if(form.password!==form.password2){setErr('Las contraseñas no coinciden.');return Promise.reject();}
-      if(form.rol==='cliente'&&!form.cliente_ref){setErr('Para rol cliente debes indicar el Cliente (cliente_ref).');return Promise.reject();}
-      return api.post('/usuarios',{nombre:form.nombre,username:form.username,password:form.password,rol:form.rol,cliente_ref:form.cliente_ref||null});
+      return api.post('/usuarios',{nombre:form.nombre,username:form.username,password:form.password,rol:form.rol||'empleado',cliente_ref:null});
     },
     onSuccess:(res)=>{ toast.success('Usuario creado'); qc.setQueryData(['usuarios'], prev => [...(prev || []), res.data]); setModal(false); setErr(''); },
     onError:(e)=>{ if(e?.response){ const d=e.response?.data?.detail; setErr(Array.isArray(d)?d.map(x=>x.msg).join(', '):(d||'Error')); } },
@@ -217,17 +215,7 @@ export default function Usuarios() {
             <select style={inp} value={form.rol||'empleado'} onChange={e=>sf('rol',e.target.value)}>
               <option value="admin">Admin</option>
               <option value="empleado">Empleado</option>
-              <option value="cliente">Cliente (Portal)</option>
             </select>
-            {form.rol==='cliente'&&(
-              <div style={{ marginTop:10 }}>
-                <label style={lbl}>Cliente *</label>
-                <select style={inp} value={form.cliente_ref||''} onChange={e=>sf('cliente_ref',e.target.value)}>
-                  <option value="">— Seleccionar cliente —</option>
-                  {clientes.map(c=><option key={c} value={c}>{c}</option>)}
-                </select>
-              </div>
-            )}
             {err&&<p style={{ color:C.red,fontSize:12,margin:'8px 0 0' }}>{err}</p>}
             <div style={{ display:'flex',gap:10,marginTop:16,justifyContent:'flex-end' }}>
               <Btn variant="secondary" onClick={()=>setModal(false)}>Cancelar</Btn>

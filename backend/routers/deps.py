@@ -126,19 +126,13 @@ def require_superadmin(token=Depends(verify_token)):
     return token
 
 
-def get_org_id(token=Depends(verify_token),
-               x_org_id: Optional[int] = Header(None, alias="X-Org-Id")) -> int:
+def get_org_id(token=Depends(verify_token)) -> int:
     """Organización efectiva de la petición — FUENTE ÚNICA de aislamiento multi-tenant.
 
-    - superadmin (god mode): opera dentro de la organización indicada en el header X-Org-Id.
-    - usuario normal: SIEMPRE su propia organización (el header X-Org-Id se ignora → sin fugas).
-    Toda ruta de datos debe scopearse con este valor.
+    Cada usuario opera SIEMPRE en su propia organización (la del token). El superadmin no tiene
+    organización y por tanto NO accede a rutas de datos: para trabajar en una organización debe
+    autenticarse como un usuario de esa organización (login por organización en el panel).
     """
-    if token.get("rol") == "superadmin":
-        if not x_org_id:
-            raise HTTPException(status_code=400,
-                                detail="Superadmin debe seleccionar una organización (header X-Org-Id)")
-        return int(x_org_id)
     org = token.get("organizacion_id")
     if not org:
         raise HTTPException(status_code=403, detail="Usuario sin organización asignada")

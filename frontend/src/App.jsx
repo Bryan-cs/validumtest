@@ -25,7 +25,6 @@ const NovedadesClientes   = lazy(() => import('./pages/NovedadesClientes'));
 const PlanillasSS         = lazy(() => import('./pages/PlanillasSS'));
 const Finanzas            = lazy(() => import('./pages/Finanzas'));
 const CredencialesPortales = lazy(() => import('./pages/CredencialesPortales'));
-const Leads               = lazy(() => import('./pages/Leads'));
 const Organizaciones      = lazy(() => import('./pages/Organizaciones'));
 
 const qc = new QueryClient({
@@ -50,16 +49,15 @@ const _Cargando = () => (
 );
 
 function PrivateRoute({ children, adminOnly = false }) {
-  const { token, user, orgActiva, _hasHydrated } = useAuthStore();
+  const { token, user, _hasHydrated } = useAuthStore();
   if (!_hasHydrated) return <_Cargando />;
   if (!token) return <Navigate to="/login" replace />;
   // Clientes solo pueden acceder al portal
   if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
-  // Superadmin (god mode): debe haber elegido una organización para ver datos.
-  if (user?.rol === 'superadmin' && !orgActiva) return <Navigate to="/organizaciones" replace />;
-  // superadmin con org activa actúa como admin de esa organización.
-  const esAdmin = user?.rol === 'admin' || user?.rol === 'superadmin';
-  if (adminOnly && !esAdmin) return <Navigate to="/" replace />;
+  // Superadmin no accede a datos: gestiona organizaciones. Para entrar a una organización se
+  // autentica como usuario de esa organización (login por organización en el panel).
+  if (user?.rol === 'superadmin') return <Navigate to="/organizaciones" replace />;
+  if (adminOnly && user?.rol !== 'admin') return <Navigate to="/" replace />;
   return children;
 }
 
@@ -84,9 +82,9 @@ function ClienteOnlyRoute({ children }) {
 }
 
 function DefaultRedirect() {
-  const { user, orgActiva } = useAuthStore();
+  const { user } = useAuthStore();
   if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
-  if (user?.rol === 'superadmin' && !orgActiva) return <Navigate to="/organizaciones" replace />;
+  if (user?.rol === 'superadmin') return <Navigate to="/organizaciones" replace />;
   return <Dashboard />;
 }
 
@@ -116,9 +114,9 @@ export default function App() {
             <Route path="afiliados"   element={<Page><Afiliados /></Page>} />
             <Route path="retiros"     element={<Page><Retiros /></Page>} />
             <Route path="tareas"      element={<Page><Tareas /></Page>} />
-            <Route path="facturacion" element={<Page><Facturacion /></Page>} />
+            <Route path="facturacion" element={<PrivateRoute adminOnly><Page><Facturacion /></Page></PrivateRoute>} />
             <Route path="cobro"       element={<Page><Cobro /></Page>} />
-            <Route path="planillas-ss" element={<Page><PlanillasSS /></Page>} />
+            <Route path="planillas-ss" element={<PrivateRoute adminOnly><Page><PlanillasSS /></Page></PrivateRoute>} />
 
             {/* Admin only */}
             <Route path="finanzas"    element={<PrivateRoute adminOnly><Page><Finanzas /></Page></PrivateRoute>} />
@@ -127,9 +125,8 @@ export default function App() {
             <Route path="listas"      element={<PrivateRoute adminOnly><Page><Listas /></Page></PrivateRoute>} />
             <Route path="calculadora" element={<PrivateRoute adminOnly><Page><Calculadora /></Page></PrivateRoute>} />
             <Route path="actividad"        element={<PrivateRoute adminOnly><Page><Actividad /></Page></PrivateRoute>} />
-            <Route path="novedades-clientes" element={<PrivateRoute><Page><NovedadesClientes /></Page></PrivateRoute>} />
+            <Route path="novedades-clientes" element={<PrivateRoute adminOnly><Page><NovedadesClientes /></Page></PrivateRoute>} />
             <Route path="credenciales"       element={<PrivateRoute><Page><CredencialesPortales /></Page></PrivateRoute>} />
-            <Route path="leads"              element={<PrivateRoute><Page><Leads /></Page></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
