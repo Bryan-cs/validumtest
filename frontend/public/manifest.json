@@ -1,13 +1,13 @@
 {
-  "name": "BBC File",
-  "short_name": "BBC File",
+  "name": "Validum",
+  "short_name": "Validum",
   "description": "Plataforma de gestión de personal y seguridad social",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "theme_color": "#111827",
-  "background_color": "#0D0B1E",
+  "theme_color": "#1D3F72",
+  "background_color": "#14294D",
   "lang": "es",
   "icons": [
     { "src": "/icons/icon-48.png",  "sizes": "48x48",   "type": "image/png" },
