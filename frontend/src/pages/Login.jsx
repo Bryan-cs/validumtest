@@ -69,7 +69,24 @@ const ESTILOS = `
   background: var(--lime); display: grid; place-items: center;
   box-shadow: 0 4px 12px -4px rgba(200,215,43,.6);
 }
-.lg-foot { position: relative; z-index: 2; font-family: 'JetBrains Mono', monospace; font-size: 10.5px; color: rgba(255,255,255,.44); letter-spacing: .6px; animation: lgUp .6s .4s ease both; }
+.lg-foot { position: relative; z-index: 2; font-family: 'JetBrains Mono', monospace; font-size: 11.5px; font-weight: 500; color: rgba(255,255,255,.82); letter-spacing: .8px; animation: lgUp .6s .4s ease both; }
+.lg-foot b { color: var(--lime); font-weight: 600; }
+
+/* Enlace al sitio web */
+.lg-web {
+  position: absolute; top: 40px; right: 50px; z-index: 3;
+  display: inline-flex; align-items: center; gap: 7px; text-decoration: none;
+  font-size: 12px; font-weight: 700; color: #fff; padding: 8px 14px; border-radius: 999px;
+  background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+  backdrop-filter: blur(6px); transition: all .2s; animation: lgUp .6s .2s ease both;
+}
+.lg-web:hover { background: var(--lime); color: var(--navy); border-color: var(--lime); }
+.lg-web span { transition: transform .2s; }
+.lg-web:hover span { transform: translateX(3px); }
+
+.lg-webnote { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 20px; animation: lgUp .5s .44s ease both; }
+.lg-webnote a { color: var(--navy); font-weight: 800; text-decoration: none; border-bottom: 2px solid var(--lime); padding-bottom: 1px; transition: color .2s; }
+.lg-webnote a:hover { color: var(--lime-d); }
 
 /* ── Formulario ── */
 .lg-formpane { flex: 1; display: flex; align-items: center; justify-content: center; padding: 28px; position: relative; }
@@ -188,6 +205,10 @@ export default function Login() {
         <div className="lg-orb lg-orb--1" />
         <div className="lg-orb lg-orb--2" />
 
+        <a className="lg-web" href="https://validum.com.co" target="_blank" rel="noopener noreferrer">
+          Conoce Validum <span aria-hidden>→</span>
+        </a>
+
         <div className="lg-brand">
           <ValidumBadge size={46} radius={13} />
           <div>
@@ -214,7 +235,7 @@ export default function Login() {
           </div>
         </div>
 
-        <div className="lg-foot">© {new Date().getFullYear()} VALIDUM · TODOS LOS DERECHOS RESERVADOS</div>
+        <div className="lg-foot">© {new Date().getFullYear()} <b>VALIDUM</b> · TODOS LOS DERECHOS RESERVADOS</div>
       </div>
 
       {/* Formulario */}
@@ -252,6 +273,10 @@ export default function Login() {
             {loading ? 'Ingresando…' : 'Ingresar al sistema'}
             {!loading && <span aria-hidden>→</span>}
           </button>
+
+          <p className="lg-webnote">
+            Conoce más en <a href="https://validum.com.co" target="_blank" rel="noopener noreferrer">validum.com.co</a>
+          </p>
         </form>
       </div>
     </div>
