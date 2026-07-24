@@ -416,3 +416,42 @@ class CredencialUpdate(BaseModel):
     usuario_portal: Optional[str] = None
     clave_portal: Optional[str] = None
     obs: Optional[str] = None
+
+
+# ── Multi-tenant: Organizaciones (gestionadas por el superadmin) ──────────────
+class OrganizacionCreate(BaseModel):
+    """Crea una organización nueva + su usuario admin inicial."""
+    nombre: str
+    slug: Optional[str] = None            # si no se envía, se deriva del nombre
+    admin_username: str
+    admin_password: str
+    admin_nombre: Optional[str] = None
+
+    @field_validator('nombre', 'admin_username', mode='before')
+    @classmethod
+    def no_vacio(cls, v, info):
+        if not v or not str(v).strip():
+            raise ValueError(f'{info.field_name} es requerido')
+        return str(v).strip()
+
+    @field_validator('admin_password')
+    @classmethod
+    def password_min_length(cls, v):
+        if len(v) < 6:
+            raise ValueError('La contraseña debe tener al menos 6 caracteres')
+        return v
+
+
+class OrganizacionUpdate(BaseModel):
+    nombre: Optional[str] = None
+    slug: Optional[str] = None
+    activo: Optional[bool] = None
+
+
+class OrganizacionOut(BaseModel):
+    id: int
+    nombre: str
+    slug: Optional[str] = None
+    activo: bool
+    total_usuarios: Optional[int] = None
+    total_afiliados: Optional[int] = None

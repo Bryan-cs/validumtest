@@ -9,15 +9,20 @@ from crud_helpers import _factura_to_dict, _log
 
 
 def _next_codigo(db):
+    from tenant import current_org_id
+    org = current_org_id.get()
     db_url = str(db.bind.url) if db.bind else os.environ.get("DATABASE_URL", "")
     if "postgresql" in db_url:
-        db.execute(_text("SELECT pg_advisory_xact_lock(9876543210)"))
+        # Advisory lock por organización (evita colisión de secuencia con concurrencia dentro de la org).
+        db.execute(_text("SELECT pg_advisory_xact_lock(9876543210, :org)"), {"org": org or 0})
+        # codigo es único por organización → la secuencia también debe scoparse por org.
         result = db.execute(_text(
             "SELECT MAX(CAST(SPLIT_PART(codigo, '-', 2) AS INTEGER)) "
-            "FROM facturas WHERE codigo LIKE 'FVE-%'"
-        )).scalar()
+            "FROM facturas WHERE codigo LIKE 'FVE-%' AND organizacion_id = :org"
+        ), {"org": org}).scalar()
         n = max(2650, result) if result else 2650
     else:
+        # ORM → auto-filtrado por organización (secuencia por org).
         last = db.query(models.Factura).filter(models.Factura.codigo.like("FVE-%")).order_by(models.Factura.id.desc()).first()
         n = 2650
         if last:

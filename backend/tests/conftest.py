@@ -20,6 +20,8 @@ TEST_DB_URL = _pg_url if _pg_url else "sqlite:///./test_bbcfile.db"
 
 os.environ.setdefault("DATABASE_URL", TEST_DB_URL)
 os.environ.setdefault("SECRET_KEY", "test-secret-key-only-for-testing")
+os.environ.setdefault("SUPERADMIN_USER", "superadmin")
+os.environ.setdefault("SUPERADMIN_PASS", "super1234")
 
 import pytest
 from fastapi.testclient import TestClient
@@ -45,11 +47,21 @@ def client():
     import models  # noqa: F401 — registra modelos en Base
     Base.metadata.create_all(bind=engine_test)
 
-    # Seed mínimo: admin + empleado1
-    from database import _seed
+    # Seed multi-tenant para tests: superadmin + una organización de prueba con admin/empleado1.
+    # Los tokens admin/empleado1 pertenecen a esa organización, así los endpoints de datos quedan
+    # auto-scopeados a ella (no envían X-Org-Id porque no son superadmin).
+    from database import _seed, provision_organizacion
+    from crud import hash_password
     db = TestingSession()
     try:
-        _seed(db)
+        _seed(db)  # superadmin
+        org = provision_organizacion(db, nombre="Org Test", slug="org-test",
+                                     admin_username="admin", admin_password="admin1234",
+                                     admin_nombre="Administrador Test")
+        db.add(models.Usuario(nombre="Empleado 1", username="empleado1", rol="empleado",
+                              organizacion_id=org.id, activo=True,
+                              password=hash_password("emp1234")))
+        db.commit()
     finally:
         db.close()
 

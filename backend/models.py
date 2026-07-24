@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Index, Numeric, text
+from sqlalchemy import Column, Integer, String, Float, Boolean, Text, DateTime, ForeignKey, Index, Numeric, text, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, timezone, timedelta
@@ -12,13 +12,30 @@ def _col_now():
     """Hora actual en Colombia (UTC-5)."""
     return datetime.now(COL_TZ)
 
+
+def _org_fk(nullable=False):
+    """Columna organizacion_id estándar (tenant). Multi-tenant: aísla los datos por organización."""
+    return Column(Integer, ForeignKey("organizaciones.id", ondelete="CASCADE"), index=True, nullable=nullable)
+
+
+class Organizacion(Base):
+    """Inquilino (tenant) del SaaS. Cada organización tiene sus propios datos aislados."""
+    __tablename__ = "organizaciones"
+    id      = Column(Integer, primary_key=True, index=True)
+    nombre  = Column(String(150), nullable=False)
+    slug    = Column(String(80), unique=True, index=True)   # identificador legible/único
+    activo  = Column(Boolean, default=True)
+    creado  = Column(DateTime(timezone=True), default=_utcnow)
+
+
 class Usuario(Base):
     __tablename__ = "usuarios"
     id          = Column(Integer, primary_key=True, index=True)
     nombre      = Column(String(120))
-    username    = Column(String(60), unique=True, index=True)
+    username    = Column(String(60), unique=True, index=True)  # único global (login sin selector de org)
     password    = Column(String(120), nullable=True)
-    rol         = Column(String(20), default="empleado")   # admin | empleado | cliente
+    rol         = Column(String(20), default="empleado")   # superadmin | admin | empleado | cliente
+    organizacion_id = _org_fk(nullable=True)               # NULL solo para superadmin (sin organización)
     cliente_ref = Column(String(120), nullable=True)       # para rol=cliente: valor de cliente_txt
     ver_detalle = Column(Boolean, default=False)           # portal: puede ver la columna "Detalle" de afiliados
     activo      = Column(Boolean, default=True)
@@ -27,16 +44,18 @@ class Usuario(Base):
 class Afiliado(Base):
     __tablename__ = "afiliados"
     __table_args__ = (
-        Index('ix_afiliado_activo_estado_srv', 'activo', 'estado_srv'),  # cobro: activo=True + estado_srv
-        Index('ix_afiliado_cliente_estado',    'cliente_txt', 'estado'), # filtro cliente+estado
+        UniqueConstraint('organizacion_id', 'doc', name='uq_afiliado_org_doc'),
+        Index('ix_afiliado_org_activo_estado_srv', 'organizacion_id', 'activo', 'estado_srv'),  # cobro: activo=True + estado_srv
+        Index('ix_afiliado_org_cliente_estado', 'organizacion_id', 'cliente_txt', 'estado'), # filtro cliente+estado
         # Covering index para get_cobro — soporta empresa/cliente/doc filters con Index-Only Scan
-        Index('ix_afiliado_cobro_cobertura', 'activo', 'estado_srv', 'empresa', 'cliente_txt',
+        Index('ix_afiliado_cobro_cobertura', 'organizacion_id', 'activo', 'estado_srv', 'empresa', 'cliente_txt',
               postgresql_where=text("activo = TRUE")),
     )
     id              = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     nombre          = Column(String(150), index=True)
     tipo_doc        = Column(String(10), default="CC")
-    doc             = Column(String(20), unique=True, index=True)
+    doc             = Column(String(20), index=True)
     empresa         = Column(String(80), index=True)       # índice para filtros frecuentes
     cargo           = Column(String(80))
     cliente_txt     = Column(String(120), index=True)      # índice para filtros frecuentes
@@ -62,17 +81,17 @@ class Afiliado(Base):
     creado          = Column(DateTime(timezone=True), default=_utcnow)
     actualizado     = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
-from sqlalchemy import UniqueConstraint
-
 class Factura(Base):
     __tablename__ = "facturas"
     __table_args__ = (
-        UniqueConstraint('doc', 'mes', 'anio', name='uq_factura_doc_mes_anio'),
-        Index('ix_factura_cliente_estado', 'cliente', 'estado'),
-        Index('ix_factura_anio_mes', 'anio', 'mes'),
+        UniqueConstraint('organizacion_id', 'doc', 'mes', 'anio', name='uq_factura_org_doc_mes_anio'),
+        UniqueConstraint('organizacion_id', 'codigo', name='uq_factura_org_codigo'),
+        Index('ix_factura_org_cliente_estado', 'organizacion_id', 'cliente', 'estado'),
+        Index('ix_factura_org_anio_mes', 'organizacion_id', 'anio', 'mes'),
     )
     id               = Column(Integer, primary_key=True, index=True)
-    codigo           = Column(String(20), unique=True, index=True)
+    organizacion_id  = _org_fk()
+    codigo           = Column(String(20), index=True)
     nombre_afiliado  = Column(String(150), index=True)
     doc              = Column(String(20), index=True)   # doc del afiliado
     cliente          = Column(String(120), index=True)
@@ -99,9 +118,10 @@ class Factura(Base):
 class Retiro(Base):
     __tablename__ = "retiros"
     __table_args__ = (
-        Index('ix_retiro_anio_mes', 'anio', 'mes'),
+        Index('ix_retiro_org_anio_mes', 'organizacion_id', 'anio', 'mes'),
     )
     id              = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     nombre          = Column(String(150))
     doc             = Column(String(20), index=True)
     empresa         = Column(String(80))
@@ -116,6 +136,7 @@ class Retiro(Base):
 class Eliminado(Base):
     __tablename__ = "eliminados"
     id                  = Column(Integer, primary_key=True, index=True)
+    organizacion_id     = _org_fk()
     nombre              = Column(String(150))
     doc                 = Column(String(20), index=True)
     empresa             = Column(String(80))
@@ -128,9 +149,13 @@ class Eliminado(Base):
 
 class Empleado(Base):
     __tablename__ = "empleados"
+    __table_args__ = (
+        UniqueConstraint('organizacion_id', 'doc', name='uq_empleado_org_doc'),
+    )
     id            = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     nombre        = Column(String(150))
-    doc           = Column(String(20), unique=True, index=True)
+    doc           = Column(String(20), index=True)
     cargo         = Column(String(80))
     tel           = Column(String(20))
     email         = Column(String(100))
@@ -143,9 +168,10 @@ class Empleado(Base):
 class Gasto(Base):
     __tablename__ = "gastos"
     __table_args__ = (
-        Index('ix_gasto_anio_mes', 'anio', 'mes'),  # dashboard financiero
+        Index('ix_gasto_org_anio_mes', 'organizacion_id', 'anio', 'mes'),  # dashboard financiero
     )
     id     = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     nombre = Column(String(120))
     valor  = Column(Numeric(15, 2), default=0)
     activo = Column(Boolean, default=True)
@@ -156,9 +182,10 @@ class Gasto(Base):
 class IngresoAdicional(Base):
     __tablename__ = "ingresos_adicionales"
     __table_args__ = (
-        Index('ix_ingreso_adicional_anio_mes', 'anio', 'mes'),
+        Index('ix_ingreso_adicional_org_anio_mes', 'organizacion_id', 'anio', 'mes'),
     )
     id          = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     concepto    = Column(String(60))   # Comisión | Planilla verificable | Otro
     descripcion = Column(String(200), default="")
     valor       = Column(Numeric(15, 2), default=0)
@@ -171,10 +198,11 @@ class IngresoAdicional(Base):
 class NominaMensual(Base):
     __tablename__ = "nomina_mensual"
     __table_args__ = (
-        Index('ix_nomina_empleado_anio_mes', 'empleado_id', 'anio', 'mes'),
-        UniqueConstraint('empleado_id', 'mes', 'anio', name='uq_nomina_emp_mes_anio'),
+        Index('ix_nomina_org_empleado_anio_mes', 'organizacion_id', 'empleado_id', 'anio', 'mes'),
+        UniqueConstraint('organizacion_id', 'empleado_id', 'mes', 'anio', name='uq_nomina_org_emp_mes_anio'),
     )
     id          = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     empleado_id = Column(Integer, index=True)
     mes         = Column(Integer)
     anio        = Column(Integer)
@@ -182,7 +210,11 @@ class NominaMensual(Base):
 
 class Config(Base):
     __tablename__ = "config"
-    id                 = Column(Integer, primary_key=True, default=1)
+    __table_args__ = (
+        UniqueConstraint('organizacion_id', name='uq_config_org'),   # una config por organización
+    )
+    id                 = Column(Integer, primary_key=True)
+    organizacion_id    = _org_fk()
     ibc_global         = Column(Numeric(15, 2), default=1_750_905)
     porcentajes        = Column(Text)    # JSON dict
     plantilla_whatsapp = Column(Text)    # Plantilla del mensaje de WhatsApp
@@ -192,13 +224,18 @@ class Config(Base):
 
 class Lista(Base):
     __tablename__ = "listas"
+    __table_args__ = (
+        UniqueConstraint('organizacion_id', 'nombre', name='uq_lista_org_nombre'),
+    )
     id     = Column(Integer, primary_key=True, index=True)
-    nombre = Column(String(60), unique=True)
+    organizacion_id = _org_fk()
+    nombre = Column(String(60))
     items  = Column(Text)    # JSON list
 
 class SolicitudNovedad(Base):
     __tablename__ = "solicitudes_novedad"
     id               = Column(Integer, primary_key=True, index=True)
+    organizacion_id  = _org_fk()
     cliente_ref      = Column(String(120), index=True)
     username_cliente = Column(String(60), index=True)
     afiliado_doc     = Column(String(20))
@@ -213,6 +250,7 @@ class SolicitudNovedad(Base):
 class NovedadPago(Base):
     __tablename__ = "novedades_pago"
     id               = Column(Integer, primary_key=True, index=True)
+    organizacion_id  = _org_fk()
     cliente_ref      = Column(String(120), index=True)
     username_cliente = Column(String(60), index=True)
     mes              = Column(String(20))
@@ -228,6 +266,7 @@ class NovedadPago(Base):
 class SolicitudRetiro(Base):
     __tablename__ = "solicitudes_retiro"
     id               = Column(Integer, primary_key=True, index=True)
+    organizacion_id  = _org_fk()
     cliente_ref      = Column(String(120), index=True)
     username_cliente = Column(String(60), index=True)
     afiliado_doc     = Column(String(20))
@@ -242,10 +281,11 @@ class SolicitudRetiro(Base):
 class Actividad(Base):
     __tablename__ = "actividad"
     __table_args__ = (
-        Index('ix_actividad_usuario_modulo', 'usuario', 'modulo'),
-        Index('ix_actividad_fecha', 'fecha'),
+        Index('ix_actividad_org_usuario_modulo', 'organizacion_id', 'usuario', 'modulo'),
+        Index('ix_actividad_org_fecha', 'organizacion_id', 'fecha'),
     )
     id      = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     usuario = Column(String(60))
     accion  = Column(String(200))
     modulo  = Column(String(60))
@@ -255,9 +295,10 @@ class Actividad(Base):
 class Tarea(Base):
     __tablename__ = "tareas"
     __table_args__ = (
-        Index('ix_tarea_estado_asignado', 'estado', 'asignado_a'),  # tareas activas por usuario
+        Index('ix_tarea_org_estado_asignado', 'organizacion_id', 'estado', 'asignado_a'),  # tareas activas por usuario
     )
     id            = Column(Integer, primary_key=True)
+    organizacion_id = _org_fk()
     titulo        = Column(String(200))
     descripcion   = Column(Text, default="")
     asignado_a    = Column(String(60), index=True)
@@ -273,6 +314,7 @@ class Tarea(Base):
 class TareaComentario(Base):
     __tablename__ = "tarea_comentarios"
     id       = Column(Integer, primary_key=True)
+    organizacion_id = _org_fk()
     tarea_id = Column(Integer, index=True)
     usuario  = Column(String(60))
     texto    = Column(Text)
@@ -288,9 +330,10 @@ class LoginAttempt(Base):
 class Notificacion(Base):
     __tablename__ = "notificaciones"
     __table_args__ = (
-        Index('ix_notificacion_usuario_leida', 'usuario', 'leida'),  # no leídas por usuario
+        Index('ix_notificacion_org_usuario_leida', 'organizacion_id', 'usuario', 'leida'),  # no leídas por usuario
     )
     id       = Column(Integer, primary_key=True)
+    organizacion_id = _org_fk()
     usuario  = Column(String(60), index=True)
     mensaje  = Column(Text)  # texto libre: puede incluir notas largas del administrador
     leida    = Column(Boolean, default=False, index=True)
@@ -300,9 +343,10 @@ class Notificacion(Base):
 class PlanillaPago(Base):
     __tablename__ = "planillas_pago"
     __table_args__ = (
-        Index('ix_planilla_cliente_anio_mes', 'cliente_ref', 'anio', 'mes'),
+        Index('ix_planilla_org_cliente_anio_mes', 'organizacion_id', 'cliente_ref', 'anio', 'mes'),
     )
     id           = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     cliente_ref  = Column(String(150), index=True)
     mes          = Column(String(20))
     anio         = Column(String(4))
@@ -314,9 +358,10 @@ class PlanillaPago(Base):
 class Documento(Base):
     __tablename__ = "documentos"
     __table_args__ = (
-        Index('ix_documento_contexto_id', 'contexto', 'contexto_id'),
+        Index('ix_documento_org_contexto_id', 'organizacion_id', 'contexto', 'contexto_id'),
     )
     id           = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     upload_id    = Column(String(36), unique=True, nullable=True, index=True)  # UUID idempotency key
     afiliado_doc = Column(String(20), index=True)       # doc del afiliado dueño
     nombre       = Column(String(200))                   # nombre original del archivo
@@ -333,9 +378,10 @@ class AvisoCliente(Base):
     """Avisos/comunicados que el admin envía a un cliente específico."""
     __tablename__ = "avisos_clientes"
     __table_args__ = (
-        Index('ix_aviso_cliente_ref', 'cliente_ref'),
+        Index('ix_aviso_org_cliente_ref', 'organizacion_id', 'cliente_ref'),
     )
     id          = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     cliente_ref = Column(String(120), index=True)   # destinatario (cliente_txt / cliente_ref)
     titulo      = Column(String(200))
     mensaje     = Column(Text)
@@ -355,10 +401,11 @@ class TokenBlacklist(Base):
 class CredencialPortal(Base):
     __tablename__ = "credenciales_portales"
     __table_args__ = (
-        Index('ix_cred_portal_tipo', 'portal'),
-        Index('ix_cred_doc', 'numero_doc'),
+        Index('ix_cred_org_portal_tipo', 'organizacion_id', 'portal'),
+        Index('ix_cred_org_doc', 'organizacion_id', 'numero_doc'),
     )
     id             = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
     tipo_doc       = Column(String(10), default="NIT")   # NIT | CC
     numero_doc     = Column(String(40), nullable=False)
     titular        = Column(String(150), default="")
@@ -375,9 +422,10 @@ class CredencialPortal(Base):
 class SeguimientoArl(Base):
     __tablename__ = "seguimiento_arl"
     __table_args__ = (
-        Index('ix_seg_arl_cliente_estado', 'cliente', 'estado'),
+        Index('ix_seg_arl_org_cliente_estado', 'organizacion_id', 'cliente', 'estado'),
     )
     id               = Column(Integer, primary_key=True, index=True)
+    organizacion_id  = _org_fk()
     nombre           = Column(String(120), nullable=False)
     documento        = Column(String(30), nullable=False)
     cliente          = Column(String(150), index=True)

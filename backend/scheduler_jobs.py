@@ -222,6 +222,8 @@ def alertar_arl_pendientes():
         # creado_en es naive (sin timezone) — comparar con naive UTC
         umbral_alerta_naive = umbral_alerta.replace(tzinfo=None)
 
+        # Scheduler sin contexto de organización: escanea registros de TODAS las organizaciones.
+        # Las notificaciones se dirigen y se sellan por la organización de cada registro (multi-tenant).
         registros = db.query(models.SeguimientoArl).filter(
             models.SeguimientoArl.estado == 'activo',
             models.SeguimientoArl.creado_en < umbral_alerta_naive,
@@ -234,21 +236,27 @@ def alertar_arl_pendientes():
         if not registros:
             return
 
-        destinatarios = db.query(models.Usuario).filter(
-            models.Usuario.rol.in_(['admin', 'empleado']),
-            models.Usuario.activo == True,
-        ).all()
-
-        if not destinatarios:
-            _log.warning("alertar_arl_pendientes: sin destinatarios activos — alertas suprimidas")
-            return
+        # Destinatarios cacheados por organización (admin/empleado activos de esa org).
+        _dest_cache = {}
+        def destinatarios_de(org_id):
+            if org_id not in _dest_cache:
+                _dest_cache[org_id] = db.query(models.Usuario).filter(
+                    models.Usuario.organizacion_id == org_id,
+                    models.Usuario.rol.in_(['admin', 'empleado']),
+                    models.Usuario.activo == True,
+                ).all()
+            return _dest_cache[org_id]
 
         total_notifs = 0
         for reg in registros:
+            destinatarios = destinatarios_de(reg.organizacion_id)
+            if not destinatarios:
+                continue
             dias = (ahora.replace(tzinfo=None) - reg.creado_en).days
             msg = f"⚠️ {reg.nombre} lleva {dias} días en SeguimientoARL sin activar ({reg.entidad_arl})"
             for u in destinatarios:
-                db.add(models.Notificacion(usuario=u.username, mensaje=msg))
+                db.add(models.Notificacion(usuario=u.username, mensaje=msg,
+                                           organizacion_id=reg.organizacion_id))
                 total_notifs += 1
             reg.ultima_alerta_en = ahora
 

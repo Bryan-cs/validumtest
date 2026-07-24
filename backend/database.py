@@ -36,6 +36,10 @@ engine = create_engine(
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
+# Registrar el listener de aislamiento multi-tenant (do_orm_execute).
+# Import con efecto secundario: define el ContextVar y engancha el filtro automático por organización.
+import tenant  # noqa: E402,F401
+
 def get_db():
     db = SessionLocal()
     try:
@@ -188,56 +192,88 @@ def _ensure_indexes():
                     pass
 
 
-def _seed(db):
-    import models
-    from datetime import datetime
+def _default_porcentajes():
+    return {"EPS":0.04,"AFP":0.16,"CCF":0.04,
+            "ARL 1":0.00522,"ARL 2":0.01044,"ARL 3":0.02436,
+            "ARL 4":0.04350,"ARL 5":0.06960}
 
-    # Usuarios iniciales
-    if db.query(models.Usuario).count() == 0:
-        from crud import hash_password
-        db.add_all([
-            models.Usuario(nombre="Administrador Principal", username="admin",
-                           rol="admin", activo=True, password=hash_password("admin1234")),
-            models.Usuario(nombre="Empleado 1", username="empleado1",
-                           rol="empleado", activo=True, password=hash_password("emp1234")),
-        ])
 
-    # Configuración inicial
-    if db.query(models.Config).count() == 0:
-        import json
-        pcts = {"EPS":0.04,"AFP":0.16,"CCF":0.04,
-                "ARL 1":0.00522,"ARL 2":0.01044,"ARL 3":0.02436,
-                "ARL 4":0.04350,"ARL 5":0.06960}
-        db.add(models.Config(
-            ibc_global=1_750_905,
-            porcentajes=json.dumps(pcts)
-        ))
-
-    # Listas de referencia
-    default_listas = {
-        "empresas": ["PROSECOOP","CARSECOOP","TECHNOVA","TECHPLANET"],
+def _default_listas():
+    """Listas de referencia base que recibe cada organización nueva."""
+    return {
+        "empresas": [],
         "eps": ["Sin EPS","Sura EPS","Compensar","Sanitas","Nueva EPS","Coomeva",
                 "Salud Total","Cafesalud","Famisanar","Coosalud","Medimas","Emssanar"],
         "arl": ["N/A","1","2","3","4","5"],
         "ccf": ["N/A","Compensar","Colsubsidio","Cafam","Comfandi","Comfamiliar Huila",
                 "Combarranquilla","Comfenalco Antioquia","Comfenalco Valle"],
         "afp": ["N/A","Porvenir","Colpensiones","Colfondos","Skandia"],
-        "bancos": [
-            "Nequi / Daviplata - 3170296773",
-            "Davivienda (Ahorros) - 0550108900642357",
-            "Banco de Bogotá (Ahorros) - 462547688",
-            "Llave Banco Bogotá - @BBJMF23103",
-            "Bancolombia (Ahorros) - 91270274485",
-        ],
+        "bancos": [],
         "subtipos": ["0","3","4","20","22"],
         "estados_srv": ["ACTIVO","SUSPENDIDO","DOBLE AFILIACION","EN ESPERA DE ACTIVACION",
                         "RETIRADO","EN MORA","NO AFILIADO","PENDIENTE"],
         "motivos_retiro": ["Renuncia","Despido","Pension","Otro"],
         "clientes": [],
     }
-    import json
-    for nombre, items in default_listas.items():
-        if not db.query(models.Lista).filter_by(nombre=nombre).first():
-            db.add(models.Lista(nombre=nombre, items=json.dumps(items)))
 
+
+def provision_organizacion(db, nombre, slug, admin_username, admin_password, admin_nombre=None):
+    """Crea una organización nueva con su Config, sus Listas base y su usuario admin inicial.
+    Todo queda scopeado al organizacion_id recién creado. Devuelve la Organizacion.
+    Usado por el router de superadmin y por el seed inicial de dev.
+    """
+    import models, json
+    from crud import hash_password
+
+    org = models.Organizacion(nombre=nombre, slug=slug, activo=True)
+    db.add(org)
+    db.flush()   # obtener org.id sin cerrar la transacción
+
+    db.add(models.Config(
+        organizacion_id=org.id,
+        ibc_global=1_750_905,
+        porcentajes=json.dumps(_default_porcentajes()),
+    ))
+    for lst_nombre, items in _default_listas().items():
+        db.add(models.Lista(organizacion_id=org.id, nombre=lst_nombre, items=json.dumps(items)))
+
+    db.add(models.Usuario(
+        nombre=admin_nombre or f"Administrador {nombre}",
+        username=admin_username,
+        rol="admin",
+        organizacion_id=org.id,
+        activo=True,
+        password=hash_password(admin_password),
+    ))
     db.commit()
+    db.refresh(org)
+    return org
+
+
+def _seed(db):
+    """Seed mínimo: solo el superadmin del SaaS. Las organizaciones se crean desde el panel
+    de superadmin (o vía provision_organizacion). Ya NO se siembran admin/empleado/Config/Listas
+    globales — todo eso vive dentro de cada organización."""
+    import models
+
+    if db.query(models.Usuario).filter_by(rol="superadmin").count() == 0:
+        from crud import hash_password
+        su_user = os.getenv("SUPERADMIN_USER", "superadmin")
+        su_pass = os.getenv("SUPERADMIN_PASS")
+        if not su_pass:
+            if _is_sqlite:
+                su_pass = "superadmin1234"   # solo dev/SQLite
+            else:
+                import logging
+                logging.getLogger("bbcfile").warning(
+                    "SUPERADMIN_PASS no definido en producción — no se crea el superadmin inicial")
+                return
+        db.add(models.Usuario(
+            nombre="Super Administrador",
+            username=su_user,
+            rol="superadmin",
+            organizacion_id=None,
+            activo=True,
+            password=hash_password(su_pass),
+        ))
+        db.commit()

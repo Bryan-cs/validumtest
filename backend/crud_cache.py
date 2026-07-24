@@ -22,6 +22,17 @@ except Exception as _redis_err:
 _mem_cache: dict = {}
 _cache_lock = _threading.Lock()
 
+
+def _ns(key: str) -> str:
+    """Prefija la clave con la organización activa para aislar la caché por tenant.
+    Sin organización activa (login, tareas de sistema) se usa la clave tal cual."""
+    try:
+        from tenant import current_org_id
+        org = current_org_id.get()
+    except Exception:
+        org = None
+    return f"o{org}:{key}" if org is not None else key
+
 _cb_failures   = 0
 _cb_open_until = 0.0
 _CB_MAX_FAILS  = 5
@@ -57,6 +68,7 @@ def _use_mem_cache() -> bool:
 
 
 def _cache_get(key: str):
+    key = _ns(key)
     if _redis_disponible():
         try:
             raw = _redis_client.get(key)
@@ -76,6 +88,7 @@ def _cache_get(key: str):
 
 
 def _cache_set(key: str, data, ttl: int = TTL_COBRO):
+    key = _ns(key)
     if _redis_disponible():
         try:
             _redis_client.setex(key, ttl, json.dumps(data, default=str))
@@ -99,6 +112,7 @@ def _cache_set(key: str, data, ttl: int = TTL_COBRO):
 
 
 def cache_invalidar(prefijo: str = ""):
+    prefijo = _ns(prefijo)
     if _redis_disponible():
         try:
             cursor = 0

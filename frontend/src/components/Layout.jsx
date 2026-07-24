@@ -21,7 +21,9 @@ const PALETTES = [
   { id: 'slate',    label: 'Slate',      dot: '#475569' },
 ];
 
-const navGroups = (rol) => [
+const navGroups = (rol) => {
+  const esAdmin = rol === 'admin' || rol === 'superadmin';
+  return [
   {
     id: 'principal',
     label: null,
@@ -50,10 +52,10 @@ const navGroups = (rol) => [
     label: 'FINANZAS',
     items: [
       { to: '/facturacion',  label: '🧾 Facturación' },
-      ...(rol === 'admin' ? [{ to: '/finanzas', label: '📊 Reportes Financieros' }] : []),
+      ...(esAdmin ? [{ to: '/finanzas', label: '📊 Reportes Financieros' }] : []),
       { to: '/cobro',        label: '💰 Cobro' },
       { to: '/planillas-ss', label: '📋 Planillas SS' },
-      ...(rol === 'admin' ? [{ to: '/empleados', label: '💵 Nómina' }] : []),
+      ...(esAdmin ? [{ to: '/empleados', label: '💵 Nómina' }] : []),
     ],
   },
   ...(rol !== 'cliente' ? [
@@ -66,7 +68,7 @@ const navGroups = (rol) => [
       ],
     },
   ] : []),
-  ...(rol === 'admin' ? [
+  ...(esAdmin ? [
     {
       id: 'configuracion',
       label: 'CONFIGURACIÓN',
@@ -84,7 +86,8 @@ const navGroups = (rol) => [
       ],
     },
   ] : []),
-];
+  ];
+};
 
 function tiempoRelativo(fechaStr) {
   if (!fechaStr) return '';
@@ -116,7 +119,7 @@ function tipoNotif(n) {
 }
 
 export default function Layout() {
-  const { user, logout } = useAuthStore();
+  const { user, logout, orgActiva } = useAuthStore();
   const navigate = useNavigate();
   const qc = useQueryClient();
   const [width, setWidth] = useState(SIDEBAR_DEFAULT);
@@ -667,6 +670,19 @@ export default function Layout() {
                 {noLeidas} 🔔
               </span>
             )}
+          </div>
+        )}
+        {user?.rol === 'superadmin' && orgActiva && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12,
+            background: 'var(--c-amber-bg)', border: '1px solid var(--c-amber)', color: 'var(--c-amber)',
+            borderRadius: 8, padding: '8px 14px', marginBottom: 16, fontSize: 13, fontWeight: 600,
+          }}>
+            <span>👁️ Modo superadmin — viendo la organización <b>{orgActiva.nombre}</b></span>
+            <button onClick={() => navigate('/organizaciones')} style={{
+              background: 'none', border: '1px solid var(--c-amber)', color: 'var(--c-amber)',
+              borderRadius: 6, padding: '4px 10px', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+            }}>Cambiar organización</button>
           </div>
         )}
         <Outlet />

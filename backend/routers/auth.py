@@ -171,6 +171,7 @@ def login(request: Request, response: Response, data: schemas.LoginRequest, db: 
         db.commit()
 
     token_data = {"sub": user.username, "rol": user.rol, "nombre": user.nombre,
+                  "organizacion_id": user.organizacion_id,
                   "cliente_ref": user.cliente_ref or "", "ver_detalle": bool(user.ver_detalle)}
     access_token = create_token(token_data)
     rt = create_token(
@@ -184,6 +185,7 @@ def login(request: Request, response: Response, data: schemas.LoginRequest, db: 
         "rol": user.rol,
         "nombre": user.nombre,
         "username": user.username,
+        "organizacion_id": user.organizacion_id,
         "cliente_ref": user.cliente_ref or "",
         "ver_detalle": bool(user.ver_detalle),
     }
@@ -231,6 +233,7 @@ def refresh_token(request: Request, response: Response, db: Session = Depends(ge
         _blacklist_jti(db, jti, expires_at)
 
     claims = {"sub": user.username, "rol": user.rol, "nombre": user.nombre,
+              "organizacion_id": user.organizacion_id,
               "cliente_ref": user.cliente_ref or "", "ver_detalle": bool(user.ver_detalle)}
     new_access = create_token(claims)
     new_refresh = create_token(

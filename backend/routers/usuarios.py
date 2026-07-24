@@ -40,13 +40,14 @@ def set_usuario_ver_detalle(id: int, valor: bool, db: Session = Depends(get_db),
 
 @router.delete("/{id}")
 def delete_usuario(id: int, db: Session = Depends(get_db), token=Depends(require_admin)):
-    u = crud.get_usuario(db, id)
+    u = crud.get_usuario(db, id)   # scopeado a la organización del admin
     if not u: raise HTTPException(404, "Usuario no encontrado")
-    if u.username == "admin":
-        raise HTTPException(400, "No puedes eliminar el administrador principal")
+    if u.username == token.get("sub"):
+        raise HTTPException(400, "No puedes eliminarte a ti mismo")
     if u.rol == "admin":
-        admins_activos = db.query(models.Usuario).filter_by(rol="admin", activo=True).count()
+        admins_activos = db.query(models.Usuario).filter_by(
+            rol="admin", activo=True, organizacion_id=u.organizacion_id).count()
         if admins_activos <= 1:
-            raise HTTPException(400, "No puedes eliminar el único admin activo del sistema")
+            raise HTTPException(400, "No puedes eliminar el único admin activo de la organización")
     crud.delete_usuario(db, id, user=token.get("sub", "sistema"))
     return {"ok": True}

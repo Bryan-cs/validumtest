@@ -7,13 +7,18 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(config => {
-  // Leer token desde Zustand persist store (fuente única de verdad)
-  let token = null;
+  // Leer estado desde Zustand persist store (fuente única de verdad)
+  let state = null;
   try {
-    const stored = localStorage.getItem('bbc-auth');
-    if (stored) token = JSON.parse(stored)?.state?.token;
+    const stored = localStorage.getItem('bbc-auth') ?? sessionStorage.getItem('bbc-auth');
+    if (stored) state = JSON.parse(stored)?.state;
   } catch { /* ignorar */ }
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  if (state?.token) config.headers.Authorization = `Bearer ${state.token}`;
+  // Multi-tenant god mode: el superadmin envía la organización activa que está viendo.
+  // El backend IGNORA este header para usuarios normales (usan su propia org del token).
+  if (state?.user?.rol === 'superadmin' && state?.orgActiva?.id) {
+    config.headers['X-Org-Id'] = String(state.orgActiva.id);
+  }
   return config;
 });
 

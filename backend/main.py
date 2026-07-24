@@ -31,7 +31,7 @@ from datetime import datetime, timezone
 from database import get_db, init_db
 from sqlalchemy.orm import Session
 import models, crud
-from routers.deps import verify_token
+from routers.deps import verify_token, tenant_scope
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -305,29 +305,38 @@ from routers import actividad as actividad_router
 from routers import news as news_router
 from routers import credenciales as credenciales_router
 from routers import leads as leads_router
+from routers import organizaciones as organizaciones_router
+
+# Aislamiento multi-tenant: todas las rutas de datos se registran con la dependencia tenant_scope,
+# que fija la organización activa en el ContextVar (auto-filtra lecturas y auto-sella escrituras).
+# EXCEPCIONES:
+#  - auth: login/refresh no tienen token todavía.
+#  - organizaciones: panel del superadmin, opera a través de organizaciones (sin scope fijo).
+_TENANT = [Depends(tenant_scope)]
 
 app.include_router(auth_router.router)
-app.include_router(afiliados_router.router)
-app.include_router(facturas_router.router)
-app.include_router(reportes_router.router)
-app.include_router(tareas_router.router)
-app.include_router(portal_router.router)
-app.include_router(documentos_router)
-app.include_router(planillas_router.router)
-app.include_router(seguimiento_arl_router.router)
-app.include_router(eliminados_router.router)
-app.include_router(retiros_router.router)
-app.include_router(empleados_router.router)
-app.include_router(nomina_router.router)
-app.include_router(gastos_router.router)
-app.include_router(usuarios_router.router)
-app.include_router(config_router.router)
-app.include_router(dashboard_router.router)
-app.include_router(cobro_router.router)
-app.include_router(actividad_router.router)
-app.include_router(news_router.router)
-app.include_router(credenciales_router.router)
-app.include_router(leads_router.router)
+app.include_router(organizaciones_router.router)
+app.include_router(afiliados_router.router, dependencies=_TENANT)
+app.include_router(facturas_router.router, dependencies=_TENANT)
+app.include_router(reportes_router.router, dependencies=_TENANT)
+app.include_router(tareas_router.router, dependencies=_TENANT)
+app.include_router(portal_router.router, dependencies=_TENANT)
+app.include_router(documentos_router, dependencies=_TENANT)
+app.include_router(planillas_router.router, dependencies=_TENANT)
+app.include_router(seguimiento_arl_router.router, dependencies=_TENANT)
+app.include_router(eliminados_router.router, dependencies=_TENANT)
+app.include_router(retiros_router.router, dependencies=_TENANT)
+app.include_router(empleados_router.router, dependencies=_TENANT)
+app.include_router(nomina_router.router, dependencies=_TENANT)
+app.include_router(gastos_router.router, dependencies=_TENANT)
+app.include_router(usuarios_router.router, dependencies=_TENANT)
+app.include_router(config_router.router, dependencies=_TENANT)
+app.include_router(dashboard_router.router, dependencies=_TENANT)
+app.include_router(cobro_router.router, dependencies=_TENANT)
+app.include_router(actividad_router.router, dependencies=_TENANT)
+app.include_router(news_router.router, dependencies=_TENANT)
+app.include_router(credenciales_router.router, dependencies=_TENANT)
+app.include_router(leads_router.router, dependencies=_TENANT)
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────

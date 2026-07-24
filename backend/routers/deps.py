@@ -2,7 +2,8 @@
 import os
 import time
 import uuid
-from fastapi import HTTPException, Depends
+from typing import Optional
+from fastapi import HTTPException, Depends, Header
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from datetime import datetime, timedelta, timezone
 import jwt
@@ -116,3 +117,44 @@ def require_admin_or_empleado(token=Depends(verify_token)):
     if token.get("rol") not in ("admin", "empleado"):
         raise HTTPException(status_code=403, detail="Requiere rol administrador o empleado")
     return token
+
+
+def require_superadmin(token=Depends(verify_token)):
+    """Solo el superadmin del SaaS (gestiona organizaciones y sus usuarios)."""
+    if token.get("rol") != "superadmin":
+        raise HTTPException(status_code=403, detail="Requiere rol superadministrador")
+    return token
+
+
+def get_org_id(token=Depends(verify_token),
+               x_org_id: Optional[int] = Header(None, alias="X-Org-Id")) -> int:
+    """Organización efectiva de la petición — FUENTE ÚNICA de aislamiento multi-tenant.
+
+    - superadmin (god mode): opera dentro de la organización indicada en el header X-Org-Id.
+    - usuario normal: SIEMPRE su propia organización (el header X-Org-Id se ignora → sin fugas).
+    Toda ruta de datos debe scopearse con este valor.
+    """
+    if token.get("rol") == "superadmin":
+        if not x_org_id:
+            raise HTTPException(status_code=400,
+                                detail="Superadmin debe seleccionar una organización (header X-Org-Id)")
+        return int(x_org_id)
+    org = token.get("organizacion_id")
+    if not org:
+        raise HTTPException(status_code=403, detail="Usuario sin organización asignada")
+    return int(org)
+
+
+async def tenant_scope(org_id: int = Depends(get_org_id)):
+    """Dependencia de router para rutas de datos: fija la organización activa en el ContextVar
+    durante la petición y la resetea al terminar. El listener de tenant.py usa ese valor para
+    auto-filtrar lecturas y auto-sellar escrituras por organización.
+
+    Async a propósito: al setear el ContextVar en el contexto del event-loop, el valor se propaga
+    al endpoint aunque corra en el threadpool (anyio copia el contexto al hilo)."""
+    import tenant
+    tok = tenant.set_org(org_id)
+    try:
+        yield org_id
+    finally:
+        tenant.reset_org(tok)

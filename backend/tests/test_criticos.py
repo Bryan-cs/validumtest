@@ -278,6 +278,7 @@ def test_alertar_arl_pendientes_crea_notificaciones(client):
             creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=16),
             ultima_alerta_en=None,
         )
+        reg.organizacion_id = db.query(models.Organizacion).filter_by(slug="org-test").first().id
         db.add(reg)
         db.commit()
         db.refresh(reg)
@@ -323,6 +324,7 @@ def test_alertar_arl_pendientes_no_spam(client):
             creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=20),
             ultima_alerta_en=datetime.now(timezone.utc) - timedelta(days=3),
         )
+        reg.organizacion_id = db.query(models.Organizacion).filter_by(slug="org-test").first().id
         db.add(reg)
         db.commit()
     finally:
@@ -372,6 +374,7 @@ def test_alertar_arl_pendientes_retirado_ignorado(client):
             creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=20),
             ultima_alerta_en=None,
         )
+        reg.organizacion_id = db.query(models.Organizacion).filter_by(slug="org-test").first().id
         db.add(reg)
         db.commit()
     finally:
@@ -413,6 +416,7 @@ def test_alertar_arl_pendientes_fresco_ignorado(client):
             creado_en=datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=10),
             ultima_alerta_en=None,
         )
+        reg.organizacion_id = db.query(models.Organizacion).filter_by(slug="org-test").first().id
         db.add(reg)
         db.commit()
     finally:

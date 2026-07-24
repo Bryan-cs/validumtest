@@ -26,6 +26,7 @@ const PlanillasSS         = lazy(() => import('./pages/PlanillasSS'));
 const Finanzas            = lazy(() => import('./pages/Finanzas'));
 const CredencialesPortales = lazy(() => import('./pages/CredencialesPortales'));
 const Leads               = lazy(() => import('./pages/Leads'));
+const Organizaciones      = lazy(() => import('./pages/Organizaciones'));
 
 const qc = new QueryClient({
   defaultOptions: {
@@ -42,17 +43,31 @@ const qc = new QueryClient({
   },
 });
 
+const _Cargando = () => (
+  <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#888', fontSize:14 }}>
+    Cargando...
+  </div>
+);
+
 function PrivateRoute({ children, adminOnly = false }) {
-  const { token, user, _hasHydrated } = useAuthStore();
-  if (!_hasHydrated) return (
-    <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', color:'#888', fontSize:14 }}>
-      Cargando...
-    </div>
-  );
+  const { token, user, orgActiva, _hasHydrated } = useAuthStore();
+  if (!_hasHydrated) return <_Cargando />;
   if (!token) return <Navigate to="/login" replace />;
   // Clientes solo pueden acceder al portal
   if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
-  if (adminOnly && user?.rol !== 'admin') return <Navigate to="/" replace />;
+  // Superadmin (god mode): debe haber elegido una organización para ver datos.
+  if (user?.rol === 'superadmin' && !orgActiva) return <Navigate to="/organizaciones" replace />;
+  // superadmin con org activa actúa como admin de esa organización.
+  const esAdmin = user?.rol === 'admin' || user?.rol === 'superadmin';
+  if (adminOnly && !esAdmin) return <Navigate to="/" replace />;
+  return children;
+}
+
+function SuperAdminRoute({ children }) {
+  const { token, user, _hasHydrated } = useAuthStore();
+  if (!_hasHydrated) return <_Cargando />;
+  if (!token) return <Navigate to="/login" replace />;
+  if (user?.rol !== 'superadmin') return <Navigate to="/" replace />;
   return children;
 }
 
@@ -69,8 +84,9 @@ function ClienteOnlyRoute({ children }) {
 }
 
 function DefaultRedirect() {
-  const { user } = useAuthStore();
+  const { user, orgActiva } = useAuthStore();
   if (user?.rol === 'cliente') return <Navigate to="/portal" replace />;
+  if (user?.rol === 'superadmin' && !orgActiva) return <Navigate to="/organizaciones" replace />;
   return <Dashboard />;
 }
 
@@ -88,6 +104,9 @@ export default function App() {
         <Suspense fallback={<div style={{display:'flex',justifyContent:'center',alignItems:'center',height:'100vh',color:'#888'}}>Cargando...</div>}>
         <Routes>
           <Route path="/login" element={<Login />} />
+
+          {/* Panel del superadmin — gestión de organizaciones (layout propio) */}
+          <Route path="/organizaciones" element={<SuperAdminRoute><Page><Organizaciones /></Page></SuperAdminRoute>} />
 
           {/* Portal de Cliente — layout propio */}
           <Route path="/portal" element={<ClienteOnlyRoute><Page><PortalCliente /></Page></ClienteOnlyRoute>} />

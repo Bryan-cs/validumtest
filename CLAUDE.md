@@ -24,6 +24,33 @@ pnpm start         # Dev server → http://localhost:5173 (vite.config.js)
 pnpm run build     # Build de producción
 ```
 
+## Multi-tenant (Organizaciones)
+
+Este proyecto es **multi-tenant**: aloja varias organizaciones (empresas cliente) con datos
+totalmente aislados. Un **superadmin** (rol `superadmin`, sin `organizacion_id`) crea organizaciones
+y sus usuarios desde `/organizaciones`.
+
+- **Roles**: `superadmin` | `admin` | `empleado` | `cliente`. `admin/empleado/cliente` pertenecen a
+  una organización (`Usuario.organizacion_id`). `username` es único **global** (login sin selector).
+- **Motor de aislamiento** (`backend/tenant.py`): un `ContextVar current_org_id` + listener
+  `do_orm_execute` **auto-filtra** toda lectura ORM y bloquea update/delete cross-tenant; un
+  `before_flush` **auto-sella** `organizacion_id` en inserts. Regla: si no hay organización activa ni
+  id explícito al escribir un modelo tenant → error ruidoso (`TenantContextError`), nunca fila huérfana.
+- **Wiring**: la dependencia `tenant_scope` (en `routers/deps.py`) fija `current_org_id` por petición;
+  se aplica a todos los routers de datos en `main.py` (`include_router(..., dependencies=_TENANT)`).
+  `get_org_id` resuelve la org: usuario normal → su org del token; **superadmin (god mode)** → header
+  `X-Org-Id` (para usuarios normales el header se IGNORA → no hay fuga).
+- **Modelos excluidos del auto-filtro**: `Usuario` (scoping explícito en `crud_usuarios.py`),
+  `Organizacion`, `LoginAttempt`, `TokenBlacklist`.
+- **Config/Lista** dejaron de ser globales → una fila por organización. `Afiliado.doc`, `Empleado.doc`,
+  `Factura(codigo / doc,mes,anio)`, `NominaMensual` usan **unicidad compuesta con `organizacion_id`**.
+- **Frontend**: `useAuth` guarda `orgActiva` (god mode); `utils/api.js` envía `X-Org-Id` solo si
+  superadmin; `SuperAdminRoute` + página `Organizaciones.jsx`; banner god mode en `Layout.jsx`.
+- **Seed/provisión**: `database.py` `_seed()` crea solo el superadmin (`SUPERADMIN_USER/PASS`);
+  `provision_organizacion()` crea org + su Config + Listas + admin inicial.
+- **Startup**: el esquema lo construye `create_all` + `_ensure_columns` (NO `alembic upgrade`).
+  Follow-up: re-baseline de la cadena Alembic para el proyecto nuevo (requiere Postgres para verificar).
+
 ## Architecture
 
 ### Backend (`bbcfile/backend/`)
