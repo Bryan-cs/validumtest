@@ -12,12 +12,17 @@ const inp = { width: '100%', padding: '9px 12px', border: `1px solid ${C.border}
 const lbl = { display: 'block', fontSize: 12, color: C.text2, fontWeight: 500, marginBottom: 4 };
 
 const COLS = [
-  { key: 'pendiente',  label: 'Pendiente',   dot: '#d97706', headBg: '#fffbeb', labelColor: '#92400e', borderColor: '#d97706' },
-  { key: 'en_proceso', label: 'En proceso',  dot: '#2563eb', headBg: '#eff6ff', labelColor: '#1e40af', borderColor: '#2563eb' },
-  { key: 'completada', label: 'Completadas', dot: '#16a34a', headBg: '#f0fdf4', labelColor: '#166534', borderColor: '#16a34a' },
+  { key: 'pendiente',  label: 'Pendiente',   dot: '#d97706', borderColor: '#d97706' },
+  { key: 'en_proceso', label: 'En proceso',  dot: '#2563eb', borderColor: '#2563eb' },
+  { key: 'completada', label: 'Completadas', dot: '#16a34a', borderColor: '#16a34a' },
 ];
-const COL_FINALIZADA = { key: 'finalizada', label: 'Finalizadas', dot: '#94a3b8', headBg: '#f8fafc', labelColor: '#64748b', borderColor: '#94a3b8' };
-const COL_VENCIDA = { key: 'vencida', label: 'Vencidas', dot: '#dc2626', headBg: '#fff9f9', labelColor: '#b91c1c', borderColor: '#fca5a5' };
+const COL_FINALIZADA = { key: 'finalizada', label: 'Finalizadas', dot: '#94a3b8', borderColor: '#94a3b8' };
+const COL_VENCIDA = { key: 'vencida', label: 'Vencidas', dot: '#dc2626', borderColor: '#fca5a5' };
+
+// Tinte y rótulo de columna derivados del color de la columna, mezclados contra
+// los tokens de tema para que funcionen igual en claro y en oscuro.
+const headBg = col => `color-mix(in srgb, ${col.dot} 12%, var(--c-surface))`;
+const headLabel = col => `color-mix(in srgb, ${col.dot} 45%, var(--c-text))`;
 
 function Btn({ children, onClick, variant = 'primary', size = 'md', disabled = false, style = {} }) {
   const base = { cursor: disabled ? 'not-allowed' : 'pointer', border: 'none', borderRadius: 7, fontWeight: 600, fontSize: size === 'sm' ? 12 : 13, padding: size === 'sm' ? '5px 12px' : '9px 18px', opacity: disabled ? 0.6 : 1, fontFamily: FONT, ...style };
@@ -388,8 +393,8 @@ export default function Tareas() {
               onClick={() => setFiltroEstado(active ? '' : col.key)}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20,
-                background: active ? col.dot : col.headBg,
-                color: active ? '#fff' : col.labelColor,
+                background: active ? col.dot : headBg(col),
+                color: active ? '#fff' : headLabel(col),
                 fontSize: 12, fontWeight: 600,
                 border: `1.5px solid ${active ? col.dot : 'transparent'}`,
                 cursor: 'pointer', fontFamily: FONT, transition: 'all .15s',
@@ -406,8 +411,8 @@ export default function Tareas() {
               onClick={() => setFiltroEstado(active ? '' : 'vencida')}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20,
-                background: active ? COL_VENCIDA.dot : COL_VENCIDA.headBg,
-                color: active ? '#fff' : COL_VENCIDA.labelColor,
+                background: active ? COL_VENCIDA.dot : headBg(COL_VENCIDA),
+                color: active ? '#fff' : headLabel(COL_VENCIDA),
                 fontSize: 12, fontWeight: 700,
                 border: `1.5px solid ${active ? COL_VENCIDA.dot : 'transparent'}`,
                 cursor: 'pointer', fontFamily: FONT, transition: 'all .15s',
@@ -424,8 +429,8 @@ export default function Tareas() {
               onClick={() => { setFiltroEstado(active ? '' : 'finalizada'); if (!active) setShowFinalizadas(true); }}
               style={{
                 display: 'flex', alignItems: 'center', gap: 6, padding: '5px 12px', borderRadius: 20,
-                background: active ? COL_FINALIZADA.dot : COL_FINALIZADA.headBg,
-                color: active ? '#fff' : COL_FINALIZADA.labelColor,
+                background: active ? COL_FINALIZADA.dot : headBg(COL_FINALIZADA),
+                color: active ? '#fff' : headLabel(COL_FINALIZADA),
                 fontSize: 12, fontWeight: 600,
                 border: `1.5px solid ${active ? COL_FINALIZADA.dot : 'transparent'}`,
                 cursor: 'pointer', fontFamily: FONT, transition: 'all .15s',
@@ -509,8 +514,8 @@ export default function Tareas() {
       {/* ── KPI semanal ── */}
       {kpiSemanal.length > 0 && (
         <div style={{ marginBottom: 14, background: C.surface, border: `1px solid ${C.border}`, borderRadius: 12, overflow: 'hidden' }}>
-          <div style={{ padding: '7px 16px', borderBottom: `1px solid ${C.border}`, background: '#f0fdf4' }}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#15803d', textTransform: 'uppercase', letterSpacing: '.08em' }}>✦ Completadas esta semana</span>
+          <div style={{ padding: '7px 16px', borderBottom: `1px solid ${C.border}`, background: 'color-mix(in srgb, var(--c-green) 12%, var(--c-surface))' }}>
+            <span style={{ fontSize: 11, fontWeight: 700, color: 'color-mix(in srgb, var(--c-green) 45%, var(--c-text))', textTransform: 'uppercase', letterSpacing: '.08em' }}>✦ Completadas esta semana</span>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap' }}>
             {kpiSemanal.map(([nombre, count], i) => {
@@ -524,9 +529,9 @@ export default function Tareas() {
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 600, color: C.text2, lineHeight: 1, marginBottom: 3 }}>{words[0]} {words[1] || ''}</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 5 }}>
-                      <span style={{ fontSize: 28, fontWeight: 900, color: '#16a34a', lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
-                      <span style={{ fontSize: 11, fontWeight: 600, color: '#16a34a' }}>tarea{count !== 1 ? 's' : ''}</span>
-                      {isFirst && kpiSemanal.length > 1 && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: '#fef9c3', color: '#854d0e', marginLeft: 4 }}>🥇 líder</span>}
+                      <span style={{ fontSize: 28, fontWeight: 900, color: C.green, lineHeight: 1, fontVariantNumeric: 'tabular-nums' }}>{count}</span>
+                      <span style={{ fontSize: 11, fontWeight: 600, color: C.green }}>tarea{count !== 1 ? 's' : ''}</span>
+                      {isFirst && kpiSemanal.length > 1 && <span style={{ fontSize: 10, fontWeight: 700, padding: '1px 6px', borderRadius: 20, background: C.amberBg, color: 'color-mix(in srgb, var(--c-amber) 35%, var(--c-text))', marginLeft: 4 }}>🥇 líder</span>}
                     </div>
                   </div>
                 </div>
@@ -544,7 +549,7 @@ export default function Tareas() {
           {COLS.map(col => (
             <div key={col.key} style={{ flex: 1, minWidth: 280 }}>
               <div className="bbc-skeleton" style={{ height: 40, borderRadius: '10px 10px 0 0' }} />
-              <div style={{ background: '#f8fafc', border: `1px solid ${C.border}`, borderTop: `2px solid ${col.borderColor}`, borderRadius: '0 0 10px 10px', padding: '10px 8px' }}>
+              <div style={{ background: C.surface2, border: `1px solid ${C.border}`, borderTop: `2px solid ${col.borderColor}`, borderRadius: '0 0 10px 10px', padding: '10px 8px' }}>
                 {[90, 70, 110].map((h, i) => <div key={i} className="bbc-skeleton" style={{ height: h, borderRadius: 9, marginBottom: 8 }} />)}
               </div>
             </div>
@@ -562,11 +567,11 @@ export default function Tareas() {
               <div key={col.key} style={{ flex: 1, minWidth: 280, maxWidth: 360, display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
 
                 {/* Column header */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: col.headBg, borderRadius: '10px 10px 0 0' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: headBg(col), borderRadius: '10px 10px 0 0' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span style={{ width: 8, height: 8, borderRadius: '50%', background: col.dot, display: 'inline-block', flexShrink: 0 }} />
-                    <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: col.labelColor }}>{col.label}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 10, padding: '1px 7px', background: 'rgba(0,0,0,.06)', color: col.labelColor }}>{tasks.length}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.06em', color: headLabel(col) }}>{col.label}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, borderRadius: 10, padding: '1px 7px', background: 'color-mix(in srgb, var(--c-text) 10%, transparent)', color: headLabel(col) }}>{tasks.length}</span>
                   </div>
                   {isAdmin && isFinalizada && tasks.length > 0 && (
                     <button type="button"
@@ -601,7 +606,7 @@ export default function Tareas() {
                     ) : (
                       tasks.length > 0 && (
                         <button type="button" onClick={() => setBatchMode(true)}
-                          style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: col.labelColor, cursor: 'pointer', fontFamily: FONT }}>
+                          style={{ fontSize: 11, padding: '3px 9px', borderRadius: 6, border: `1px solid ${C.border}`, background: 'transparent', color: C.text2, cursor: 'pointer', fontFamily: FONT }}>
                           ☑ Seleccionar
                         </button>
                       )
@@ -614,7 +619,7 @@ export default function Tareas() {
                   onDragOver={!isFinalizada && !isVencida ? e => handleDragOver(e, col.key) : undefined}
                   onDragLeave={!isFinalizada && !isVencida ? () => setDragOver(null) : undefined}
                   onDrop={!isFinalizada && !isVencida ? e => handleDrop(e, col.key) : undefined}
-                  style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 8px 12px', background: dragOver === col.key ? `${col.borderColor}18` : '#f8fafc', border: `1px solid ${dragOver === col.key ? col.borderColor : C.border}`, borderTop: `2px solid ${col.borderColor}`, borderRadius: '0 0 10px 10px', minHeight: 120, transition: 'background .15s, border-color .15s' }}>
+                  style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 8px 12px', background: dragOver === col.key ? `${col.borderColor}18` : C.surface2, border: `1px solid ${dragOver === col.key ? col.borderColor : C.border}`, borderTop: `2px solid ${col.borderColor}`, borderRadius: '0 0 10px 10px', minHeight: 120, transition: 'background .15s, border-color .15s' }}>
 
                   {tasks.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '24px 8px', color: C.text2, fontSize: 12 }}>Sin tareas</div>
@@ -632,9 +637,8 @@ export default function Tareas() {
                         onDragStart={canDrag ? e => handleDragStart(e, t.id) : undefined}
                         onDragEnd={canDrag ? handleDragEnd : undefined}
                         style={{
-                          background: marcada ? C.blueBg : vencida ? '#fff9f9' : C.surface,
-                          border: `1px solid ${marcada ? C.blue : vencida ? '#fca5a5' : C.border}`,
-                          borderLeft: `3px solid ${marcada ? C.blue : vencida ? '#dc2626' : col.borderColor}`,
+                          background: marcada ? C.blueBg : vencida ? C.redBg : C.surface,
+                          border: `1px solid ${marcada ? C.blue : vencida ? C.red : C.border}`,
                           borderRadius: 9, overflow: 'hidden',
                           transition: 'box-shadow .15s, border-color .15s, opacity .15s',
                           opacity: dragId === t.id ? 0.45 : 1,
@@ -654,9 +658,9 @@ export default function Tareas() {
                           {/* Badges */}
                           {(t.privada || vencida || urgente) && (
                             <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 7 }}>
-                              {t.privada && <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '2px 7px', background: '#f5f3ff', color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '.03em' }}>🔒 Privada</span>}
-                              {vencida && <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '2px 7px', background: C.redBg, color: C.red, textTransform: 'uppercase', letterSpacing: '.03em' }}>⚠ Vencida</span>}
-                              {urgente && <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '2px 7px', background: '#fffbeb', color: '#92400e', textTransform: 'uppercase', letterSpacing: '.03em' }}>⏰ {dias}d</span>}
+                              {t.privada && <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '2px 7px', background: C.surface2, color: C.text, textTransform: 'uppercase', letterSpacing: '.03em' }}>🔒 Privada</span>}
+                              {vencida && <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '2px 7px', background: C.redBg, color: 'color-mix(in srgb, var(--c-red) 35%, var(--c-text))', textTransform: 'uppercase', letterSpacing: '.03em' }}>⚠ Vencida</span>}
+                              {urgente && <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 5, padding: '2px 7px', background: C.amberBg, color: 'color-mix(in srgb, var(--c-amber) 35%, var(--c-text))', textTransform: 'uppercase', letterSpacing: '.03em' }}>⏰ {dias}d</span>}
                             </div>
                           )}
 

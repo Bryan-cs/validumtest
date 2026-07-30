@@ -1480,7 +1480,7 @@ export default function Afiliados() {
               { label:'Independientes', value:arlStats.independiente, color:C.amber },
             ].map(c => (
               <div key={c.label} style={{ flex:'1 1 120px', minWidth:120, background:C.surface,
-                border:`1px solid ${C.border}`, borderLeft:`3px solid ${c.color}`, borderRadius:10, padding:'10px 14px' }}>
+                border:`1px solid ${C.border}`, borderRadius:10, padding:'10px 14px' }}>
                 <div style={{ fontSize:11, fontWeight:600, color:C.text2, textTransform:'uppercase', letterSpacing:'0.04em' }}>{c.label}</div>
                 <div style={{ fontSize:24, fontWeight:800, color:c.color, lineHeight:1.2 }}>{c.value}</div>
               </div>

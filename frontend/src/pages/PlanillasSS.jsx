@@ -235,7 +235,9 @@ export default function PlanillasSS() {
               {clientesFaltantes.length === 0 ? '✅' : '📋'} {clientes.length - clientesFaltantes.length} de {clientes.length} clientes con planilla en {filtroMes} {filtroAnio}
             </span>
             <div style={{ flex: 1, minWidth: 120, height: 6, background: C.surface2, borderRadius: 4, overflow: 'hidden' }}>
-              <div style={{ width: `${clientes.length ? ((clientes.length - clientesFaltantes.length) / clientes.length) * 100 : 0}%`, height: '100%', background: clientesFaltantes.length === 0 ? C.green : C.amber, transition: 'width .3s' }} />
+              <div style={{ width: '100%', height: '100%', background: clientesFaltantes.length === 0 ? C.green : C.amber,
+                transform: `scaleX(${clientes.length ? (clientes.length - clientesFaltantes.length) / clientes.length : 0})`,
+                transformOrigin: 'left', transition: 'transform .3s cubic-bezier(.22,1,.36,1)' }} />
             </div>
           </div>
           {clientesFaltantes.length > 0 && (
@@ -254,14 +256,14 @@ export default function PlanillasSS() {
 
       {/* Banner: planillas duplicadas */}
       {rol === 'admin' && gruposDuplicados > 0 && (
-        <Card style={{ marginBottom: 16, borderLeft: `3px solid ${C.amber}` }}>
+        <Card style={{ marginBottom: 16, background: C.amberBg, borderColor: C.amber }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
             <span style={{ fontSize: 20 }}>⚠️</span>
             <div style={{ flex: 1, minWidth: 180 }}>
               <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>
                 {gruposDuplicados} cliente{gruposDuplicados !== 1 ? 's' : ''} con planillas duplicadas del mismo periodo
               </div>
-              <div style={{ fontSize: 12, color: C.text2 }}>
+              <div style={{ fontSize: 12, color: 'color-mix(in srgb, var(--c-amber) 35%, var(--c-text))' }}>
                 Únelas en una sola card. No se borra ningún archivo — solo se consolidan.
               </div>
             </div>
