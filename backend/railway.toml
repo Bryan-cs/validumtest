@@ -1,5 +1,13 @@
 [deploy]
-startCommand = "if [ \"$RAILWAY_SERVICE_NAME\" = \"bbc-daily\" ]; then python run_daily.py; elif [ \"$RAILWAY_SERVICE_NAME\" = \"bbc-monthly\" ]; then python run_monthly.py; else alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port $PORT --workers ${WEB_CONCURRENCY:-1} --loop uvloop --log-config log_config.json; fi"
+# El esquema NO se construye con `alembic upgrade head`: lo arma init_db() en el
+# lifespan de la app via create_all(checkfirst=True) + _ensure_columns(). Ver el
+# comentario en database.py:55 — llamar a Alembic en startup multi-worker provoca
+# deadlocks porque abre conexiones fuera del advisory lock.
+# La cadena Alembic quedó baselineada contra la base de BBC prod (su migración
+# raíz asume que las tablas ya existen), asi que correrla contra un Postgres nuevo
+# falla en la primera sentencia. Para este proyecto se hace `alembic stamp head`
+# una vez tras el primer arranque y las migraciones futuras siguen desde ahí.
+startCommand = "if [ \"$RAILWAY_SERVICE_NAME\" = \"bbc-daily\" ]; then python run_daily.py; elif [ \"$RAILWAY_SERVICE_NAME\" = \"bbc-monthly\" ]; then python run_monthly.py; else uvicorn main:app --host 0.0.0.0 --port $PORT --workers ${WEB_CONCURRENCY:-1} --loop uvloop --log-config log_config.json; fi"
 healthcheckPath = "/health"
 healthcheckTimeout = 60
 region = "us-east4"
