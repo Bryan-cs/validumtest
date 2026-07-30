@@ -18,6 +18,18 @@ def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
             return {}
 
     rows = db.query(models.Eliminado).order_by(models.Eliminado.id.desc()).all()
+
+    # Un usuario con rol cliente solo puede ver SUS eliminados. Sin esto veia los de
+    # todos los clientes de la organizacion. El cliente no es una columna de la tabla
+    # (Eliminado guarda `empresa`, que es otra cosa): vive en el snapshot JSON
+    # datos_completos.cliente_txt, asi que el filtro va en Python y no en SQL.
+    if token.get("rol") == "cliente":
+        cliente_ref = (token.get("cliente_ref") or "").strip()
+        if not cliente_ref:
+            return []
+        rows = [r for r in rows
+                if (_parse_datos(r.datos_completos).get("cliente_txt") or "").strip() == cliente_ref]
+
     return [
         {
             "id": r.id,

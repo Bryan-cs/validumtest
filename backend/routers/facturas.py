@@ -30,6 +30,14 @@ def list_facturas(
     """
     if mes and mes not in MESES:
         raise HTTPException(422, f"mes debe ser nombre en español (ej: Abril). Recibido: '{mes}'")
+    # Un usuario con rol cliente solo puede ver SUS facturas. Sin esto veia las de
+    # todos los clientes de la organizacion, montos incluidos. Mismo criterio que
+    # el listado de afiliados.
+    if token.get("rol") == "cliente":
+        cliente_ref = (token.get("cliente_ref") or "").strip()
+        if not cliente_ref:
+            return {"total": 0, "items": []} if limit else []
+        cliente = cliente_ref
     return crud.get_facturas(db, anio=anio, mes=mes, cliente=cliente,
                               estado=estado, banco=banco, doc=doc,
                               skip=skip, limit=limit,
