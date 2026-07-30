@@ -219,14 +219,15 @@ def alertar_arl_pendientes():
         ahora = datetime.now(timezone.utc)
         umbral_alerta  = ahora - timedelta(days=15)
         umbral_reenvio = ahora - timedelta(days=7)
-        # creado_en es naive (sin timezone) — comparar con naive UTC
-        umbral_alerta_naive = umbral_alerta.replace(tzinfo=None)
+        # creado_en es DateTime(timezone=True). Se compara AWARE para que sea
+        # correcto en Postgres (timestamptz) y no depender de que el servidor
+        # corra en UTC; SQLite tolera ambas.
 
         # Scheduler sin contexto de organización: escanea registros de TODAS las organizaciones.
         # Las notificaciones se dirigen y se sellan por la organización de cada registro (multi-tenant).
         registros = db.query(models.SeguimientoArl).filter(
             models.SeguimientoArl.estado == 'activo',
-            models.SeguimientoArl.creado_en < umbral_alerta_naive,
+            models.SeguimientoArl.creado_en < umbral_alerta,
             or_(
                 models.SeguimientoArl.ultima_alerta_en.is_(None),
                 models.SeguimientoArl.ultima_alerta_en < umbral_reenvio,
@@ -252,7 +253,14 @@ def alertar_arl_pendientes():
             destinatarios = destinatarios_de(reg.organizacion_id)
             if not destinatarios:
                 continue
-            dias = (ahora.replace(tzinfo=None) - reg.creado_en).days
+            # creado_en es DateTime(timezone=True): Postgres lo devuelve AWARE y
+            # SQLite NAIVE. Restar sin normalizar reventaba en produccion con
+            # "can't subtract offset-naive and offset-aware datetimes", el job
+            # moria entero en el except y nunca se enviaba una sola alerta.
+            creado = reg.creado_en
+            if creado.tzinfo is None:
+                creado = creado.replace(tzinfo=timezone.utc)
+            dias = (ahora - creado).days
             msg = f"⚠️ {reg.nombre} lleva {dias} días en SeguimientoARL sin activar ({reg.entidad_arl})"
             for u in destinatarios:
                 db.add(models.Notificacion(usuario=u.username, mensaje=msg,

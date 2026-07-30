@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 from database import get_db
 import schemas, crud
@@ -8,7 +8,7 @@ router = APIRouter(prefix="/nomina", tags=["nomina"])
 
 
 @router.get("")
-def get_nomina(mes: int, anio: int,
+def get_nomina(mes: int = Query(..., ge=1, le=12), anio: int = Query(..., ge=2000, le=2100),
                db: Session = Depends(get_db), token=Depends(require_admin)):
     return crud.get_nomina_mensual(db, mes=mes, anio=anio)
 

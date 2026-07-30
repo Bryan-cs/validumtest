@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from database import get_db
 import schemas, crud
@@ -10,7 +10,7 @@ router = APIRouter(tags=["gastos"])
 # ─── GASTOS ───────────────────────────────────────────────────────────────────
 
 @router.get("/gastos")
-def list_gastos(mes: int, anio: int,
+def list_gastos(mes: int = Query(..., ge=1, le=12), anio: int = Query(..., ge=2000, le=2100),
                 db: Session = Depends(get_db), token=Depends(require_admin)):
     return crud.get_gastos(db, mes=mes, anio=anio)
 

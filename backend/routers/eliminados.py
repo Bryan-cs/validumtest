@@ -1,5 +1,5 @@
 import json
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from database import get_db
@@ -10,7 +10,11 @@ router = APIRouter(prefix="/eliminados", tags=["eliminados"])
 
 
 @router.get("")
-def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
+def list_eliminados(skip: int = Query(0, ge=0), limit: int = Query(0, ge=0, le=1000),
+                    db: Session = Depends(get_db), token=Depends(verify_token)):
+    """limit=0 (default) devuelve todo, que es lo que espera Afiliados.jsx hoy: consume
+    la respuesta como array plano. skip/limit quedan disponibles para paginar sin
+    romper ese contrato."""
     def _parse_datos(datos_completos):
         try:
             return json.loads(datos_completos or "{}")
@@ -30,6 +34,9 @@ def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
         rows = [r for r in rows
                 if (_parse_datos(r.datos_completos).get("cliente_txt") or "").strip() == cliente_ref]
 
+    if skip or limit:
+        rows = rows[skip: (skip + limit) if limit else None]
+
     return [
         {
             "id": r.id,
@@ -44,6 +51,19 @@ def list_eliminados(db: Session = Depends(get_db), token=Depends(verify_token)):
         }
         for r in rows
     ]
+
+
+@router.post("/{id}/a-retiros", status_code=201)
+def eliminado_a_retiros(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+    """Mueve un eliminado al historial de retiros.
+
+    crud_retiros.eliminado_a_retiro() existia completa pero ningun router la
+    exponia, asi que la capacidad que documenta CLAUDE.md ("Eliminados → Retiros")
+    no era alcanzable por HTTP. El camino alternativo tampoco servia: POST /retiros
+    usa get_afiliado_by_doc, que filtra activo=True, de modo que un eliminado
+    siempre daba 404.
+    """
+    return crud.eliminado_a_retiro(db, id, user=token.get("sub", "sistema"))
 
 
 @router.get("/{id}/preview")

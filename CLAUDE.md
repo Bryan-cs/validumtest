@@ -38,18 +38,31 @@ y sus usuarios desde `/organizaciones`.
   id explícito al escribir un modelo tenant → error ruidoso (`TenantContextError`), nunca fila huérfana.
 - **Wiring**: la dependencia `tenant_scope` (en `routers/deps.py`) fija `current_org_id` por petición;
   se aplica a todos los routers de datos en `main.py` (`include_router(..., dependencies=_TENANT)`).
-  `get_org_id` resuelve la org: usuario normal → su org del token; **superadmin (god mode)** → header
-  `X-Org-Id` (para usuarios normales el header se IGNORA → no hay fuga).
+  `get_org_id` toma la organización **únicamente del JWT firmado**. No lee ningún header: no existe
+  "god mode" por `X-Org-Id` (se eliminó). El superadmin no tiene organización, así que recibe **403**
+  en toda ruta de datos; para operar dentro de una organización debe autenticarse como un usuario de
+  esa organización. Cero superficie de spoofing desde el cliente.
+- **Autorización por rol**: los routers de uso interno (reportes, planillas, seguimiento_arl,
+  eliminados, retiros, empleados, nomina, gastos, usuarios, dashboard, cobro, actividad, credenciales)
+  se registran con `_INTERNO` = `_TENANT + require_admin_or_empleado`, que bloquea al rol `cliente`.
+  Un cliente solo alcanza `/portal/*`, `/documentos`, `/listas`, `/tareas/notificaciones` y `/auth/*`.
+  En `afiliados` y `facturas` el listado se filtra además por `cliente_ref`.
 - **Modelos excluidos del auto-filtro**: `Usuario` (scoping explícito en `crud_usuarios.py`),
   `Organizacion`, `LoginAttempt`, `TokenBlacklist`.
 - **Config/Lista** dejaron de ser globales → una fila por organización. `Afiliado.doc`, `Empleado.doc`,
   `Factura(codigo / doc,mes,anio)`, `NominaMensual` usan **unicidad compuesta con `organizacion_id`**.
-- **Frontend**: `useAuth` guarda `orgActiva` (god mode); `utils/api.js` envía `X-Org-Id` solo si
-  superadmin; `SuperAdminRoute` + página `Organizaciones.jsx`; banner god mode en `Layout.jsx`.
+- **Frontend**: `SuperAdminRoute` + página `Organizaciones.jsx` para el panel del superadmin.
+  (`utils/api.js` todavía envía `X-Org-Id` cuando el rol es superadmin, pero el backend lo ignora.)
 - **Seed/provisión**: `database.py` `_seed()` crea solo el superadmin (`SUPERADMIN_USER/PASS`);
   `provision_organizacion()` crea org + su Config + Listas + admin inicial.
-- **Startup**: el esquema lo construye `create_all` + `_ensure_columns` (NO `alembic upgrade`).
-  Follow-up: re-baseline de la cadena Alembic para el proyecto nuevo (requiere Postgres para verificar).
+- **Startup**: el esquema lo construye `create_all` + `_ensure_columns` en `init_db()` (NO
+  `alembic upgrade`; ver el comentario en `database.py:55` — Alembic en startup multi-worker abre
+  conexiones fuera del advisory lock y genera deadlocks). El `startCommand` de `railway.toml` **ya no
+  llama a Alembic**: la migración raíz quedó baselineada contra la base de BBC prod (no crea tablas,
+  asume que existen) y contra un Postgres nuevo fallaba en la primera sentencia. Peor: habría aplicado
+  `retiros_doc_key UNIQUE(doc)`, que rompe el multi-tenant porque impide que dos organizaciones
+  retiren la misma cédula. La base de producción quedó estampada con `alembic stamp head`
+  (`s3t4u5v6w7x8`), así que las migraciones futuras aplican desde ahí.
 
 ## Architecture
 
@@ -154,9 +167,11 @@ React Page → Axios (api.js) → FastAPI (main.py) → crud_*.py → SQLAlchemy
 | `SECRET_KEY` | JWT signing key | Vacío — **requerido en prod** |
 | `PORT` | Puerto del servidor | 8000 |
 | `REDIS_URL` | Redis para caché | Sin Redis = caché en memoria |
-| `STORAGE_BUCKET` | Bucket Cloudflare R2 | Sin bucket = disco local (falla en prod) |
-| `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | Credenciales R2 | — |
-| `R2_ENDPOINT_URL` | Endpoint R2 | — |
+| `STORAGE_BUCKET` | Nombre del bucket S3 | **Requerido en prod** (el guard de `documentos.py` corre en tiempo de import: sin storage el backend NO arranca contra Postgres) |
+| `STORAGE_ENDPOINT` | Endpoint S3 explícito (Railway Buckets, MinIO, etc.) | Si falta, se arma el de R2 con `STORAGE_ACCOUNT` |
+| `STORAGE_ACCOUNT` | Account ID de Cloudflare (solo modo R2) | — |
+| `STORAGE_KEY` / `STORAGE_SECRET` | Credenciales S3 | — |
+| `STORAGE_REGION` | Región S3 | `auto` |
 | `SENTRY_DSN` | Monitoreo de errores | Opcional |
 | `WEB_CONCURRENCY` | Workers Uvicorn | 1 |
 | `ENABLE_SCHEDULER` | APScheduler en proceso web | `false` |
@@ -169,6 +184,11 @@ React Page → Axios (api.js) → FastAPI (main.py) → crud_*.py → SQLAlchemy
 - **DB**: PostgreSQL en Railway (backups diarios nativos Railway Pro)
 - **Cron**: `bbc-daily` (00:00 UTC) y `bbc-monthly` (06:00 UTC 1er día) — servicios separados Railway
 - **Repo**: `Bryan-cs/ValidumMultiEmpresa` (privado), rama `main`. Proyecto independiente de BBC prod.
+- **Proyecto Railway**: `validum` (`us-east4`). Servicios: `validum-api`, `Postgres`, `Redis`,
+  `bbc-daily` (`0 0 * * *`), `bbc-monthly` (`0 6 1 * *`). Bucket S3: `validum-docs` (región `iad`).
+  El deploy es automático con cada push a `main` (deployment trigger de GitHub).
+- **Frontend**: proyecto Vercel `validum-frontend` → `https://validum-frontend.vercel.app`.
+  `VITE_API_URL` se hornea en build time: **cambiarla exige redesplegar**, no basta con setearla.
 
 ## Credenciales dev por defecto
 - Superadmin: `superadmin / superadmin1234` (solo dev/SQLite; en prod se define con `SUPERADMIN_USER/PASS`)

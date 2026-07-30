@@ -1,16 +1,54 @@
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
+from typing import ClassVar
+from functools import lru_cache
 from typing import Optional, List, Any, Literal
 from datetime import datetime
 import re as _re
 
 _DATE_RE = _re.compile(r'^\d{4}-\d{2}-\d{2}$')
 
+
+@lru_cache(maxsize=None)
+def _largos_columna(modelo: str) -> dict:
+    """Largo maximo de cada columna String del modelo SQLAlchemy indicado.
+
+    Se lee del modelo en vez de repetir max_length campo por campo: asi la
+    validacion no se desincroniza si alguien cambia una columna.
+    """
+    import models
+    tabla = getattr(models, modelo).__table__
+    return {c.name: c.type.length for c in tabla.columns
+            if getattr(c.type, "length", None)}
+
+
+class LargosDeColumna(BaseModel):
+    """Rechaza strings mas largos que su columna, con 422 y mensaje preciso.
+
+    Sin esto el valor viajaba hasta Postgres y volvia como DataError, que el
+    handler global de main.py convierte en un 422 generico ("algun valor excede
+    el largo permitido"). Aca se sabe QUE campo y CUANTO sobra.
+    """
+    _MODELO: ClassVar[str] = ""
+
+    @model_validator(mode="after")
+    def _verificar_largos(self):
+        if not self._MODELO:
+            return self
+        limites = _largos_columna(self._MODELO)
+        for campo, valor in self.__dict__.items():
+            tope = limites.get(campo)
+            if tope and isinstance(valor, str) and len(valor) > tope:
+                raise ValueError(
+                    f"{campo}: maximo {tope} caracteres (recibidos {len(valor)})")
+        return self
+
 class LoginRequest(BaseModel):
     username: str
     password: str
     remember_me: bool = True
 
-class AfiliadoCreate(BaseModel):
+class AfiliadoCreate(LargosDeColumna):
+    _MODELO: ClassVar[str] = "Afiliado"
     nombre: str
     tipo_doc: str = "CC"
     doc: str
@@ -82,7 +120,8 @@ class AfiliadoCreate(BaseModel):
             raise ValueError(f'{info.field_name}: fecha inválida ({v})')
         return v
 
-class FacturaCreate(BaseModel):
+class FacturaCreate(LargosDeColumna):
+    _MODELO: ClassVar[str] = "Factura"
     codigo: str = ""
     nombre_afiliado: str = ""
     doc: str
@@ -123,7 +162,8 @@ class FacturaCreate(BaseModel):
             raise ValueError('Estado en creación debe ser "pendiente"')
         return 'pendiente'
 
-class FacturaUpdate(BaseModel):
+class FacturaUpdate(LargosDeColumna):
+    _MODELO: ClassVar[str] = "Factura"
     cliente: Optional[str] = None
     mes: Optional[str] = None
     anio: Optional[str] = None
@@ -153,7 +193,8 @@ class FacturaUpdate(BaseModel):
             raise ValueError('Estado debe ser "pendiente", "pagado" o "planilla_pagada"')
         return v
 
-class RetiroCreate(BaseModel):
+class RetiroCreate(LargosDeColumna):
+    _MODELO: ClassVar[str] = "Retiro"
     doc: str
     fecha: str
     motivo: str
@@ -177,7 +218,8 @@ class RetiroCreate(BaseModel):
             raise ValueError(f'fecha: fecha inválida ({v})')
         return v
 
-class EmpleadoCreate(BaseModel):
+class EmpleadoCreate(LargosDeColumna):
+    _MODELO: ClassVar[str] = "Empleado"
     nombre: str
     doc: str = ""
     cargo: str = ""
@@ -356,7 +398,8 @@ class AvisoClienteCreate(BaseModel):
     titulo: str
     mensaje: str
 
-class SeguimientoArlCreate(BaseModel):
+class SeguimientoArlCreate(LargosDeColumna):
+    _MODELO: ClassVar[str] = "SeguimientoArl"
     nombre: str
     documento: str
     cliente: str = ""
@@ -380,7 +423,8 @@ class SeguimientoArlCreate(BaseModel):
             raise ValueError(f'fecha_afiliacion: fecha inválida ({v})')
         return v
 
-class SeguimientoArlUpdate(BaseModel):
+class SeguimientoArlUpdate(LargosDeColumna):
+    _MODELO: ClassVar[str] = "SeguimientoArl"
     nombre: Optional[str] = None
     documento: Optional[str] = None
     cliente: Optional[str] = None
