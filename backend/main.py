@@ -107,7 +107,10 @@ def _rl_check(subject: str, path: str) -> tuple[int, bool]:
     key = f"rl:{subject}:{path.split('/')[1]}:{window}"
 
     try:
-        from crud import _redis_client, _redis_disponible
+        # Ver nota en /health/detail: `crud` reexporta con import-star y omite los
+        # nombres con guion bajo, asi que este import fallaba y el rate limiting caia
+        # siempre al contador en memoria (por worker, no compartido).
+        from crud_cache import _redis_client, _redis_disponible
         if _redis_disponible():
             count = _redis_client.incr(key)
             if count == 1:
@@ -362,7 +365,11 @@ def health_detail(db: Session = Depends(get_db), token=Depends(verify_token)):
         db_ok = False
     redis_ok = None
     try:
-        from crud import _redis_client
+        # Importar del módulo real, no del shim `crud`: este hace `from crud_cache import *`
+        # y, sin __all__, el import-star omite los nombres con guion bajo. Importarlo desde
+        # `crud` lanzaba ImportError siempre y el health reportaba redis en error aunque la
+        # conexión estuviera sana.
+        from crud_cache import _redis_client
         if _redis_client:
             redis_ok = _redis_client.ping()
     except Exception:
