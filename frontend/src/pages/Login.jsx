@@ -61,7 +61,8 @@ const ESTILOS = `
 .lg-hero { position: relative; z-index: 2; }
 .lg-hero h1 { font-size: clamp(30px, 3.2vw, 44px); font-weight: 900; letter-spacing: -1px; line-height: 1.08; margin: 0 0 16px; animation: lgUp .6s .1s ease both; }
 .lg-hero h1 em { font-style: normal; color: var(--lime); }
-.lg-hero p  { color: rgba(255,255,255,.74); font-size: 14.5px; line-height: 1.65; max-width: 40ch; margin: 0 0 28px; animation: lgUp .6s .2s ease both; }
+.lg-hero p  { color: rgba(255,255,255,.93); font-size: clamp(15.5px, 1.15vw, 17.5px); line-height: 1.58; max-width: 42ch; margin: 0 0 28px; animation: lgUp .6s .2s ease both; }
+.lg-hero p strong { color: #fff; font-weight: 600; }
 .lg-feats { display: flex; flex-direction: column; gap: 13px; }
 .lg-feat { display: flex; align-items: center; gap: 12px; font-size: 13.5px; font-weight: 600; color: rgba(255,255,255,.92); animation: lgIn .5s ease both; }
 .lg-feat-ico {
@@ -89,7 +90,7 @@ const ESTILOS = `
 .lg-webnote a:hover { color: var(--lime-d); }
 
 /* ── Formulario ── */
-.lg-formpane { flex: 1; display: flex; align-items: center; justify-content: center; padding: 28px; position: relative; }
+.lg-formpane { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: center; padding: 28px; position: relative; }
 .lg-formpane::before {
   content: ''; position: absolute; width: 340px; height: 340px; border-radius: 999px;
   background: radial-gradient(circle, rgba(29,63,114,.09), transparent 70%); top: 8%; right: 4%;
@@ -220,14 +221,13 @@ export default function Login() {
         <div className="lg-hero">
           <h1>Todas tus <em>organizaciones</em>,<br />un solo mando.</h1>
           <p>
-            Afiliaciones, novedades, planillas y facturación — cada organización con sus
-            datos, en una sola plataforma potente y ordenada.
+            <strong>Afiliaciones, novedades, planillas y facturación</strong> — cada
+            organización con sus datos, en una sola plataforma potente y ordenada.
           </p>
           <div className="lg-feats">
             {['Datos 100% aislados por organización',
               'Gestión de afiliados y novedades',
-              'Facturación y reportes por organización',
-              'Portal del cliente integrado'].map((f, i) => (
+              'Facturación y reportes por organización'].map((f, i) => (
               <div key={f} className="lg-feat" style={{ animationDelay: `${0.3 + i * 0.1}s` }}>
                 <span className="lg-feat-ico"><IcoCheck /></span>{f}
               </div>
