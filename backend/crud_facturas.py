@@ -14,7 +14,13 @@ def _next_codigo(db):
     db_url = str(db.bind.url) if db.bind else os.environ.get("DATABASE_URL", "")
     if "postgresql" in db_url:
         # Advisory lock por organización (evita colisión de secuencia con concurrencia dentro de la org).
-        db.execute(_text("SELECT pg_advisory_xact_lock(9876543210, :org)"), {"org": org or 0})
+        # La forma de dos argumentos es pg_advisory_xact_lock(int4, int4). El literal
+        # 9876543210 excede int4, asi que Postgres lo tipaba como bigint y buscaba una
+        # sobrecarga (bigint, integer) que no existe: toda creacion de factura moria con
+        # UndefinedFunction. Se usa una clave de namespace dentro del rango de int4 y se
+        # castean ambos argumentos de forma explicita.
+        db.execute(_text("SELECT pg_advisory_xact_lock(CAST(987654321 AS int), CAST(:org AS int))"),
+                   {"org": org or 0})
         # codigo es único por organización → la secuencia también debe scoparse por org.
         result = db.execute(_text(
             "SELECT MAX(CAST(SPLIT_PART(codigo, '-', 2) AS INTEGER)) "
