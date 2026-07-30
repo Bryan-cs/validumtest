@@ -32,7 +32,7 @@ from database import get_db, init_db
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import DataError as _SADataError
 import models, crud
-from routers.deps import verify_token, tenant_scope
+from routers.deps import verify_token, tenant_scope, require_admin_or_empleado
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
 from slowapi import Limiter, _rate_limit_exceeded_handler
@@ -333,27 +333,36 @@ from routers import organizaciones as organizaciones_router
 #  - organizaciones: panel del superadmin, opera a través de organizaciones (sin scope fijo).
 _TENANT = [Depends(tenant_scope)]
 
+# Routers de uso EXCLUSIVAMENTE interno: un usuario con rol `cliente` no debe
+# alcanzarlos. Antes solo algunas rutas sueltas filtraban por cliente_ref y el
+# resto quedaba abierto a cualquier usuario autenticado de la organizacion: un
+# cliente podia bajarse el Excel con TODOS los afiliados (/reportes/*), borrar
+# permanentemente (/eliminados/{id}), o crear y borrar retiros y seguimiento ARL.
+# El portal del cliente solo consume /portal/*, /documentos, /listas y
+# /tareas/notificaciones, asi que bloquear estos routers no le quita nada.
+_INTERNO = _TENANT + [Depends(require_admin_or_empleado)]
+
 app.include_router(auth_router.router)
 app.include_router(organizaciones_router.router)
 app.include_router(afiliados_router.router, dependencies=_TENANT)
 app.include_router(facturas_router.router, dependencies=_TENANT)
-app.include_router(reportes_router.router, dependencies=_TENANT)
+app.include_router(reportes_router.router, dependencies=_INTERNO)
 app.include_router(tareas_router.router, dependencies=_TENANT)
 app.include_router(portal_router.router, dependencies=_TENANT)
 app.include_router(documentos_router, dependencies=_TENANT)
-app.include_router(planillas_router.router, dependencies=_TENANT)
-app.include_router(seguimiento_arl_router.router, dependencies=_TENANT)
-app.include_router(eliminados_router.router, dependencies=_TENANT)
-app.include_router(retiros_router.router, dependencies=_TENANT)
-app.include_router(empleados_router.router, dependencies=_TENANT)
-app.include_router(nomina_router.router, dependencies=_TENANT)
-app.include_router(gastos_router.router, dependencies=_TENANT)
-app.include_router(usuarios_router.router, dependencies=_TENANT)
+app.include_router(planillas_router.router, dependencies=_INTERNO)
+app.include_router(seguimiento_arl_router.router, dependencies=_INTERNO)
+app.include_router(eliminados_router.router, dependencies=_INTERNO)
+app.include_router(retiros_router.router, dependencies=_INTERNO)
+app.include_router(empleados_router.router, dependencies=_INTERNO)
+app.include_router(nomina_router.router, dependencies=_INTERNO)
+app.include_router(gastos_router.router, dependencies=_INTERNO)
+app.include_router(usuarios_router.router, dependencies=_INTERNO)
 app.include_router(config_router.router, dependencies=_TENANT)
-app.include_router(dashboard_router.router, dependencies=_TENANT)
-app.include_router(cobro_router.router, dependencies=_TENANT)
-app.include_router(actividad_router.router, dependencies=_TENANT)
-app.include_router(credenciales_router.router, dependencies=_TENANT)
+app.include_router(dashboard_router.router, dependencies=_INTERNO)
+app.include_router(cobro_router.router, dependencies=_INTERNO)
+app.include_router(actividad_router.router, dependencies=_INTERNO)
+app.include_router(credenciales_router.router, dependencies=_INTERNO)
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────

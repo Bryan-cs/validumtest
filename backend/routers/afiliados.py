@@ -16,7 +16,7 @@ router = APIRouter(prefix="/afiliados", tags=["afiliados"])
 
 
 @router.get("/filter-options")
-def filter_options(db: Session = Depends(get_db), token=Depends(verify_token)):
+def filter_options(db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """Retorna opciones únicas para cada filtro de afiliados (ligero, cacheado)."""
     return crud.get_afiliados_filter_options(db)
 
@@ -75,7 +75,7 @@ def list_afiliados(
 
 
 @router.get("/{id}/certificado")
-def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """Genera un certificado de inicio de afiliación en PDF con membrete corporativo."""
     import pypdf as PyPDF2
     from reportlab.pdfgen import canvas
@@ -228,7 +228,7 @@ def certificado_afiliado(id: int, db: Session = Depends(get_db), token=Depends(v
 
 
 @router.get("/{id}/estado-cuenta")
-def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """Genera un PDF 'Estado de Cuenta' del afiliado con todas sus facturas."""
     import pypdf as PyPDF2
     from reportlab.pdfgen import canvas
@@ -425,7 +425,7 @@ def estado_cuenta_afiliado(id: int, db: Session = Depends(get_db), token=Depends
 
 
 @router.get("/{id}")
-def get_afiliado(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def get_afiliado(id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     a = crud.get_afiliado(db, id)
     if not a:
         raise HTTPException(404, "Afiliado no encontrado")

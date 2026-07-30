@@ -6,7 +6,7 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends, Q
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session
 from database import get_db
-from routers.deps import verify_token
+from routers.deps import verify_token, require_admin_or_empleado
 import models
 
 CONTEXTOS_VALIDOS = Literal[
@@ -423,7 +423,7 @@ def descargar_documento(
 def eliminar_documento(
     doc_id: int,
     db: Session = Depends(get_db),
-    token=Depends(verify_token),
+    token=Depends(require_admin_or_empleado),
 ):
     doc = db.query(models.Documento).filter_by(id=doc_id).first()
     if not doc:

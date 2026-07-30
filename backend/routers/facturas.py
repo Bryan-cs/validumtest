@@ -76,7 +76,7 @@ def calc_planilla(
     afiliado_id: int,
     dias: int = 30,
     db: Session = Depends(get_db),
-    token=Depends(verify_token),
+    token=Depends(require_admin_or_empleado),
 ):
     """Calcula detalle de planilla SS para un afiliado (fuente única para el frontend)."""
     if dias < 0 or dias > 30:
@@ -114,7 +114,7 @@ def delete_factura(id: int, force: bool = False,
 
 
 @router.get("/{id}/pdf")
-def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
+def descargar_factura_pdf(id: int, db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """Genera PDF de la factura sobre el membrete corporativo."""
     import pypdf as PyPDF2
     from reportlab.pdfgen import canvas
