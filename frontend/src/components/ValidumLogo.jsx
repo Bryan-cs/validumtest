@@ -5,10 +5,14 @@ export function ValidumMark({ size = 40, navy = '#1D3F72', lime = '#C8D72B', sty
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" role="img" aria-label="Validum"
          style={style} className={className}>
+      {/* Brazo izquierdo navy: arriba-izquierda -> abajo-centro.
+          Brazo derecho lima: arriba-derecha -> abajo-centro.
+          Los signos de rotación estaban invertidos y los trazos se juntaban ARRIBA,
+          dibujando una "Λ" en vez de la "V" de Validum (ver public/validum-logo.png). */}
       <rect x="-5.5" y="-20" width="11" height="40" rx="5.5" fill={navy}
-            transform="translate(18,23.5) rotate(17)" />
+            transform="translate(18,23.5) rotate(-17)" />
       <rect x="-5" y="-19" width="10" height="38" rx="5" fill={lime}
-            transform="translate(30.5,24.5) rotate(-19)" />
+            transform="translate(30.5,24.5) rotate(19)" />
     </svg>
   );
 }
