@@ -1,5 +1,5 @@
 from datetime import datetime
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.orm import Session
 from database import get_db
 import schemas, crud
@@ -14,9 +14,10 @@ _MESES = ["Enero","Febrero","Marzo","Abril","Mayo","Junio",
 
 @router.get("")
 def list_retiros(anio: str = "", mes: str = "", doc: str = "",
-                 skip: int = 0, limit: int = 500,
+                 skip: int = Query(0, ge=0), limit: int = Query(500, ge=1, le=500),
                  db: Session = Depends(get_db), token=Depends(verify_token)):
-    limit = min(limit, 500)
+    # skip/limit negativos llegaban crudos a .offset()/.limit() y Postgres los
+    # rechazaba con un 500. Con ge/le los rechaza FastAPI antes, como 422.
     return crud.get_retiros(db, anio=anio, mes=mes, doc=doc, skip=skip, limit=limit)
 
 
@@ -35,5 +36,8 @@ def create_retiro(data: schemas.RetiroCreate,
 
 @router.delete("/{id}")
 def delete_retiro(id: int, db: Session = Depends(get_db), token=Depends(verify_token)):
-    crud.delete_retiro(db, id, user=token.get("sub", "sistema"))
+    # delete_retiro devuelve False si el id no existe; antes el router respondia
+    # {"ok": true} igual y el cliente creia haber borrado algo inexistente.
+    if not crud.delete_retiro(db, id, user=token.get("sub", "sistema")):
+        raise HTTPException(404, "Retiro no encontrado")
     return {"ok": True}

@@ -44,11 +44,14 @@ def bulk_estado(
         raise HTTPException(400, "Lista de IDs vacía")
     if body.estado not in ("activo", "retirar", "retirado"):
         raise HTTPException(400, "Estado inválido")
-    db.query(models.SeguimientoArl)\
+    # Devolver el rowcount real, no len(ids): con ids inexistentes (o de otra
+    # organizacion, que el filtro de tenant descarta) el endpoint informaba
+    # actualizaciones que nunca ocurrieron.
+    afectados = db.query(models.SeguimientoArl)\
       .filter(models.SeguimientoArl.id.in_(body.ids))\
       .update({"estado": body.estado}, synchronize_session=False)
     db.commit()
-    return {"ok": True, "actualizados": len(body.ids)}
+    return {"ok": True, "actualizados": afectados}
 
 
 @router.put("/{id}")
@@ -61,7 +64,12 @@ def update_seguimiento(
     row = db.query(models.SeguimientoArl).filter_by(id=id).first()
     if not row:
         raise HTTPException(404, "Registro no encontrado")
-    for field, value in data.model_dump(exclude_none=True).items():
+    cambios = data.model_dump(exclude_none=True)
+    # Mismo dominio de estados que /bulk-estado. Sin esto el PUT dejaba filas en
+    # estados que ningun otro punto del sistema contempla.
+    if "estado" in cambios and cambios["estado"] not in ("activo", "retirar", "retirado"):
+        raise HTTPException(400, "Estado inválido")
+    for field, value in cambios.items():
         setattr(row, field, value)
     db.commit()
     db.refresh(row)

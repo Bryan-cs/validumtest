@@ -44,11 +44,20 @@ class AfiliadoCreate(BaseModel):
     @field_validator('ibc', mode='before')
     @classmethod
     def ibc_positivo(cls, v):
-        if v is not None and float(v) <= 0:
+        if v is None:
+            return v
+        # float() sobre list/dict lanza TypeError, y Pydantic v2 solo traduce
+        # ValueError/AssertionError a error de validacion: el TypeError se escapaba
+        # del handler y salia como 500 en vez de 422.
+        try:
+            valor = float(v)
+        except (TypeError, ValueError):
+            raise ValueError('IBC debe ser un numero')
+        if valor <= 0:
             raise ValueError('IBC debe ser mayor a 0')
         SMMLV_VALUE = 1_300_000
-        if v is not None and float(v) > 0 and float(v) < SMMLV_VALUE:
-            raise ValueError(f'IBC no puede ser menor al SMMLV')
+        if valor < SMMLV_VALUE:
+            raise ValueError('IBC no puede ser menor al SMMLV')
         return v
     fecha_afiliacion: str
     registrado_por: str = ""
@@ -156,7 +165,17 @@ class RetiroCreate(BaseModel):
     def fecha_formato(cls, v):
         if not v or not str(v).strip():
             raise ValueError('Fecha es requerida')
-        return str(v).strip()
+        v = str(v).strip()
+        # Mismo criterio que AfiliadoCreate y SeguimientoArlCreate. Antes aceptaba
+        # cualquier texto: "9999-99-99" entraba como 201, y un valor de mas de 10
+        # caracteres reventaba contra la columna String(10) como 500.
+        if not _DATE_RE.match(v):
+            raise ValueError('fecha: formato inválido, use YYYY-MM-DD')
+        try:
+            datetime.strptime(v, '%Y-%m-%d')
+        except ValueError:
+            raise ValueError(f'fecha: fecha inválida ({v})')
+        return v
 
 class EmpleadoCreate(BaseModel):
     nombre: str

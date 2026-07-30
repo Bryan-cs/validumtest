@@ -30,6 +30,7 @@ import os
 from datetime import datetime, timezone
 from database import get_db, init_db
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import DataError as _SADataError
 import models, crud
 from routers.deps import verify_token, tenant_scope
 
@@ -198,6 +199,23 @@ app = FastAPI(
 # Rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+# Red de seguridad para errores de datos de Postgres (DataError): valor mas largo
+# que la columna, numero fuera de rango, fecha imposible. Son fallos de ENTRADA, no
+# del servidor, pero llegaban al cliente como 500 porque ningun schema declara
+# max_length. Traducirlos a 422 evita exponer un 500 en cada endpoint de escritura.
+# No reemplaza la validacion por campo: es el piso, no el techo.
+@app.exception_handler(_SADataError)
+async def _data_error_handler(request, exc):
+    from fastapi.responses import JSONResponse
+    from logger import logger as _delog
+    _delog.warning(f"DataError en {request.method} {request.url.path}: {type(exc).__name__}")
+    return JSONResponse(
+        status_code=422,
+        content={"detail": "Datos invalidos: algun valor excede el largo permitido "
+                           "o esta fuera de rango para su campo."},
+    )
 
 # En producción: ALLOWED_ORIGINS=https://tu-app.vercel.app
 # En desarrollo: dejar vacío → usa localhost:5173 y localhost:3000

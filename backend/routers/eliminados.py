@@ -63,6 +63,9 @@ def delete_eliminado(id: int, db: Session = Depends(get_db), token=Depends(verif
     doc = e.doc
     try:
         db.query(models.Afiliado).filter_by(doc=doc).delete()
+        # El Retiro faltaba en esta lista: al borrar permanentemente quedaba un retiro
+        # apuntando a un documento inexistente, visible en GET /retiros.
+        db.query(models.Retiro).filter_by(doc=doc).delete()
         db.query(models.Factura).filter_by(doc=doc).delete()
         db.query(models.Documento).filter_by(afiliado_doc=doc).delete()
         db.query(models.SolicitudNovedad).filter_by(afiliado_doc=doc).delete()

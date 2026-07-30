@@ -63,7 +63,7 @@ def delete_retiro(db, id, user=""):
     cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:")
     r = db.query(models.Retiro).filter_by(id=id).first()
     if not r:
-        return
+        return False   # el router lo traduce a 404; antes respondia {"ok": true}
     _log(db, user, "eliminó un retiro (→ eliminados)", "Retiros", r.nombre)
     afil = db.query(models.Afiliado).filter_by(doc=r.doc).first()
     if afil:
@@ -80,6 +80,7 @@ def delete_retiro(db, id, user=""):
         _log(db, user, "afiliado movido a eliminados por eliminación de retiro", "Afiliados", afil.nombre)
     db.query(models.Retiro).filter_by(id=id).delete()
     db.commit()
+    return True
 
 
 def eliminado_a_retiro(db, eliminado_id, user=""):
