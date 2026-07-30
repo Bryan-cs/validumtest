@@ -39,45 +39,57 @@ def _validar_magic(ext: str, content: bytes) -> bool:
         return True  # extensión sin firma conocida — pasar
     return content[:len(magic)] == magic
 
-# ─── Cloudflare R2 ───────────────────────────────────────────────────────────
+# ─── Almacenamiento de objetos S3-compatible (Cloudflare R2, Railway Buckets) ──
 _s3 = None
 _s3_error = None  # Guarda el error de inicialización para diagnóstico
 _R2_BUCKET = os.getenv("STORAGE_BUCKET", "")
 
-# En producción (PostgreSQL), R2 es obligatorio — disco Railway es efímero
+# El endpoint se puede fijar explícitamente con STORAGE_ENDPOINT (Railway Buckets
+# u otro proveedor S3). Si no está, se arma el de R2 a partir de STORAGE_ACCOUNT,
+# que es como venía funcionando.
+def _storage_endpoint() -> str:
+    explicit = os.getenv("STORAGE_ENDPOINT", "").strip()
+    if explicit:
+        return explicit.rstrip("/")
+    account_id = os.getenv("STORAGE_ACCOUNT", "")
+    return f"https://{account_id}.r2.cloudflarestorage.com" if account_id else ""
+
+# En producción (PostgreSQL), el almacenamiento remoto es obligatorio: el disco
+# de Railway es efímero y se pierde en cada redeploy.
 _DB_URL = os.getenv("DATABASE_URL", "")
 if _DB_URL.startswith("postgresql") and not all([
-    os.getenv("STORAGE_ACCOUNT"),
+    _storage_endpoint(),
     os.getenv("STORAGE_KEY"),
     os.getenv("STORAGE_SECRET"),
     _R2_BUCKET,
 ]):
     raise RuntimeError(
-        "Producción requiere almacenamiento R2 configurado. "
-        "Faltan una o más variables: STORAGE_ACCOUNT, STORAGE_KEY, STORAGE_SECRET, STORAGE_BUCKET"
+        "Producción requiere almacenamiento de objetos configurado. Definí "
+        "STORAGE_ENDPOINT (o STORAGE_ACCOUNT para R2), más STORAGE_KEY, "
+        "STORAGE_SECRET y STORAGE_BUCKET."
     )
 
 def _get_s3():
     global _s3, _s3_error
     if _s3 is not None:
         return _s3
-    account_id = os.getenv("STORAGE_ACCOUNT", "")
+    endpoint = _storage_endpoint()
     access_key = os.getenv("STORAGE_KEY", "")
     secret_key = os.getenv("STORAGE_SECRET", "")
-    if account_id and access_key and secret_key and _R2_BUCKET:
+    if endpoint and access_key and secret_key and _R2_BUCKET:
         try:
-            import boto3  # optional dependency; install boto3 to enable R2 storage
+            import boto3  # optional dependency; install boto3 to enable object storage
             _s3 = boto3.client(
                 "s3",
-                endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
+                endpoint_url=endpoint,
                 aws_access_key_id=access_key,
                 aws_secret_access_key=secret_key,
-                region_name="auto",
+                region_name=os.getenv("STORAGE_REGION", "auto"),
             )
             # Verificar conexión
             _s3.head_bucket(Bucket=_R2_BUCKET)
             from logger import logger
-            logger.info(f"R2 conectado: bucket '{_R2_BUCKET}'")
+            logger.info(f"Storage conectado: bucket '{_R2_BUCKET}' en {endpoint}")
             _s3_error = None
         except Exception as e:
             from logger import logger
@@ -86,7 +98,7 @@ def _get_s3():
             _s3 = False  # False = intentó pero falló, no reintentar
     else:
         _s3 = False
-        _s3_error = f"Missing vars: account={bool(account_id)}, key={bool(access_key)}, secret={bool(secret_key)}, bucket={bool(_R2_BUCKET)}"
+        _s3_error = f"Missing vars: endpoint={bool(endpoint)}, key={bool(access_key)}, secret={bool(secret_key)}, bucket={bool(_R2_BUCKET)}"
     return _s3
 
 
