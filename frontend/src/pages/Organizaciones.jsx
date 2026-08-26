@@ -315,9 +315,25 @@ export default function Organizaciones() {
     enabled: tab === 'ing',
   });
 
-  // El ingreso del SaaS ya no es una tarifa por afiliado sino la utilidad que genera
-  // cada empresa, así que el editor inline de precio_afiliado se retiró. El campo sigue
-  // existiendo en el modelo y PATCH /organizaciones/{id} lo acepta.
+  // Edición inline del precio por afiliado
+  const [editPrecio, setEditPrecio] = useState(null);
+  const precioMut = useMutation({
+    mutationFn: ({ id, precio }) => api.patch(`/organizaciones/${id}`, { precio_afiliado: precio }),
+    onSuccess: () => {
+      toast.success('Precio actualizado');
+      qc.invalidateQueries({ queryKey: ['organizaciones-ingresos'] });
+      setEditPrecio(null);
+    },
+    onError: (e) => {
+      const d = e.response?.data?.detail;
+      toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error'));
+    },
+  });
+  const guardarPrecio = () => {
+    const v = parseFloat(editPrecio?.valor);
+    if (isNaN(v) || v < 0) { toast.error('Precio inválido'); return; }
+    precioMut.mutate({ id: editPrecio.id, precio: v });
+  };
 
   const fmtCOP = (v) => new Intl.NumberFormat('es-CO', {
     style: 'currency', currency: 'COP', maximumFractionDigits: 0,
@@ -471,9 +487,9 @@ export default function Organizaciones() {
               <div className="sa-tiles">
                 <div className="sa-tile sa-tile--dark">
                   <div>
-                    <div className="sa-tile-l" style={{ color: '#fff' }}>Utilidad del mes</div>
+                    <div className="sa-tile-l" style={{ color: '#fff' }}>Ingreso mensual</div>
                     <div className="sa-tile-n">{fmtCOP(ing.totales.ingreso_mensual)}</div>
-                    <div className="sa-tile-sub">generada por {ing.organizaciones.length} organizaciones</div>
+                    <div className="sa-tile-sub">{ing.totales.afiliados} afiliados facturables</div>
                   </div>
                   <div className="sa-ico">{Ico.money()}</div>
                 </div>
@@ -481,15 +497,15 @@ export default function Organizaciones() {
                   <div>
                     <div className="sa-tile-l">Proyección anual</div>
                     <div className="sa-tile-n">{fmtCOP(ing.totales.ingreso_anual)}</div>
-                    <div className="sa-tile-sub">utilidad del mes × 12</div>
+                    <div className="sa-tile-sub">precio base {fmtCOP(ing.precio_default)}/afiliado</div>
                   </div>
                   <div className="sa-ico">{Ico.money()}</div>
                 </div>
                 <div className="sa-tile" style={{ animationDelay: '100ms' }}>
                   <div>
-                    <div className="sa-tile-l">Utilidad por afiliado</div>
-                    <div className="sa-tile-n">{fmtCOP(ing.totales.utilidad_por_afiliado)}</div>
-                    <div className="sa-tile-sub">promedio sobre {ing.totales.afiliados} afiliados activos</div>
+                    <div className="sa-tile-l">Afiliados facturables</div>
+                    <div className="sa-tile-n">{ing.totales.afiliados}</div>
+                    <div className="sa-tile-sub">afiliados activos</div>
                   </div>
                   <div className="sa-ico">{Ico.users()}</div>
                 </div>
@@ -506,7 +522,7 @@ export default function Organizaciones() {
                 <div className="sa-tabletitle">Ingresos por organización</div>
                 <table className="sa-table">
                   <thead>
-                    <tr>{['Organización', 'Afiliados', 'Utilidad del mes', 'Ingreso mensual', 'Proyección anual', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
+                    <tr>{['Organización', 'Afiliados', 'Precio por afiliado', 'Ingreso mensual', 'Proyección anual', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
                     {ing.organizaciones.map(o => (
@@ -516,14 +532,31 @@ export default function Organizaciones() {
                           <div className="sa-td-slug">{o.slug}{!o.activo && ' · inactiva'}</div>
                         </td>
                         <td>{o.afiliados}</td>
-                        <td title={o.afiliados ? `${fmtCOP(o.utilidad_por_afiliado)} por afiliado` : 'Sin afiliados activos'}>
-                          <span className="sa-price-v">{fmtCOP(o.utilidad_mes)}</span>
+                        <td>
+                          {editPrecio?.id === o.id ? (
+                            <span className="sa-price">
+                              <input
+                                className="sa-price-input" autoFocus type="number" min="0" step="1000"
+                                value={editPrecio.valor}
+                                onChange={e => setEditPrecio(p => ({ ...p, valor: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') guardarPrecio(); if (e.key === 'Escape') setEditPrecio(null); }}
+                              />
+                              <button className="sa-price-edit" title="Guardar" onClick={guardarPrecio} disabled={precioMut.isPending}>✓</button>
+                              <button className="sa-price-edit" title="Cancelar" onClick={() => setEditPrecio(null)}>✕</button>
+                            </span>
+                          ) : (
+                            <span className="sa-price">
+                              <span className="sa-price-v">{fmtCOP(o.precio_afiliado)}</span>
+                              <button className="sa-price-edit" title="Modificar precio"
+                                      onClick={() => setEditPrecio({ id: o.id, valor: o.precio_afiliado })}>✎</button>
+                            </span>
+                          )}
                         </td>
                         <td style={{ fontWeight: 800 }}>{fmtCOP(o.ingreso_mensual)}</td>
                         <td style={{ color: 'var(--muted)' }}>{fmtCOP(o.ingreso_anual)}</td>
                         <td>
                           <button className="sa-btn sa-btn--sm" disabled={facturar.isPending}
-                                  title={`Emitir factura del mes por la utilidad generada: ${fmtCOP(o.utilidad_mes)}`}
+                                  title={`Emitir factura del mes: ${o.afiliados} afiliados × ${fmtCOP(o.precio_afiliado)}`}
                                   onClick={() => facturar.mutate(o.id)}>
                             Facturar
                           </button>

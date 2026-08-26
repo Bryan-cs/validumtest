@@ -125,67 +125,33 @@ def update_organizacion(org_id: int, data: schemas.OrganizacionUpdate,
 PRECIO_AFILIADO_DEFAULT = 30_000   # COP por afiliado activo/mes
 
 
-def _utilidad_por_org(db: Session, anio: int, mes: int) -> dict:
-    """Suma la utilidad de las facturas de cada organización en un mes.
-
-    Factura.mes guarda el nombre del mes en español y Factura.anio un string, de ahí
-    la conversión. Este router no usa tenant_scope, así que la consulta ve todas las
-    organizaciones (el ContextVar queda en None y el auto-filtro no se aplica).
-    """
-    filas = (db.query(models.Factura.organizacion_id, func.sum(models.Factura.utilidad))
-             .filter(models.Factura.mes == MESES_ES[mes],
-                     models.Factura.anio == str(anio))
-             .group_by(models.Factura.organizacion_id).all())
-    return {org_id: float(total or 0) for org_id, total in filas}
-
-
 def _calc_items_ingresos(db: Session) -> list:
-    """Facturación en vivo por organización.
-
-    El ingreso del SaaS es la UTILIDAD que genera cada empresa en el mes en curso
-    (suma de Factura.utilidad = ingresos - costos - costo_adm + conceptos_extra),
-    no una tarifa fija por afiliado. `precio_afiliado` se sigue devolviendo porque
-    la columna existe y queda como referencia histórica.
-    """
-    from models import COL_TZ
-    from datetime import datetime
-    hoy = datetime.now(COL_TZ)
+    """Calcula la facturación en vivo por organización (afiliados activos × precio)."""
     orgs = db.query(models.Organizacion).order_by(models.Organizacion.creado.desc()).all()
     counts = dict(db.query(models.Afiliado.organizacion_id, func.count(models.Afiliado.id))
                   .filter(models.Afiliado.activo == True)
                   .group_by(models.Afiliado.organizacion_id).all())
-    utilidades = _utilidad_por_org(db, hoy.year, hoy.month)
     items = []
     for o in orgs:
         precio = float(o.precio_afiliado) if o.precio_afiliado is not None else PRECIO_AFILIADO_DEFAULT
         n = counts.get(o.id, 0)
-        utilidad = utilidades.get(o.id, 0.0)
         items.append({
             "id": o.id, "nombre": o.nombre, "slug": o.slug, "activo": bool(o.activo),
             "afiliados": n,
             "precio_afiliado": precio,
-            "utilidad_mes": utilidad,
-            "utilidad_por_afiliado": (utilidad / n) if n else 0.0,
-            "ingreso_mensual": utilidad,
-            "ingreso_anual": utilidad * 12,
+            "ingreso_mensual": n * precio,
+            "ingreso_anual": n * precio * 12,
         })
     return items
 
 
 @router.get("/ingresos")
 def ingresos_organizaciones(db: Session = Depends(get_db), token=Depends(require_superadmin)):
-    """Resumen de ingresos del SaaS.
-
-    El ingreso de cada organización es la UTILIDAD que genera en el mes en curso
-    (suma de Factura.utilidad), no una tarifa por afiliado.
-    """
+    """Resumen de ingresos del SaaS: cada organización paga precio_afiliado (COP) por
+    afiliado activo al mes. El precio es editable por organización (PATCH /organizaciones/{id})."""
     items = _calc_items_ingresos(db)
-    afiliados_tot = sum(i["afiliados"] for i in items)
-    utilidad_tot = sum(i["utilidad_mes"] for i in items)
     totales = {
-        "afiliados": afiliados_tot,
-        "utilidad_mes": utilidad_tot,
-        "utilidad_por_afiliado": (utilidad_tot / afiliados_tot) if afiliados_tot else 0.0,
+        "afiliados": sum(i["afiliados"] for i in items),
         "ingreso_mensual": sum(i["ingreso_mensual"] for i in items),
         "ingreso_anual": sum(i["ingreso_anual"] for i in items),
         "organizaciones_activas": sum(1 for i in items if i["activo"]),
@@ -310,11 +276,9 @@ def facturar_organizacion(org_id: int, mes: int = 0, anio: int = 0,
     n = db.query(func.count(models.Afiliado.id)).filter(
         models.Afiliado.organizacion_id == org_id,
         models.Afiliado.activo == True).scalar() or 0
-    # El monto es la utilidad del periodo, igual que el "Ingreso mensual" del panel.
-    # Si facturara afiliados x precio, el panel y la factura mostrarian cifras distintas.
-    utilidad = _utilidad_por_org(db, anio, mes).get(org_id, 0.0)
+    precio = float(org.precio_afiliado) if org.precio_afiliado is not None else PRECIO_AFILIADO_DEFAULT
     f = models.FacturaOrg(organizacion_id=org_id, anio=anio, mes=mes,
-                          afiliados=n, precio=(utilidad / n) if n else 0.0, monto=utilidad)
+                          afiliados=n, precio=precio, monto=n * precio)
     db.add(f); db.commit(); db.refresh(f)
     return _factura_out(f, org.nombre, org.slug)
 
