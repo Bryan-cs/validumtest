@@ -1,5 +1,6 @@
 """CRUD de facturas."""
 import json, os
+from decimal import Decimal
 from datetime import datetime, timezone
 from sqlalchemy import text as _text
 import models, schemas
@@ -154,7 +155,14 @@ def update_factura(db, id, data: schemas.FacturaUpdate, editor=""):
         if k in ("servicios_detalle","conceptos_detalle"): v = json.dumps(v)
         setattr(f, k, v)
 
-    f.utilidad = (f.ingresos or 0) - (f.costos or 0) - (f.costo_adm or 0) + (f.conceptos_extra or 0)
+    # Las columnas de dinero son Numeric -> la base devuelve Decimal, pero los campos que
+    # acaba de escribir setattr() son float del request. Mezclarlos lanzaba
+    # "unsupported operand type(s) for -: 'decimal.Decimal' and 'float'" y editar los
+    # costos de cualquier factura daba 500. Se normaliza todo a Decimal antes de operar.
+    def _dec(v):
+        return v if isinstance(v, Decimal) else Decimal(str(v or 0))
+    f.utilidad = (_dec(f.ingresos) - _dec(f.costos)
+                  - _dec(f.costo_adm) + _dec(f.conceptos_extra))
 
     _log(db, editor, "editó una factura", "Facturación", f.codigo)
     db.commit(); db.refresh(f); return _factura_to_dict(f)

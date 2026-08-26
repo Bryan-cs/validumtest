@@ -124,23 +124,41 @@ def test_dashboard_organizaciones_superadmin(client, orgs):
 
 
 def test_ingresos_organizaciones(client, orgs):
-    """Ingresos: afiliados activos × precio_afiliado (default 30.000 COP), precio editable."""
+    """Ingresos: el ingreso del SaaS es la UTILIDAD del mes de cada organización."""
+    from datetime import datetime, timezone, timedelta
+    hoy = datetime.now(timezone(timedelta(hours=-5)))
+    MESES = ["", "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
+             "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"]
     su = orgs["su"]
     r = client.get("/organizaciones/ingresos", headers=_h(su))
     assert r.status_code == 200, r.text
     data = r.json()
-    assert data["precio_default"] == 30_000
     g = {o["id"]: o for o in data["organizaciones"]}[orgs["g"]]
-    assert g["precio_afiliado"] == 30_000
-    assert g["ingreso_mensual"] == g["afiliados"] * 30_000
+    # Sin facturas del mes la utilidad es 0, y el ingreso la sigue
+    assert g["utilidad_mes"] == 0
+    assert g["ingreso_mensual"] == g["utilidad_mes"]
     assert g["ingreso_anual"] == g["ingreso_mensual"] * 12
-    # modificar precio de la org Gamma
-    r = client.patch(f"/organizaciones/{orgs['g']}", headers=_h(su), json={"precio_afiliado": 45_000})
-    assert r.status_code == 200, r.text
+
+    # Emitir una factura con utilidad conocida: 500.000 - 300.000 - 20.000 + 5.000 = 185.000
+    g_tok, _ = _login(client, "gamma_admin", "gamma123")
+    r = client.post("/facturas", headers=_h(g_tok), json={
+        "doc": "77700001", "mes": MESES[hoy.month], "anio": str(hoy.year),
+        "cliente": "Cliente Gamma", "ingresos": 500_000, "costos": 300_000,
+        "costo_adm": 20_000, "conceptos_extra": 5_000,
+    })
+    assert r.status_code == 201, r.text
+
     r = client.get("/organizaciones/ingresos", headers=_h(su))
     g = {o["id"]: o for o in r.json()["organizaciones"]}[orgs["g"]]
-    assert g["precio_afiliado"] == 45_000
-    assert g["ingreso_mensual"] == g["afiliados"] * 45_000
+    assert g["utilidad_mes"] == 185_000, g
+    assert g["ingreso_mensual"] == 185_000
+    assert g["ingreso_anual"] == 185_000 * 12
+    if g["afiliados"]:
+        assert g["utilidad_por_afiliado"] == 185_000 / g["afiliados"]
+
+    # precio_afiliado sigue existiendo como campo editable aunque ya no define el ingreso
+    r = client.patch(f"/organizaciones/{orgs['g']}", headers=_h(su), json={"precio_afiliado": 45_000})
+    assert r.status_code == 200, r.text
     # precio negativo rechazado
     r = client.patch(f"/organizaciones/{orgs['g']}", headers=_h(su), json={"precio_afiliado": -5})
     assert r.status_code == 422
@@ -160,10 +178,13 @@ def test_ingresos_mensuales_snapshot(client, orgs):
     assert data["anio"] == hoy.year
     mes_actual = next((m for m in data["meses"] if m["mes"] == hoy.month), None)
     assert mes_actual is not None, "Debe existir snapshot del mes en curso"
-    # Gamma tiene >= 1 afiliado activo → aparece en el desglose con ingreso = afiliados × precio
+    # Gamma aparece en el desglose; el ingreso guardado es la utilidad del mes, no
+    # afiliados × precio (el snapshot refleja lo mismo que muestra /ingresos)
     g = next((o for o in mes_actual["organizaciones"] if o["id"] == orgs["g"]), None)
     assert g is not None and g["afiliados"] >= 1
-    assert g["ingreso"] == g["afiliados"] * g["precio"]
+    ing = next(o for o in client.get("/organizaciones/ingresos", headers=_h(su)).json()
+               ["organizaciones"] if o["id"] == orgs["g"])
+    assert g["ingreso"] == ing["utilidad_mes"]
     # Segunda consulta: idempotente (upsert, no duplica)
     r2 = client.get("/organizaciones/ingresos-mensuales", headers=_h(su))
     m2 = next(m for m in r2.json()["meses"] if m["mes"] == hoy.month)
@@ -175,14 +196,17 @@ def test_ingresos_mensuales_snapshot(client, orgs):
 
 
 def test_facturar_organizacion(client, orgs):
-    """Facturar emite UNA factura por org/mes (afiliados × precio); pagable y no duplicable."""
+    """Facturar emite UNA factura por org/mes por la utilidad; pagable y no duplicable."""
     su = orgs["su"]
+    ing = next(o for o in client.get("/organizaciones/ingresos", headers=_h(su)).json()
+               ["organizaciones"] if o["id"] == orgs["g"])
     # emitir factura del mes en curso para Gamma
     r = client.post(f"/organizaciones/{orgs['g']}/facturar", headers=_h(su))
     assert r.status_code == 201, r.text
     f = r.json()
     assert f["afiliados"] >= 1
-    assert f["monto"] == f["afiliados"] * f["precio"]
+    # el monto debe cuadrar con lo que muestra el panel, no con afiliados × precio
+    assert f["monto"] == ing["utilidad_mes"]
     assert f["estado"] == "pendiente"
     # duplicado del mismo período → rechazado
     r2 = client.post(f"/organizaciones/{orgs['g']}/facturar", headers=_h(su))
