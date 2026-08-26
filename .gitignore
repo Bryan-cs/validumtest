@@ -56,6 +56,6 @@ Thumbs.db
 *.swo
 
 # Ignorados recientemente
-backend/bbcfile.db.bak
+backend/bbcfile.db.bak*
 backend/restore_local.py
 .vercel
