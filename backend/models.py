@@ -476,3 +476,41 @@ class SeguimientoArl(Base):
     estado           = Column(String(20), default='activo')  # activo | retirar | retirado
     creado_en        = Column(DateTime(timezone=True), default=_utcnow)
     ultima_alerta_en = Column(DateTime(timezone=True), nullable=True)
+
+
+class ConsultaExterna(Base):
+    """Registro de cada consulta a una fuente oficial (ADRES, RUAF...).
+
+    Cumple tres funciones a la vez:
+      - cache: `valido_hasta` evita repetir la consulta (y el captcha) por 30 dias
+      - auditoria: quien consulto la afiliacion en salud de quien, y cuando.
+        Dato sensible bajo Ley 1581/2012, asi que aqui NO se suprime al admin.
+      - diagnostico: los fallos quedan con su motivo para detectar cuando la
+        fuente cambio de forma.
+
+    Multi-tenant: lleva `organizacion_id` y entra en el auto-filtro de tenant.py.
+    El cache es POR ORGANIZACION a proposito — una organizacion no puede ver a
+    quien consulto otra, ni reutilizar un resultado que obtuvo otra con la
+    autorizacion de su propio titular. Repetir el documento desde otra
+    organizacion cuesta un captcha nuevo, y esta bien que asi sea.
+    """
+    __tablename__ = "consultas_externas"
+    __table_args__ = (
+        Index('ix_consulta_org_fuente_doc', 'organizacion_id', 'fuente', 'doc'),
+    )
+    id              = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
+    fuente          = Column(String(20), nullable=False, index=True)  # adres | ruaf
+    tipo_doc        = Column(String(10), default="CC")
+    doc             = Column(String(20), nullable=False, index=True)
+    exito           = Column(Boolean, default=False, index=True)
+    nombre          = Column(String(150))
+    eps             = Column(String(120))
+    regimen         = Column(String(60))
+    estado_afil     = Column(String(60))
+    tipo_afiliado   = Column(String(60))
+    respuesta       = Column(Text)              # JSON completo normalizado
+    error_detalle   = Column(Text)
+    usuario         = Column(String(60), index=True)
+    creado          = Column(DateTime(timezone=True), default=_utcnow)
+    valido_hasta    = Column(DateTime(timezone=True), nullable=True)

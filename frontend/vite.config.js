@@ -21,9 +21,9 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'favicon.svg', 'favicon-96x96.png', 'apple-touch-icon.png', 'icons/*.png', 'icons/*.svg'],
       manifest: {
-        name: 'BBC File',
-        short_name: 'BBC File',
-        description: 'Gestión de afiliados y facturación BBC File',
+        name: 'Validum',
+        short_name: 'Validum',
+        description: 'Validum — gestión de afiliados, seguridad social y facturación',
         theme_color: '#111827',
         background_color: '#111827',
         display: 'standalone',

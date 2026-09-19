@@ -7,6 +7,7 @@ import api, { buildUploadForm } from '../utils/api';
 import { empresaStyle } from '../utils/colors';
 import { C, Btn, Modal, ConfirmModal, PageHeader, statusBadge, ErrorMsg } from '../components/UI';
 import { BarraFiltros } from '../components/FiltroCheck';
+import ConsultaADRES from '../components/ConsultaADRES';
 import useAuthStore from '../hooks/useAuth';
 import {
   useReactTable,
@@ -103,6 +104,7 @@ export default function Afiliados() {
     navigate(location.pathname, { replace: true, state: {} });
   }, []);
   const [form,     setForm]     = useState({});
+  const [consultaSS, setConsultaSS] = useState(false);
 
   // Pagos tab state
   const [docSeleccionado, setDocSeleccionado] = useState('');
@@ -1684,6 +1686,15 @@ export default function Afiliados() {
                 placeholder="SOLO NÚMEROS"
                 inputMode="numeric"
                 style={{ ...inp2, flex:1 }} />
+              <Btn size="sm" variant="secondary"
+                onClick={()=>setConsultaSS(true)}
+                disabled={!/^\d{3,}$/.test(form.doc||'') || (form.tipo_doc||'CC')==='NIT'}
+                title={(form.tipo_doc||'CC')==='NIT'
+                  ? 'ADRES consulta personas, no empresas'
+                  : !/^\d{3,}$/.test(form.doc||'')
+                    ? 'Escribe el número de documento para consultar'
+                    : 'Consultar afiliación en salud en ADRES'}
+                style={{ flexShrink:0 }}>🔍</Btn>
             </div>
           </div>
           <InputUp label="Cargo"    value={form.cargo||''}
@@ -1853,6 +1864,16 @@ export default function Afiliados() {
           </Btn>
         </div>
       </Modal>
+
+      {/* Consulta ADRES — nunca escribe sola: devuelve lo marcado por el empleado */}
+      <ConsultaADRES
+        open={consultaSS}
+        onClose={()=>setConsultaSS(false)}
+        tipoDoc={form.tipo_doc||'CC'}
+        doc={form.doc||''}
+        valoresActuales={form}
+        onAplicar={campos=>setForm(f=>({ ...f, ...campos }))}
+      />
 
       {/* Overlay texto completo (novedades / detalle) — sin Radix, sin click-outside issues */}
       {textoModal && (

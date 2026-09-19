@@ -42,6 +42,7 @@ def _tenant_models():
                 models.SolicitudRetiro, models.Actividad, models.Tarea, models.TareaComentario,
                 models.Notificacion, models.PlanillaPago, models.Documento, models.AvisoCliente,
                 models.CredencialPortal, models.SeguimientoArl,
+                models.ConsultaExterna,
             ) if m.__name__ not in excluidos
         ]
     return _TENANT_MODELS

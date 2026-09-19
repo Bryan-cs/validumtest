@@ -341,7 +341,7 @@ export default function Tareas() {
         <div>
           <h2 style={{ margin: 0, color: C.primary, fontSize: 20, fontWeight: 700, letterSpacing: '-.2px' }}>Tareas</h2>
           <p style={{ margin: '3px 0 0', color: C.text2, fontSize: 13 }}>
-            {isAdmin ? 'Equipo BBC File' : 'Mis tareas asignadas'}
+            {isAdmin ? 'Tareas del equipo' : 'Mis tareas asignadas'}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

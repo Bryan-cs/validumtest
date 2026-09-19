@@ -208,8 +208,10 @@ export default function Cobro() {
         <table style={{ width:'100%', borderCollapse:'collapse', background:C.surface }}>
           <thead>
             <tr style={{ background:C.surface2 }}>
-              {['','Afiliado','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades',''].map(h=>(
-                <th key={h} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
+              {/* La lista tiene dos cadenas vacías (primera y última columna), así que
+                  usar el texto como key daba duplicados y React avisaba en consola. */}
+              {['','Afiliado','Doc.','Subtipo','Cliente','Período','Día cobro','Servicios','Planilla ($)','Estado','Novedades',''].map((h,i)=>(
+                <th key={i} style={{ padding:'10px 12px',textAlign:'left',fontSize:11,fontWeight:600,
                   color:C.text2,borderBottom:`1px solid ${C.border}`,whiteSpace:'nowrap' }}>{h}</th>
               ))}
             </tr>

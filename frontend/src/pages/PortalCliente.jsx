@@ -1155,7 +1155,7 @@ export default function PortalCliente() {
           <div className="pcc-hdr-in">
             <div className="pcc-topbar">
               <div style={{ display:'flex', alignItems:'baseline' }}>
-                <span className="pcc-logo-main">BBC <span style={{ color:C.accent }}>File</span></span>
+                <span className="pcc-logo-main">Vali<span style={{ color:C.accent }}>dum</span></span>
                 <span className="pcc-logo-sub">Portal del Cliente</span>
               </div>
               <div className="pcc-actions">
@@ -1368,7 +1368,7 @@ export default function PortalCliente() {
                   ))}
                 </div>
                 <p style={{ fontSize:12.5, color:'#1877F2', letterSpacing:.3, fontFamily:"'Outfit',system-ui,sans-serif", margin:0 }}>
-                  Copyright © 2026 — "BBC File" Todos los derechos reservados
+                  Copyright © {new Date().getFullYear()} — Validum. Todos los derechos reservados
                 </p>
               </div>
             </>

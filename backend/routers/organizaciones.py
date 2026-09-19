@@ -125,33 +125,90 @@ def update_organizacion(org_id: int, data: schemas.OrganizacionUpdate,
 PRECIO_AFILIADO_DEFAULT = 30_000   # COP por afiliado activo/mes
 
 
+def _utilidad_neta_por_org(db: Session, anio: int, mes: int) -> dict:
+    """Utilidad NETA del mes por organización, con la misma fórmula que Reportes Financieros.
+
+    Réplica de crud_dashboard (`util_neta`), que es la fuente de verdad del negocio:
+
+        utilidad de facturas PAGADAS + ingresos adicionales - nóminas - gastos
+
+    Solo cuentan las facturas en estado `pagado` o `planilla_pagada`: lo pendiente de
+    cobro no es utilidad todavía. crud_dashboard corre bajo tenant_scope y se auto-filtra
+    por organización; acá no hay contexto de tenant, así que se agrupa a mano.
+
+    Ojo con los formatos de período, que difieren entre modelos: Factura guarda el mes
+    como nombre en español y el año como string, mientras Gasto, NominaMensual e
+    IngresoAdicional los guardan como enteros. Confundirlos devuelve 0 en silencio.
+    """
+    neto = {}
+
+    facturas = (db.query(models.Factura.organizacion_id, func.sum(models.Factura.utilidad))
+                .filter(models.Factura.estado.in_(["pagado", "planilla_pagada"]),
+                        models.Factura.mes == MESES_ES[mes],
+                        models.Factura.anio == str(anio))
+                .group_by(models.Factura.organizacion_id).all())
+    for org_id, total in facturas:
+        neto[org_id] = neto.get(org_id, 0.0) + float(total or 0)
+
+    for modelo, signo in ((models.IngresoAdicional, 1),
+                          (models.NominaMensual, -1),
+                          (models.Gasto, -1)):
+        filas = (db.query(modelo.organizacion_id, func.sum(modelo.valor))
+                 .filter(modelo.mes == mes, modelo.anio == anio)
+                 .group_by(modelo.organizacion_id).all())
+        for org_id, total in filas:
+            neto[org_id] = neto.get(org_id, 0.0) + signo * float(total or 0)
+
+    return neto
+
+
 def _calc_items_ingresos(db: Session) -> list:
-    """Calcula la facturación en vivo por organización (afiliados activos × precio)."""
+    """Facturación en vivo por organización.
+
+    El ingreso del SaaS es la UTILIDAD NETA que genera cada empresa en el mes en curso,
+    la misma cifra que muestra Reportes Financieros. `precio_afiliado` se sigue
+    devolviendo porque la columna existe, pero ya no define el ingreso.
+    """
+    from models import COL_TZ
+    from datetime import datetime
+    hoy = datetime.now(COL_TZ)
     orgs = db.query(models.Organizacion).order_by(models.Organizacion.creado.desc()).all()
     counts = dict(db.query(models.Afiliado.organizacion_id, func.count(models.Afiliado.id))
                   .filter(models.Afiliado.activo == True)
                   .group_by(models.Afiliado.organizacion_id).all())
+    netos = _utilidad_neta_por_org(db, hoy.year, hoy.month)
     items = []
     for o in orgs:
         precio = float(o.precio_afiliado) if o.precio_afiliado is not None else PRECIO_AFILIADO_DEFAULT
         n = counts.get(o.id, 0)
+        neta = netos.get(o.id, 0.0)
         items.append({
             "id": o.id, "nombre": o.nombre, "slug": o.slug, "activo": bool(o.activo),
             "afiliados": n,
             "precio_afiliado": precio,
-            "ingreso_mensual": n * precio,
-            "ingreso_anual": n * precio * 12,
+            "utilidad_neta": neta,
+            "utilidad_por_afiliado": (neta / n) if n else 0.0,
+            "ingreso_mensual": neta,
+            "ingreso_anual": neta * 12,
         })
     return items
 
 
 @router.get("/ingresos")
 def ingresos_organizaciones(db: Session = Depends(get_db), token=Depends(require_superadmin)):
-    """Resumen de ingresos del SaaS: cada organización paga precio_afiliado (COP) por
-    afiliado activo al mes. El precio es editable por organización (PATCH /organizaciones/{id})."""
+    """Resumen de ingresos del SaaS.
+
+    El ingreso de cada organización es su UTILIDAD NETA del mes: la misma cifra que
+    muestra Reportes Financieros (facturas pagadas + ingresos adicionales - nóminas
+    - gastos). No es una tarifa por afiliado ni cuenta lo pendiente de cobro.
+    """
     items = _calc_items_ingresos(db)
+    afiliados_tot = sum(i["afiliados"] for i in items)
+    neta_tot = sum(i["utilidad_neta"] for i in items)
     totales = {
-        "afiliados": sum(i["afiliados"] for i in items),
+        "afiliados": afiliados_tot,
+        "utilidad_neta": neta_tot,
+        "utilidad_por_afiliado": (neta_tot / afiliados_tot) if afiliados_tot else 0.0,
         "ingreso_mensual": sum(i["ingreso_mensual"] for i in items),
         "ingreso_anual": sum(i["ingreso_anual"] for i in items),
         "organizaciones_activas": sum(1 for i in items if i["activo"]),
@@ -276,9 +333,11 @@ def facturar_organizacion(org_id: int, mes: int = 0, anio: int = 0,
     n = db.query(func.count(models.Afiliado.id)).filter(
         models.Afiliado.organizacion_id == org_id,
         models.Afiliado.activo == True).scalar() or 0
-    precio = float(org.precio_afiliado) if org.precio_afiliado is not None else PRECIO_AFILIADO_DEFAULT
+    # El monto es la utilidad neta del periodo, la misma cifra que muestra el panel.
+    # Si facturara afiliados x precio, panel y factura mostrarian numeros distintos.
+    neta = _utilidad_neta_por_org(db, anio, mes).get(org_id, 0.0)
     f = models.FacturaOrg(organizacion_id=org_id, anio=anio, mes=mes,
-                          afiliados=n, precio=precio, monto=n * precio)
+                          afiliados=n, precio=(neta / n) if n else 0.0, monto=neta)
     db.add(f); db.commit(); db.refresh(f)
     return _factura_out(f, org.nombre, org.slug)
 

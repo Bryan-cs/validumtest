@@ -1,4 +1,4 @@
-// Shared UI Components for BBC File
+// Componentes de interfaz compartidos — Validum
 import React, { useEffect, useState, Component } from 'react';
 import { Button } from './ui/button';
 import { Card as ShadCard } from './ui/card';

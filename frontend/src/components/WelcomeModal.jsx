@@ -133,7 +133,7 @@ export default function WelcomeModal({ user, onClose }) {
               {saludo(hora)}, {nombreCompleto}.
             </h2>
             <p style={{ margin: '4px 0 0', fontSize: 13, color: '#94a3b8' }}>
-              Ha iniciado sesión en el Sistema de Gestión BBC File.
+              Ha iniciado sesión en Validum, su sistema de gestión de seguridad social.
             </p>
           </div>
 
