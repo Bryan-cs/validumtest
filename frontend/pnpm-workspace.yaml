@@ -1,3 +1,10 @@
+# `packages` es obligatorio: pnpm 9 falla con "packages field missing or empty"
+# en cuanto encuentra este archivo sin el campo. Local no se notaba porque una
+# pnpm mas nueva lo tolera; el build de Railway (pnpm 9.15.9) no.
+# '.' = este directorio es el unico paquete, no hay monorepo.
+packages:
+  - '.'
+
 allowBuilds:
   esbuild: true
   sharp: true
