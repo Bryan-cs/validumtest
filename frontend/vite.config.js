@@ -81,4 +81,10 @@ export default defineConfig({
       },
     },
   },
+  // `vite preview` sirve el build en Railway. Desde 5.4.12 rechaza peticiones
+  // cuyo Host no reconoce, y el dominio de Railway no es uno de ellos: sin esto
+  // responde "Blocked request". Solo afecta al servidor de preview.
+  preview: {
+    allowedHosts: ['.up.railway.app'],
+  },
 });

@@ -1,0 +1,17 @@
+# Frontend servido desde Railway (no Vercel).
+#
+# Vite compila a estaticos y `vite preview` los sirve con fallback de SPA, que
+# es lo que necesita el router del lado del cliente: cualquier ruta profunda
+# (/afiliados, /cobro) devuelve index.html en vez de 404.
+#
+# OJO con VITE_API_URL: Vite la hornea en tiempo de BUILD, no la lee en runtime.
+# Cambiarla exige redesplegar este servicio; no alcanza con editar la variable.
+
+[build]
+buildCommand = "pnpm install --frozen-lockfile && pnpm run build"
+
+[deploy]
+startCommand = "pnpm exec vite preview --host 0.0.0.0 --port $PORT --strictPort"
+region = "us-east4"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
