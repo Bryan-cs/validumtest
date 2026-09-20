@@ -551,8 +551,12 @@ class AportanteUpdate(BaseModel):
 
 
 class LiquidacionRequest(BaseModel):
-    """Qué liquidar: un aportante y un período de cotización."""
-    aportante_id: int
+    """Qué liquidar: un afiliado y un período de cotización.
+
+    La planilla es de una persona. El aportante que va en el encabezado se
+    deduce del cliente del afiliado, no se envía.
+    """
+    afiliado_id: int
     anio: int
     mes: int
     tipo_planilla: str = "E"

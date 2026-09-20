@@ -667,7 +667,7 @@ class AportantePila(Base):
 
 
 class PlanillaLiquidacion(Base):
-    """Cabecera de una liquidación PILA: un período, un aportante, un tipo de planilla.
+    """Cabecera de una liquidación PILA: un afiliado, un período, un tipo de planilla.
 
     Distinta de `PlanillaPago`, que solo guarda archivos subidos a mano. Esta es la
     planilla que el sistema liquida y, más adelante, envía al operador.
@@ -678,6 +678,7 @@ class PlanillaLiquidacion(Base):
     __tablename__ = "planillas_liquidacion"
     __table_args__ = (
         Index('ix_liq_org_aportante_periodo', 'organizacion_id', 'aportante_id', 'periodo_cotizacion'),
+        Index('ix_liq_org_afiliado_periodo', 'organizacion_id', 'afiliado_doc', 'periodo_cotizacion'),
         Index('ix_liq_org_estado', 'organizacion_id', 'estado'),
     )
     id              = Column(Integer, primary_key=True, index=True)
@@ -685,6 +686,16 @@ class PlanillaLiquidacion(Base):
     aportante_id    = Column(Integer, ForeignKey("aportantes_pila.id", ondelete="RESTRICT"),
                              index=True, nullable=False)
     cliente_ref     = Column(String(150), index=True)
+
+    # La planilla es de una persona: un afiliado, un período, un archivo con un
+    # solo cotizante. El aportante sigue siendo la empresa porque la planilla
+    # tipo E lo exige en el encabezado, pero no se liquida a toda la empresa de
+    # una vez. Se guarda copia del documento y el nombre para que la planilla
+    # siga siendo legible si el afiliado se elimina después.
+    afiliado_id      = Column(Integer, ForeignKey("afiliados.id", ondelete="SET NULL"),
+                              index=True, nullable=True)
+    afiliado_doc     = Column(String(20), index=True)
+    afiliado_nombre  = Column(String(150))
 
     tipo_planilla      = Column(String(1), nullable=False)   # E | Y | I | A | N | M | K | J | S | W
     periodo_cotizacion = Column(String(7), nullable=False)   # AAAA-MM

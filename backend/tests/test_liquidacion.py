@@ -269,8 +269,8 @@ def test_marca_de_exonerado_en_su_posicion():
 # ─── Endpoints ────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def aportante_con_afiliados(client, db, admin_token):
-    """Un aportante con dos afiliados listos para liquidar."""
+def afiliado_listo(client, db, admin_token):
+    """Un afiliado con su empresa cargada como aportante, listo para liquidar."""
     n = next(_contador)
     cliente = f"LIQ-{n}"
     r = client.post("/aportantes", json={
@@ -280,96 +280,164 @@ def aportante_con_afiliados(client, db, admin_token):
         "cod_municipio": "001",
     }, headers=_h(admin_token))
     assert r.status_code == 201
-    ap_id = r.json()["id"]
-    org = db.query(models.AportantePila).filter_by(id=ap_id).first().organizacion_id
+    org = db.query(models.AportantePila).filter_by(id=r.json()["id"]).first().organizacion_id
 
-    for i in range(2):
-        db.add(models.Afiliado(
-            organizacion_id=org, nombre=f"AFILIADO {n}{i}", tipo_doc="CC",
-            doc=f"10{n:03d}{i}", cliente_txt=cliente, empresa=cliente,
-            activo=True, estado="ACTIVO",
-            primer_apellido="PEREZ", primer_nombre="JUAN",
-            tipo_cotizante="01", cod_eps="EPS037", cod_afp="230301",
-            cod_ccf="CCF03", clase_riesgo="1", salario_basico=SMLMV_2026,
-            fecha_ingreso="2024-01-15",
-        ))
+    af = models.Afiliado(
+        organizacion_id=org, nombre=f"JUAN PEREZ {n}", tipo_doc="CC",
+        doc=f"10{n:04d}", cliente_txt=cliente, empresa=cliente,
+        activo=True, estado="ACTIVO",
+        primer_apellido="PEREZ", primer_nombre="JUAN",
+        tipo_cotizante="01", cod_eps="EPS037", cod_afp="230301",
+        cod_ccf="CCF03", clase_riesgo="1", salario_basico=SMLMV_2026,
+        fecha_ingreso="2024-01-15",
+    )
+    db.add(af)
     db.commit()
-    return {"aportante_id": ap_id, "cliente": cliente}
+    db.refresh(af)
+    return {"afiliado_id": af.id, "doc": af.doc, "cliente": cliente}
 
 
-def test_previsualizar_no_guarda_nada(client, admin_token, aportante_con_afiliados, db):
+def test_previsualizar_no_guarda_nada(client, admin_token, afiliado_listo, db):
     antes = db.query(models.PlanillaLiquidacion).count()
     r = client.post("/liquidacion/previsualizar", headers=_h(admin_token), json={
-        "aportante_id": aportante_con_afiliados["aportante_id"], "anio": 2026, "mes": 9})
+        "afiliado_id": afiliado_listo["afiliado_id"], "anio": 2026, "mes": 9})
     assert r.status_code == 200
-    assert r.json()["total_cotizantes"] == 2
-    assert r.json()["totales"]["general"] > 0
+    cuerpo = r.json()
+    assert cuerpo["afiliado"]["doc"] == afiliado_listo["doc"]
+    assert cuerpo["totales"]["general"] > 0
     assert db.query(models.PlanillaLiquidacion).count() == antes
 
 
-def test_liquidar_congela_el_detalle(client, admin_token, aportante_con_afiliados, db):
+def test_la_planilla_es_de_una_sola_persona(client, admin_token, afiliado_listo, db):
+    """Aunque la empresa tenga más afiliados, la planilla lleva un cotizante."""
+    af = db.query(models.Afiliado).filter_by(id=afiliado_listo["afiliado_id"]).first()
+    db.add(models.Afiliado(
+        organizacion_id=af.organizacion_id, nombre="OTRA PERSONA", tipo_doc="CC",
+        doc=af.doc + "9", cliente_txt=af.cliente_txt, empresa=af.empresa,
+        activo=True, estado="ACTIVO", primer_apellido="OTRA", primer_nombre="PERSONA",
+        tipo_cotizante="01", cod_eps="EPS037", cod_afp="230301",
+        clase_riesgo="1", salario_basico=SMLMV_2026, fecha_ingreso="2024-01-15"))
+    db.commit()
+
     r = client.post("/liquidacion", headers=_h(admin_token), json={
-        "aportante_id": aportante_con_afiliados["aportante_id"], "anio": 2026, "mes": 9})
+        "afiliado_id": afiliado_listo["afiliado_id"], "anio": 2026, "mes": 9})
     assert r.status_code == 201
     liq_id = r.json()["id"]
 
     detalles = db.query(models.PlanillaDetalle).filter_by(liquidacion_id=liq_id).all()
-    assert len(detalles) == 2
-    assert all(len(d.linea_plana) == 693 for d in detalles), \
-        "cada detalle guarda su registro tipo 2 exacto"
+    assert len(detalles) == 1
+    assert detalles[0].doc == afiliado_listo["doc"]
+
+    liq = db.query(models.PlanillaLiquidacion).filter_by(id=liq_id).first()
+    assert liq.afiliado_doc == afiliado_listo["doc"]
+    assert liq.total_cotizantes == 1
+    assert len(detalles[0].linea_plana) == 693
 
 
-def test_no_se_liquida_dos_veces_el_mismo_periodo(client, admin_token, aportante_con_afiliados):
-    cuerpo = {"aportante_id": aportante_con_afiliados["aportante_id"], "anio": 2026, "mes": 9}
+def test_no_se_liquida_dos_veces_a_la_misma_persona(client, admin_token, afiliado_listo):
+    cuerpo = {"afiliado_id": afiliado_listo["afiliado_id"], "anio": 2026, "mes": 9}
     assert client.post("/liquidacion", json=cuerpo, headers=_h(admin_token)).status_code == 201
     r = client.post("/liquidacion", json=cuerpo, headers=_h(admin_token))
     assert r.status_code == 409
-    assert "Ya hay una planilla" in r.json()["detail"]
+    assert "ya tiene una planilla" in r.json()["detail"]
 
 
-def test_anular_permite_volver_a_liquidar(client, admin_token, aportante_con_afiliados):
-    cuerpo = {"aportante_id": aportante_con_afiliados["aportante_id"], "anio": 2026, "mes": 9}
+def test_el_mismo_periodo_en_otra_persona_si_se_puede(client, admin_token, afiliado_listo, db):
+    af = db.query(models.Afiliado).filter_by(id=afiliado_listo["afiliado_id"]).first()
+    otro = models.Afiliado(
+        organizacion_id=af.organizacion_id, nombre="SEGUNDA PERSONA", tipo_doc="CC",
+        doc=af.doc + "7", cliente_txt=af.cliente_txt, empresa=af.empresa,
+        activo=True, estado="ACTIVO", primer_apellido="SEGUNDA", primer_nombre="PERSONA",
+        tipo_cotizante="01", cod_eps="EPS037", cod_afp="230301",
+        clase_riesgo="1", salario_basico=SMLMV_2026, fecha_ingreso="2024-01-15")
+    db.add(otro)
+    db.commit()
+    db.refresh(otro)
+
+    for afiliado_id in (afiliado_listo["afiliado_id"], otro.id):
+        r = client.post("/liquidacion", headers=_h(admin_token),
+                        json={"afiliado_id": afiliado_id, "anio": 2026, "mes": 9})
+        assert r.status_code == 201
+
+
+def test_anular_permite_volver_a_liquidar(client, admin_token, afiliado_listo):
+    cuerpo = {"afiliado_id": afiliado_listo["afiliado_id"], "anio": 2026, "mes": 9}
     liq_id = client.post("/liquidacion", json=cuerpo, headers=_h(admin_token)).json()["id"]
     assert client.post(f"/liquidacion/{liq_id}/anular",
                        headers=_h(admin_token)).status_code == 200
     assert client.post("/liquidacion", json=cuerpo, headers=_h(admin_token)).status_code == 201
 
 
-def test_descargar_plano(client, admin_token, aportante_con_afiliados):
+def test_descargar_plano_de_una_persona(client, admin_token, afiliado_listo):
     liq_id = client.post("/liquidacion", headers=_h(admin_token), json={
-        "aportante_id": aportante_con_afiliados["aportante_id"],
+        "afiliado_id": afiliado_listo["afiliado_id"],
         "anio": 2026, "mes": 9}).json()["id"]
 
     r = client.get(f"/liquidacion/{liq_id}/plano", headers=_h(admin_token))
     assert r.status_code == 200
-    assert "attachment" in r.headers["content-disposition"]
+    assert afiliado_listo["doc"] in r.headers["content-disposition"]
 
     lineas = r.text.rstrip("\r\n").split("\r\n")
-    assert len(lineas) == 3                       # encabezado + 2 cotizantes
+    assert len(lineas) == 2, "encabezado y un solo cotizante"
     assert len(lineas[0]) == 359 and lineas[0].startswith("01")
-    assert all(len(l) == 693 and l.startswith("02") for l in lineas[1:])
+    assert len(lineas[1]) == 693 and lineas[1].startswith("02")
+    assert lineas[1][9:25].strip() == afiliado_listo["doc"]
 
 
-def test_aportante_sin_afiliados(client, admin_token, aportante_payload_simple):
-    r = client.post("/liquidacion/previsualizar", headers=_h(admin_token), json={
-        "aportante_id": aportante_payload_simple, "anio": 2026, "mes": 9})
-    assert r.status_code == 400
-    assert "no tiene afiliados" in r.json()["detail"]
-
-
-@pytest.fixture
-def aportante_payload_simple(client, admin_token):
+def test_afiliado_sin_aportante_no_se_liquida(client, admin_token, db):
+    """Sin la empresa cargada no hay NIT para el encabezado."""
     n = next(_contador)
-    r = client.post("/aportantes", json={
-        "cliente_ref": f"VACIO-{n}", "razon_social": f"VACIA {n} SAS",
-        "tipo_doc": "NI", "num_doc": f"9007770{n:02d}", "tipo_aportante": "01",
-    }, headers=_h(admin_token))
-    return r.json()["id"]
+    org = db.query(models.Organizacion).first().id
+    af = models.Afiliado(
+        organizacion_id=org, nombre="SIN EMPRESA", tipo_doc="CC", doc=f"77{n:04d}",
+        cliente_txt=f"CLIENTE-INEXISTENTE-{n}", activo=True, estado="ACTIVO",
+        primer_apellido="SIN", primer_nombre="EMPRESA", tipo_cotizante="01",
+        cod_eps="EPS037", salario_basico=SMLMV_2026)
+    db.add(af)
+    db.commit()
+    db.refresh(af)
+
+    r = client.post("/liquidacion/previsualizar", headers=_h(admin_token),
+                    json={"afiliado_id": af.id, "anio": 2026, "mes": 9})
+    assert r.status_code == 400
+    assert "no tiene aportante cargado" in r.json()["detail"]
 
 
-def test_mes_invalido_rechazado(client, admin_token, aportante_con_afiliados):
+def test_afiliado_retirado_no_se_liquida(client, admin_token, afiliado_listo, db):
+    af = db.query(models.Afiliado).filter_by(id=afiliado_listo["afiliado_id"]).first()
+    af.activo = False
+    db.commit()
+    r = client.post("/liquidacion/previsualizar", headers=_h(admin_token),
+                    json={"afiliado_id": af.id, "anio": 2026, "mes": 9})
+    assert r.status_code == 400
+    assert "retirado" in r.json()["detail"]
+
+
+def test_pendientes_marca_quien_ya_tiene_planilla(client, admin_token, afiliado_listo):
+    r = client.get("/liquidacion/pendientes?anio=2026&mes=9", headers=_h(admin_token))
+    assert r.status_code == 200
+    fila = next(x for x in r.json() if x["doc"] == afiliado_listo["doc"])
+    assert fila["planilla_id"] is None
+
+    client.post("/liquidacion", headers=_h(admin_token),
+                json={"afiliado_id": afiliado_listo["afiliado_id"], "anio": 2026, "mes": 9})
+
+    r = client.get("/liquidacion/pendientes?anio=2026&mes=9", headers=_h(admin_token))
+    fila = next(x for x in r.json() if x["doc"] == afiliado_listo["doc"])
+    assert fila["planilla_id"] is not None
+    assert fila["estado"] == "generada"
+    assert fila["total"] > 0
+
+
+def test_afiliado_inexistente(client, admin_token):
+    r = client.post("/liquidacion/previsualizar", headers=_h(admin_token),
+                    json={"afiliado_id": 999999, "anio": 2026, "mes": 9})
+    assert r.status_code == 404
+
+
+def test_mes_invalido_rechazado(client, admin_token, afiliado_listo):
     r = client.post("/liquidacion/previsualizar", headers=_h(admin_token), json={
-        "aportante_id": aportante_con_afiliados["aportante_id"], "anio": 2026, "mes": 13})
+        "afiliado_id": afiliado_listo["afiliado_id"], "anio": 2026, "mes": 13})
     assert r.status_code == 422
 
 

@@ -142,6 +142,14 @@ def _ensure_columns():
     ]:
         _check("afiliados", _col, f"ALTER TABLE afiliados ADD COLUMN {_col} {_tipo}")
 
+    # La planilla PILA es por afiliado (ver migración w7x8y9z0a1b2).
+    _check("planillas_liquidacion", "afiliado_id",
+           "ALTER TABLE planillas_liquidacion ADD COLUMN afiliado_id INTEGER")
+    _check("planillas_liquidacion", "afiliado_doc",
+           "ALTER TABLE planillas_liquidacion ADD COLUMN afiliado_doc VARCHAR(20)")
+    _check("planillas_liquidacion", "afiliado_nombre",
+           "ALTER TABLE planillas_liquidacion ADD COLUMN afiliado_nombre VARCHAR(150)")
+
     ver_detalle_recien_agregada = any(t == "usuarios" and c == "ver_detalle" for t, c, _ in _missing)
 
     if _missing:
