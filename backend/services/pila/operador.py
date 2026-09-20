@@ -338,6 +338,18 @@ def inconsistencias(sesion: Sesion, codigo_planilla: str, desde: int = 0,
 
 
 def totales(sesion: Sesion, numero_planilla: str, cliente: Optional[httpx.Client] = None):
+    """Los totales que cobra el operador, que no son los que liquida el motor.
+
+    El operador devuelve el valor final: nuestro subtotal mas los intereses de
+    mora que correspondan por pagar el periodo despues de la fecha limite. En la
+    planilla 88320590 eso fue $429.600 de aportes mas $6.000 de intereses, o sea
+    $435.600, y la prefactura lo separa en "SUBTOTAL SIN INTERESES" y "TOTAL
+    INTERESES". Los intereses se prorratean por administradora, asi que tampoco
+    conviene contrastar linea por linea contra la liquidacion propia.
+
+    El interes depende de la fecha en que se pague, no de la que se liquide, asi
+    que el motor no lo calcula: la cifra que manda es esta.
+    """
     _registrar("totales", planilla=numero_planilla)
     return _get_json(sesion, f"{BASE_PLANILLAS}/v1/planillas/{numero_planilla}/totales",
                      None, cliente)
