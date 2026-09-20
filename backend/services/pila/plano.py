@@ -149,7 +149,7 @@ CAMPOS_TIPO_2 = [
     Campo(95, 665,   9, "N", "ibc_otros_parafiscales"),
     Campo(96, 674,   3, "N", "horas_laboradas"),
     Campo(97, 677,  10, "A", "fecha_radicacion_exterior"),
-    Campo(98, 687,   7, "N", "tarifa_riesgos_especial"),
+    Campo(98, 687,   7, "N", "subactividad_economica"),
 ]
 
 LARGO_TIPO_1 = CAMPOS_TIPO_1[-1].inicio + CAMPOS_TIPO_1[-1].longitud - 1
@@ -234,6 +234,23 @@ def registro_tipo_2(valores: dict) -> str:
     return _armar(CAMPOS_TIPO_2, {"tipo_registro": 2, **valores}, LARGO_TIPO_2)
 
 
+def periodos_del_encabezado(periodo_cotizacion: str):
+    """Los dos períodos del encabezado: (otros subsistemas, salud).
+
+    El operador avisó: "El período de salud reportado en la liquidación
+    (2026-10) es diferente al período de salud a liquidar actualmente
+    (2026-09)". Salud lleva el mes que se está liquidando; pensión y los demás
+    subsistemas, el mes anterior. El plano de referencia lo confirma: para la
+    planilla de agosto reporta 2026-07 en el campo 15 y 2026-08 en el 16.
+    """
+    anio, mes = int(periodo_cotizacion[:4]), int(periodo_cotizacion[5:7])
+    if mes == 1:
+        anterior = f"{anio - 1:04d}-12"
+    else:
+        anterior = f"{anio:04d}-{mes - 1:02d}"
+    return anterior, periodo_cotizacion
+
+
 def datos_sucursal(aportante):
     """Forma de presentación y sucursal del encabezado.
 
@@ -313,6 +330,9 @@ def valores_desde_detalle(detalle, secuencia: int) -> dict:
         "tarifa_men": formatear_tarifa(0, 7),
         "cod_arl_cotizante": detalle.cod_arl,
         "clase_riesgo": detalle.clase_riesgo,
+        # El operador rechaza las horas en cero.
+        "horas_laboradas": detalle.horas_laboradas,
+        "subactividad_economica": detalle.subactividad_economica,
         # El anexo reporta este campo en "S"; con "X" el operador lo rechaza.
         "exonerado_salud_sena_icbf": "S" if detalle.exonerado else "",
         "fecha_ING": fechas.get("ING", ""),
@@ -326,6 +346,7 @@ def generar(aportante, liquidacion, resumen, modalidad: int = 1) -> str:
     Devuelve el texto con saltos CRLF, que es como lo esperan los operadores.
     """
     forma, cod_sucursal, nombre_sucursal = datos_sucursal(aportante)
+    periodo_otros, periodo_salud = periodos_del_encabezado(liquidacion.periodo_cotizacion)
     encabezado = registro_tipo_1({
         "modalidad_planilla": modalidad,
         "secuencia": 1,
@@ -340,8 +361,8 @@ def generar(aportante, liquidacion, resumen, modalidad: int = 1) -> str:
         "cod_sucursal": cod_sucursal,
         "nombre_sucursal": nombre_sucursal,
         "cod_arl": aportante.cod_arl or "",
-        "periodo_pago_otros": liquidacion.periodo_cotizacion,
-        "periodo_pago_salud": liquidacion.periodo_pago,
+        "periodo_pago_otros": periodo_otros,
+        "periodo_pago_salud": periodo_salud,
         "numero_planilla": liquidacion.numero_planilla or 0,
         "fecha_pago": liquidacion.fecha_limite_pago or "",
         "total_cotizantes": resumen.total_cotizantes,

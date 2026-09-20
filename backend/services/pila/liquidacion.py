@@ -70,6 +70,8 @@ class DetalleLiquidado:
     # referencia del operador los trae llenos.
     cod_arl: str = ""
     clase_riesgo: str = ""
+    # Campo 98: subactividad economica del aportante, no una tarifa.
+    subactividad_economica: str = ""
 
     tarifa_ccf: Decimal = Decimal("0")
     valor_ccf: Decimal = Decimal("0")
@@ -77,6 +79,10 @@ class DetalleLiquidado:
     valor_sena: Decimal = Decimal("0")
     tarifa_icbf: Decimal = Decimal("0")
     valor_icbf: Decimal = Decimal("0")
+
+    # El operador rechaza horas en cero. El plano de referencia reporta 8 por
+    # cada día cotizado: 1 día -> 008.
+    horas_laboradas: int = 0
 
     exonerado: bool = False
     novedades: dict = field(default_factory=dict)
@@ -209,6 +215,8 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         tipo_salario=(afiliado.tipo_salario or "F")[:1],
         centro_trabajo=afiliado.centro_trabajo or "",
         novedades=novedades, fechas_novedades=fechas,
+        horas_laboradas=dias * 8,
+        subactividad_economica=(getattr(aportante, "actividad_economica", "") or ""),
     )
 
     ibc = _ibc(base, dias, smlmv)
@@ -218,7 +226,7 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.dias_pension = dias
         d.ibc_pension = ibc
         d.tarifa_pension = P.TARIFA_PENSION
-        d.cot_pension = P.redondear_peso(ibc * P.TARIFA_PENSION)
+        d.cot_pension = P.aproximar_aporte(ibc * P.TARIFA_PENSION)
         d.fsp_solidaridad, d.fsp_subsistencia = P.partir_fsp(ibc, smlmv)
 
     # Salud. La exoneración del artículo 114-1 quita la parte patronal a los
@@ -230,7 +238,7 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
             ibc < smlmv * P.TOPE_EXONERACION_SMLMV
         d.exonerado = exonera
         d.tarifa_salud = P.TARIFA_SALUD_TRABAJADOR if exonera else P.TARIFA_SALUD
-        d.cot_salud = P.redondear_peso(ibc * d.tarifa_salud)
+        d.cot_salud = P.aproximar_aporte(ibc * d.tarifa_salud)
 
     # Riesgos laborales: la tarifa sale de la clase de riesgo del afiliado y,
     # si no la tiene, de la del aportante.
@@ -239,7 +247,7 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.dias_arl = dias
         d.ibc_arl = ibc
         d.tarifa_arl = _dec(afiliado.tarifa_arl) or P.TARIFA_ARL_POR_CLASE[str(clase)]
-        d.cot_arl = P.redondear_peso(ibc * d.tarifa_arl)
+        d.cot_arl = P.aproximar_aporte(ibc * d.tarifa_arl)
         d.clase_riesgo = str(clase)
         d.cod_arl = afiliado.cod_arl or getattr(aportante, "cod_arl", "") or ""
 
@@ -248,13 +256,13 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.dias_ccf = dias
         d.ibc_ccf = ibc
         d.tarifa_ccf = P.TARIFA_CCF
-        d.valor_ccf = P.redondear_peso(ibc * P.TARIFA_CCF)
+        d.valor_ccf = P.aproximar_aporte(ibc * P.TARIFA_CCF)
 
     if d.cod_ccf and not d.exonerado:
         d.tarifa_sena = P.TARIFA_SENA
-        d.valor_sena = P.redondear_peso(ibc * P.TARIFA_SENA)
+        d.valor_sena = P.aproximar_aporte(ibc * P.TARIFA_SENA)
         d.tarifa_icbf = P.TARIFA_ICBF
-        d.valor_icbf = P.redondear_peso(ibc * P.TARIFA_ICBF)
+        d.valor_icbf = P.aproximar_aporte(ibc * P.TARIFA_ICBF)
 
     return d
 

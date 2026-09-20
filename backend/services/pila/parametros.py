@@ -5,10 +5,11 @@ tarifas por subsistema y los tramos del Fondo de Solidaridad Pensional. Cuando
 el Gobierno expida el decreto del año siguiente se agrega una entrada y nada más
 se toca.
 
-El redondeo NO es al múltiplo de cien: el Anexo Técnico 2 exige aproximación
-aritmética al peso — se toman los dos primeros decimales y desde .50 se sube.
-Equivocarse en esto hace que los totales no cuadren y el operador rechace la
-planilla completa.
+El redondeo va en dos pasos y los dos importan: el Anexo Técnico 2 exige
+aproximación aritmética al peso —dos decimales, desde .50 sube—, y encima de
+eso el operador espera la cotización de cada subsistema aproximada a la
+centena superior. Lo segundo no está en la norma; salió del reporte de
+validación. Equivocarse hace que los totales no cuadren.
 """
 from decimal import Decimal, ROUND_HALF_UP
 from typing import NamedTuple
@@ -88,8 +89,33 @@ def parametros(anio: int) -> ParametrosAnio:
 
 
 def redondear_peso(valor) -> Decimal:
-    """Aproximación aritmética al peso, como la exige el Anexo Técnico 2."""
+    """Aproximación aritmética al peso, como la exige el Anexo Técnico 2.
+
+    Aplica a los valores intermedios: el IBC y las bases. La cotización final
+    de cada subsistema lleva además `aproximar_aporte`.
+    """
     return Decimal(valor).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+
+def aproximar_aporte(valor) -> Decimal:
+    """Aproxima una cotización a la centena superior.
+
+    Verificado contra el validador del operador, que sobre un IBC de un salario
+    mínimo esperaba:
+
+        salud    4%      70.036  ->  70.100
+        pensión  16%    280.145  -> 280.200
+        riesgos  0,522%   9.140  ->   9.200
+
+    Siempre hacia arriba, nunca al múltiplo más cercano: 70.036 sube a 70.100
+    y no baja a 70.000. El anexo solo habla de aproximar al peso, que es el
+    paso anterior; esta segunda aproximación no está en la norma y salió del
+    reporte de validación.
+    """
+    entero = Decimal(valor).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    if entero % 100 == 0:
+        return entero
+    return (entero // 100 + 1) * 100
 
 
 def tarifa_fsp(ibc: Decimal, smlmv: Decimal) -> Decimal:
@@ -112,6 +138,6 @@ def partir_fsp(ibc: Decimal, smlmv: Decimal):
     total = tarifa_fsp(ibc, smlmv)
     if total == 0:
         return Decimal("0"), Decimal("0")
-    solidaridad = redondear_peso(ibc * TARIFA_FSP_SOLIDARIDAD)
-    subsistencia = redondear_peso(ibc * (total - TARIFA_FSP_SOLIDARIDAD))
+    solidaridad = aproximar_aporte(ibc * TARIFA_FSP_SOLIDARIDAD)
+    subsistencia = aproximar_aporte(ibc * (total - TARIFA_FSP_SOLIDARIDAD))
     return solidaridad, subsistencia

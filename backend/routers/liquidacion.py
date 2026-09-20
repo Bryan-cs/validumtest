@@ -309,6 +309,7 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
                   .order_by(models.PlanillaDetalle.secuencia).all())
 
     forma, cod_sucursal, nombre_sucursal = plano.datos_sucursal(ap)
+    periodo_otros, periodo_salud = plano.periodos_del_encabezado(l.periodo_cotizacion)
     encabezado = plano.registro_tipo_1({
         "modalidad_planilla": 1, "secuencia": 1,
         "razon_social": ap.razon_social,
@@ -318,7 +319,7 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
         "forma_presentacion": forma,
         "cod_sucursal": cod_sucursal, "nombre_sucursal": nombre_sucursal,
         "cod_arl": ap.cod_arl or "",
-        "periodo_pago_otros": l.periodo_cotizacion, "periodo_pago_salud": l.periodo_pago,
+        "periodo_pago_otros": periodo_otros, "periodo_pago_salud": periodo_salud,
         "numero_planilla": l.numero_planilla or 0,
         "fecha_pago": l.fecha_limite_pago or "",
         "total_cotizantes": l.total_cotizantes or len(detalles),

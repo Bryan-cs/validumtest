@@ -97,8 +97,8 @@ def test_fsp_se_reparte_entre_subcuentas():
     """El primer 1% es solidaridad; lo que exceda, subsistencia."""
     ibc = SMLMV_2026 * 20
     sol, sub = P.partir_fsp(ibc, SMLMV_2026)
-    assert sol == P.redondear_peso(ibc * Decimal("0.01"))
-    assert sub == P.redondear_peso(ibc * Decimal("0.01"))
+    assert sol == P.aproximar_aporte(ibc * Decimal("0.01"))
+    assert sub == P.aproximar_aporte(ibc * Decimal("0.01"))
 
 
 def test_sin_fsp_bajo_cuatro_salarios():
@@ -144,9 +144,9 @@ def test_mes_completo_sin_novedades():
 
 def test_tarifas_estandar():
     d = motor.liquidar_afiliado(_Afiliado(), _Aportante(), 2026, 9)
-    assert d.cot_pension == P.redondear_peso(SMLMV_2026 * Decimal("0.16"))
-    assert d.cot_salud == P.redondear_peso(SMLMV_2026 * Decimal("0.125"))
-    assert d.valor_ccf == P.redondear_peso(SMLMV_2026 * Decimal("0.04"))
+    assert d.cot_pension == P.aproximar_aporte(SMLMV_2026 * Decimal("0.16"))
+    assert d.cot_salud == P.aproximar_aporte(SMLMV_2026 * Decimal("0.125"))
+    assert d.valor_ccf == P.aproximar_aporte(SMLMV_2026 * Decimal("0.04"))
 
 
 @pytest.mark.parametrize("clase,tarifa", [
@@ -155,7 +155,7 @@ def test_tarifas_estandar():
 ])
 def test_arl_por_clase_de_riesgo(clase, tarifa):
     d = motor.liquidar_afiliado(_Afiliado(clase_riesgo=clase), _Aportante(), 2026, 9)
-    assert d.cot_arl == P.redondear_peso(SMLMV_2026 * Decimal(tarifa))
+    assert d.cot_arl == P.aproximar_aporte(SMLMV_2026 * Decimal(tarifa))
 
 
 def test_sin_administradora_no_se_liquida_ese_subsistema():
@@ -171,7 +171,7 @@ def test_exonerado_paga_solo_el_4_por_ciento_de_salud():
     d = motor.liquidar_afiliado(_Afiliado(), _Aportante(exonerado=True), 2026, 9)
     assert d.exonerado is True
     assert d.tarifa_salud == Decimal("0.04")
-    assert d.cot_salud == P.redondear_peso(SMLMV_2026 * Decimal("0.04"))
+    assert d.cot_salud == P.aproximar_aporte(SMLMV_2026 * Decimal("0.04"))
 
 
 def test_exonerado_no_paga_sena_ni_icbf():
@@ -192,8 +192,8 @@ def test_exoneracion_no_aplica_sobre_diez_salarios():
 def test_aportante_no_exonerado_paga_todo():
     d = motor.liquidar_afiliado(_Afiliado(), _Aportante(exonerado=False), 2026, 9)
     assert d.tarifa_salud == Decimal("0.125")
-    assert d.valor_sena == P.redondear_peso(SMLMV_2026 * Decimal("0.02"))
-    assert d.valor_icbf == P.redondear_peso(SMLMV_2026 * Decimal("0.03"))
+    assert d.valor_sena == P.aproximar_aporte(SMLMV_2026 * Decimal("0.02"))
+    assert d.valor_icbf == P.aproximar_aporte(SMLMV_2026 * Decimal("0.03"))
 
 
 # ─── Resumen ──────────────────────────────────────────────────────────────────
@@ -625,3 +625,70 @@ def test_el_encabezado_nunca_sale_sin_sucursal():
     })
     assert linea[247] == "S"                      # campo 11
     assert linea[248:258].strip() != ""           # campo 12, obligatorio con S
+
+# ─── Valores que el operador corrigió en la validación ────────────────────────
+
+def test_aportes_se_aproximan_a_la_centena_superior():
+    """Cifras exactas del reporte de validación sobre un IBC de un salario mínimo."""
+    assert P.aproximar_aporte(70036) == 70100      # salud 4%
+    assert P.aproximar_aporte(280145) == 280200    # pensión 16%
+    assert P.aproximar_aporte(9140) == 9200        # riesgos 0,522%
+
+
+def test_la_aproximacion_es_hacia_arriba_no_a_la_mas_cercana():
+    assert P.aproximar_aporte(70036) == 70100, "70.036 sube a 70.100, no baja a 70.000"
+    assert P.aproximar_aporte(101) == 200
+    assert P.aproximar_aporte(100) == 100, "un múltiplo exacto no se mueve"
+    assert P.aproximar_aporte(0) == 0
+
+
+def test_el_ibc_no_se_aproxima_a_la_centena():
+    """La aproximación es de la cotización, no de la base."""
+    d = motor.liquidar_afiliado(_Afiliado(), _Aportante(), 2026, 9)
+    assert d.ibc_salud == SMLMV_2026            # 1.750.905, no 1.751.000
+
+
+def test_cotizaciones_del_caso_validado():
+    """El cotizante que pasó por el validador, con su empresa exonerada."""
+    d = motor.liquidar_afiliado(_Afiliado(), _Aportante(exonerado=True), 2026, 9)
+    assert d.cot_salud == 70100
+    assert d.cot_pension == 280200
+    assert d.cot_arl == 9200
+    assert d.valor_ccf == 70100
+
+
+# ─── Períodos del encabezado ──────────────────────────────────────────────────
+
+def test_salud_lleva_el_mes_liquidado_y_los_demas_el_anterior():
+    """El operador avisó: reportaba salud 2026-10 liquidando 2026-09."""
+    assert plano.periodos_del_encabezado("2026-09") == ("2026-08", "2026-09")
+
+
+def test_los_periodos_cruzan_bien_el_cambio_de_ano():
+    assert plano.periodos_del_encabezado("2026-01") == ("2025-12", "2026-01")
+    assert plano.periodos_del_encabezado("2026-12") == ("2026-11", "2026-12")
+
+
+# ─── Campos que el operador no acepta vacíos ──────────────────────────────────
+
+def test_las_horas_laboradas_nunca_son_cero():
+    """"El número de horas laboradas no puede ser 0", dijo la validación."""
+    d = motor.liquidar_afiliado(_Afiliado(), _Aportante(), 2026, 9)
+    assert d.horas_laboradas == 240              # 30 días × 8
+
+    parcial = motor.liquidar_afiliado(_Afiliado(fecha_ingreso="2026-09-11"),
+                                      _Aportante(), 2026, 9)
+    assert parcial.horas_laboradas == 160        # 20 días × 8
+
+
+def test_campo_98_es_la_subactividad_economica():
+    """No es una tarifa: el operador lo valida contra su tabla de actividades."""
+    campo = next(c for c in plano.CAMPOS_TIPO_2 if c.numero == 98)
+    assert campo.nombre == "subactividad_economica"
+
+    class ConActividad(_Aportante):
+        actividad_economica = "1649201"
+
+    d = motor.liquidar_afiliado(_Afiliado(), ConActividad(), 2026, 9)
+    linea = plano.registro_tipo_2(plano.valores_desde_detalle(d, 1))
+    assert linea[686:693] == "1649201"
