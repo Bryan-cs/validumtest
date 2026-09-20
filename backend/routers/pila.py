@@ -16,13 +16,16 @@ router = APIRouter(prefix="/pila", tags=["pila"])
 
 
 @router.get("/codigos")
-def listar_codigos(tipo: str = "", incluir_derogados: bool = False,
+def listar_codigos(tipo: str = "", padre: str = "", incluir_derogados: bool = False,
                    db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """Códigos de un catálogo, o de todos si no se pide uno.
 
     Por defecto devuelve solo los vigentes: un formulario no debe ofrecer un
     código que el anexo actual ya no permite. `incluir_derogados` existe para
     poder mostrar el nombre de un código viejo al abrir una planilla histórica.
+
+    `padre` acota a los hijos de otro código — sirve para cargar los municipios
+    de un departamento sin traer los 1.122 del país.
     """
     if tipo and tipo not in catalogos.CATALOGOS:
         raise HTTPException(400, f"Catálogo desconocido. Disponibles: "
@@ -31,16 +34,21 @@ def listar_codigos(tipo: str = "", incluir_derogados: bool = False,
     q = db.query(models.PilaCodigo)
     if tipo:
         q = q.filter(models.PilaCodigo.tipo == tipo)
+    if padre:
+        q = q.filter(models.PilaCodigo.padre == padre)
     if not incluir_derogados:
         q = q.filter(models.PilaCodigo.vigente == True)  # noqa: E712
 
     filas = q.order_by(models.PilaCodigo.tipo, models.PilaCodigo.codigo).all()
-    items = [{"tipo": f.tipo, "codigo": f.codigo, "nombre": f.nombre, "vigente": bool(f.vigente)}
+    items = [{"tipo": f.tipo, "codigo": f.codigo, "nombre": f.nombre,
+              "padre": f.padre, "vigente": bool(f.vigente)}
              for f in filas]
 
     return {
         "anexo_version": catalogos.ANEXO_VERSION,
         "anexo_fecha": catalogos.ANEXO_FECHA,
+        "fuente_administradoras": catalogos.FUENTE_ADMINISTRADORAS,
+        "fuente_dane": catalogos.FUENTE_DANE,
         "total": len(items),
         "items": items,
     }

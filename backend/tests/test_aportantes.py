@@ -5,7 +5,6 @@ import pytest
 
 from routers.aportantes import calcular_dv
 
-
 # La BD de tests es de sesion y no hace rollback entre casos (ver conftest), asi
 # que cada test necesita su propio cliente_ref: es unico por organizacion.
 _contador = itertools.count(1)
@@ -21,10 +20,10 @@ def aportante_payload():
         "num_doc": f"9001234{n:02d}",
         "tipo_aportante": "01",
         "clase_aportante": "A",
-        "cod_arl": "14-1",
+        "cod_arl": "14-11",      # ARL SURA, del catálogo de la UGPP
         "clase_riesgo": "1",
-        "cod_depto": "05",
-        "cod_municipio": "001",
+        "cod_depto": "05",       # Antioquia
+        "cod_municipio": "001",  # Medellín
     }
 
 
@@ -41,6 +40,7 @@ def _h(token):
     ("890900608", "9"),   # Grupo Argos
 ])
 def test_calcular_dv_casos_conocidos(nit, dv):
+    """NIT públicos reales: comprueban el algoritmo, no su propia salida."""
     assert calcular_dv(nit) == dv
 
 
@@ -161,6 +161,36 @@ def test_num_doc_no_numerico_rechazado(client, admin_token, aportante_payload):
     p = {**aportante_payload, "num_doc": "ABC123"}
     r = client.post("/aportantes", json=p, headers=_h(admin_token))
     assert r.status_code == 422
+
+
+# ─── Validación contra el catálogo PILA ───────────────────────────────────────
+
+def test_arl_inexistente_rechazada(client, admin_token, aportante_payload):
+    p = {**aportante_payload, "cod_arl": "14-99"}
+    r = client.post("/aportantes", json=p, headers=_h(admin_token))
+    assert r.status_code == 400
+    assert "cod_arl" in r.json()["detail"]
+
+
+def test_tipo_aportante_inexistente_rechazado(client, admin_token, aportante_payload):
+    p = {**aportante_payload, "tipo_aportante": "99"}
+    r = client.post("/aportantes", json=p, headers=_h(admin_token))
+    assert r.status_code == 400
+    assert "tipo_aportante" in r.json()["detail"]
+
+
+def test_municipio_de_otro_departamento_rechazado(client, admin_token, aportante_payload):
+    """05001 es Medellín; 08001 es Barranquilla. 05 + 001 vale, 08 + 001 también,
+    pero 05 + 999 no existe."""
+    p = {**aportante_payload, "cod_depto": "05", "cod_municipio": "999"}
+    r = client.post("/aportantes", json=p, headers=_h(admin_token))
+    assert r.status_code == 400
+    assert "no pertenece al departamento" in r.json()["detail"]
+
+
+def test_municipio_valido_aceptado(client, admin_token, aportante_payload):
+    p = {**aportante_payload, "cod_depto": "08", "cod_municipio": "001"}  # Barranquilla
+    assert client.post("/aportantes", json=p, headers=_h(admin_token)).status_code == 201
 
 
 # ─── RBAC y protección del histórico ──────────────────────────────────────────

@@ -5,7 +5,6 @@ import api from '../utils/api';
 import { C, PageHeader, Btn, Modal, ConfirmModal, ErrorMsg, SkeletonCard } from '../components/UI';
 import useAuthStore from '../hooks/useAuth';
 
-
 const TIPOS_DOC = ['NI', 'CC', 'CE', 'TI', 'PA'];
 const CLASES_RIESGO = ['1', '2', '3', '4', '5'];
 
@@ -41,6 +40,21 @@ const seccion = {
   borderBottom: `1px solid ${C.border}`,
 };
 
+// Los catálogos son normativos: no cambian dentro de una sesión.
+const CATALOGO_OPTS = { staleTime: 60 * 60 * 1000 };
+
+function useCatalogo(tipo, padre) {
+  return useQuery({
+    queryKey: ['pila-codigos', tipo, padre || null],
+    queryFn: async () => {
+      const qs = padre ? `?tipo=${tipo}&padre=${padre}` : `?tipo=${tipo}`;
+      return (await api.get(`/pila/codigos${qs}`)).data.items;
+    },
+    enabled: padre !== null,
+    ...CATALOGO_OPTS,
+  });
+}
+
 function RiesgoBadge({ clase }) {
   if (!clase) return null;
   const s = RIESGO_STYLE[clase] || { bg: '#F3F4F6', color: '#6B7280' };
@@ -75,15 +89,13 @@ export default function Aportantes() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [porBorrar, setPorBorrar] = useState(null);
 
-  // Los tipos de aportante salen de `pila_codigos`, sembrado desde el anexo
-  // vigente. Antes estaban quemados aqui y se desactualizaban con cada
-  // resolucion del Ministerio.
-  const { data: tiposAportante = [] } = useQuery({
-    queryKey: ['pila-codigos', 'TIPO_APORTANTE'],
-    queryFn: async () =>
-      (await api.get('/pila/codigos?tipo=TIPO_APORTANTE')).data.items,
-    staleTime: 60 * 60 * 1000,   // normativo: no cambia dentro de una sesion
-  });
+  // Todo lo que antes era texto libre ahora sale de `pila_codigos`: los tipos de
+  // aportante del anexo, las ARL de la lista de la UGPP y los códigos DANE.
+  const { data: tiposAportante = [] } = useCatalogo('TIPO_APORTANTE');
+  const { data: arls = [] } = useCatalogo('ARL');
+  const { data: deptos = [] } = useCatalogo('DEPTO');
+  // Los 1.122 municipios no se traen de una: solo los del departamento elegido.
+  const { data: municipios = [] } = useCatalogo('MUNICIPIO', form.cod_depto || null);
 
   const { data: aportantes = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['aportantes'],
@@ -101,6 +113,10 @@ export default function Aportantes() {
   }, [aportantes, busqueda, soloActivos]);
 
   const set = (campo, valor) => setForm(f => ({ ...f, [campo]: valor }));
+
+  // Cambiar de departamento invalida el municipio: el código DANE de municipio
+  // solo tiene sentido dentro de su departamento.
+  const setDepto = (valor) => setForm(f => ({ ...f, cod_depto: valor, cod_municipio: '' }));
 
   // El DV lo calcula el backend con el algoritmo de la DIAN. Se pide al salir
   // del campo para que el usuario lo vea antes de guardar, no después de que
@@ -315,9 +331,14 @@ export default function Aportantes() {
             <input style={mono} value={form.clase_aportante} maxLength={1}
                    onChange={e => set('clase_aportante', e.target.value.toUpperCase())} />
           </Campo>
-          <Campo label="Código ARL">
-            <input style={mono} value={form.cod_arl}
-                   onChange={e => set('cod_arl', e.target.value)} />
+          <Campo label="ARL" ancho={2}>
+            <select style={inp} value={form.cod_arl}
+                    onChange={e => set('cod_arl', e.target.value)}>
+              <option value="">—</option>
+              {arls.map(a => (
+                <option key={a.codigo} value={a.codigo}>{a.nombre} ({a.codigo})</option>
+              ))}
+            </select>
           </Campo>
           <Campo label="Clase de riesgo">
             <select style={inp} value={form.clase_riesgo}
@@ -331,7 +352,7 @@ export default function Aportantes() {
                    onChange={e => set('actividad_economica', e.target.value)}
                    placeholder="CIIU" />
           </Campo>
-          <Campo label="Exoneración" ancho={4}>
+          <Campo label="Exoneración" ancho={3}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: C.text }}>
               <input type="checkbox" checked={form.exonerado_parafiscales}
                      onChange={e => set('exonerado_parafiscales', e.target.checked)} />
@@ -342,19 +363,30 @@ export default function Aportantes() {
 
         <div style={seccion}>Ubicación y sucursal</div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-          <Campo label="Depto. (DANE)">
-            <input style={mono} value={form.cod_depto} maxLength={2}
-                   onChange={e => set('cod_depto', e.target.value)} placeholder="05" />
+          <Campo label="Departamento" ancho={2}>
+            <select style={inp} value={form.cod_depto} onChange={e => setDepto(e.target.value)}>
+              <option value="">—</option>
+              {deptos.map(d => (
+                <option key={d.codigo} value={d.codigo}>{d.nombre}</option>
+              ))}
+            </select>
           </Campo>
-          <Campo label="Municipio (DANE)">
-            <input style={mono} value={form.cod_municipio} maxLength={3}
-                   onChange={e => set('cod_municipio', e.target.value)} placeholder="001" />
+          <Campo label="Municipio" ancho={2}>
+            <select style={inp} value={form.cod_municipio} disabled={!form.cod_depto}
+                    onChange={e => set('cod_municipio', e.target.value)}>
+              <option value="">{form.cod_depto ? '—' : 'Elige departamento'}</option>
+              {municipios.map(m => (
+                // El catálogo guarda el código DANE completo; al aportante solo
+                // le corresponden los 3 últimos dígitos.
+                <option key={m.codigo} value={m.codigo.slice(2)}>{m.nombre}</option>
+              ))}
+            </select>
           </Campo>
           <Campo label="Cód. sucursal">
             <input style={mono} value={form.cod_sucursal}
                    onChange={e => set('cod_sucursal', e.target.value)} />
           </Campo>
-          <Campo label="Nombre sucursal">
+          <Campo label="Nombre sucursal" ancho={3}>
             <input style={inp} value={form.nombre_sucursal}
                    onChange={e => set('nombre_sucursal', e.target.value)} />
           </Campo>

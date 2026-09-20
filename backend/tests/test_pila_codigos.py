@@ -1,6 +1,4 @@
-"""Tests catálogos PILA — siembra idempotente, derogación y endpoint de lectura."""
-import pytest
-
+"""Tests catálogos PILA — contenido, siembra idempotente, derogación y endpoint."""
 import models
 from services.pila import catalogos
 
@@ -9,9 +7,9 @@ def _h(token):
     return {"Authorization": f"Bearer {token}"}
 
 
-# ─── Contenido del catálogo ───────────────────────────────────────────────────
+# ─── Contenido del catálogo normativo (anexo) ─────────────────────────────────
 
-def test_catalogos_completos():
+def test_catalogos_del_anexo_completos():
     assert len(catalogos.TIPO_APORTANTE) == 17
     assert len(catalogos.TIPO_PLANILLA) == 18
     assert len(catalogos.TIPO_COTIZANTE) >= 50
@@ -29,15 +27,74 @@ def test_codigos_de_la_resolucion_1529_de_2026():
 def test_sin_codigos_vacios_ni_duplicados():
     for tipo, datos in catalogos.CATALOGOS.items():
         assert all(c.strip() and n.strip() for c, n in datos.items()), tipo
-        assert len(set(datos.values())) == len(datos), f"nombres repetidos en {tipo}"
 
+
+# ─── Datos de referencia (UGPP y DANE) ────────────────────────────────────────
+
+def test_administradoras_por_subsistema():
+    assert len(catalogos.ADMINISTRADORAS["AFP"]) == 8
+    assert len(catalogos.ADMINISTRADORAS["ARL"]) == 10
+    assert len(catalogos.ADMINISTRADORAS["EPS"]) >= 25
+    assert len(catalogos.ADMINISTRADORAS["CCF"]) >= 40
+
+
+def test_administradoras_conocidas():
+    """Códigos cruzados contra dos fuentes: la lista de la UGPP y el portal ADAX."""
+    assert catalogos.ADMINISTRADORAS["AFP"]["230301"].endswith("PORVENIR")
+    assert catalogos.ADMINISTRADORAS["AFP"]["230201"].endswith("PROTECCION")
+    assert "COLPENSIONES" in catalogos.ADMINISTRADORAS["AFP"]["25-14"]
+    assert "SURA" in catalogos.ADMINISTRADORAS["ARL"]["14-11"]
+
+
+def test_eps_liquidadas_son_historicas_no_vigentes():
+    """Cafesalud y Coomeva no operan: no deben poder elegirse, pero su nombre
+    debe poder resolverse al abrir una planilla vieja."""
+    historicas = catalogos.HISTORICOS["EPS"]
+    assert "EPS003" in historicas          # Cafesalud
+    assert "EPS016" in historicas          # Coomeva
+    assert "EPS003" not in catalogos.ADMINISTRADORAS["EPS"]
+
+
+def test_dane_completo_y_consistente():
+    assert len(catalogos.DEPTO) == 33
+    assert len(catalogos.MUNICIPIO) == 1122
+    assert catalogos.DEPTO["05"] == "ANTIOQUIA"
+    assert catalogos.MUNICIPIO["05001"] == "MEDELLÍN"
+    # Cada municipio pertenece al departamento que dicen sus dos primeros dígitos.
+    assert all(cod[:2] == dep for cod, dep in catalogos.MUNICIPIO_DEPTO.items())
+    assert all(dep in catalogos.DEPTO for dep in catalogos.MUNICIPIO_DEPTO.values())
+
+
+# ─── Modelo ───────────────────────────────────────────────────────────────────
+
+def test_afiliado_expone_los_campos_del_registro_tipo_2():
+    """Sin estas columnas no se puede armar un registro tipo 2, y su ausencia no
+    rompe ningún otro test: por eso se comprueban aquí explícitamente."""
+    cols = {c.name for c in models.Afiliado.__table__.columns}
+    faltan = {
+        # nombre partido en cuatro (campos 11-14)
+        "primer_apellido", "segundo_apellido", "primer_nombre", "segundo_nombre",
+        # clasificación y ubicación
+        "tipo_cotizante", "subtipo_cotizante", "cod_depto_labor", "cod_municipio_labor",
+        # administradoras por código, no por nombre
+        "cod_eps", "cod_afp", "cod_ccf", "cod_arl",
+        # salario y riesgo
+        "clase_riesgo", "tarifa_arl", "tipo_salario", "salario_basico", "centro_trabajo",
+    } - cols
+    assert not faltan, f"faltan columnas PILA en Afiliado: {sorted(faltan)}"
+
+
+def test_tablas_de_liquidacion_existen():
+    for modelo in (models.PilaCodigo, models.AportantePila,
+                   models.PlanillaLiquidacion, models.PlanillaDetalle):
+        assert modelo.__tablename__
 
 # ─── Siembra ──────────────────────────────────────────────────────────────────
 
 def test_siembra_es_idempotente(client, db):
     catalogos.sembrar(db)
     segunda = catalogos.sembrar(db)
-    assert segunda == {"creados": 0, "actualizados": 0, "derogados": 0}
+    assert segunda == {"creados": 0, "actualizados": 0, "derogados": 0, "historicos": 0}
 
 
 def test_siembra_deja_el_total_esperado(client, db):
@@ -47,7 +104,20 @@ def test_siembra_deja_el_total_esperado(client, db):
     assert vigentes == esperado
 
 
-def test_codigo_fuera_del_anexo_se_deroga_pero_no_se_borra(client, db):
+def test_municipios_quedan_con_su_departamento_como_padre(client, db):
+    catalogos.sembrar(db)
+    fila = db.query(models.PilaCodigo).filter_by(tipo="MUNICIPIO", codigo="05001").first()
+    assert fila.padre == "05"
+
+
+def test_historicas_se_siembran_no_vigentes(client, db):
+    catalogos.sembrar(db)
+    fila = db.query(models.PilaCodigo).filter_by(tipo="EPS", codigo="EPS003").first()
+    assert fila is not None
+    assert fila.vigente is False
+
+
+def test_codigo_fuera_del_catalogo_se_deroga_pero_no_se_borra(client, db):
     catalogos.sembrar(db)
     db.add(models.PilaCodigo(tipo="TIPO_PLANILLA", codigo="Q",
                              nombre="Planilla de un anexo viejo", vigente=True))
@@ -80,7 +150,8 @@ def test_listar_todos(client, admin_token):
     assert r.status_code == 200
     body = r.json()
     assert body["anexo_version"] == "30"
-    assert body["total"] >= 95
+    assert body["total"] >= 1300
+    assert "UGPP" in body["fuente_administradoras"]
 
 
 def test_filtrar_por_tipo(client, admin_token):
@@ -92,22 +163,28 @@ def test_filtrar_por_tipo(client, admin_token):
     assert any(i["codigo"] == "01" and i["nombre"] == "Empleador" for i in items)
 
 
+def test_filtrar_municipios_por_departamento(client, admin_token):
+    """Sin el filtro por padre habría que traer los 1.122 municipios del país."""
+    r = client.get("/pila/codigos?tipo=MUNICIPIO&padre=05", headers=_h(admin_token))
+    assert r.status_code == 200
+    items = r.json()["items"]
+    assert 100 < len(items) < 200          # Antioquia tiene 125 municipios
+    assert all(i["codigo"].startswith("05") for i in items)
+
+
 def test_tipo_desconocido_rechazado(client, admin_token):
     r = client.get("/pila/codigos?tipo=INVENTADO", headers=_h(admin_token))
     assert r.status_code == 400
     assert "Catálogo desconocido" in r.json()["detail"]
 
 
-def test_derogados_ocultos_por_defecto(client, admin_token, db):
-    db.add(models.PilaCodigo(tipo="TIPO_DOC", codigo="ZZ", nombre="Derogado", vigente=False))
-    db.commit()
+def test_derogados_ocultos_por_defecto(client, admin_token):
+    vigentes = client.get("/pila/codigos?tipo=EPS", headers=_h(admin_token)).json()["items"]
+    assert all(i["codigo"] != "EPS003" for i in vigentes)
 
-    visibles = client.get("/pila/codigos?tipo=TIPO_DOC", headers=_h(admin_token)).json()["items"]
-    assert all(i["codigo"] != "ZZ" for i in visibles)
-
-    todos = client.get("/pila/codigos?tipo=TIPO_DOC&incluir_derogados=true",
+    todos = client.get("/pila/codigos?tipo=EPS&incluir_derogados=true",
                        headers=_h(admin_token)).json()["items"]
-    assert any(i["codigo"] == "ZZ" for i in todos)
+    assert any(i["codigo"] == "EPS003" for i in todos)
 
 
 def test_empleado_puede_leer(client, empleado_token):

@@ -72,7 +72,7 @@ def _sembrar_catalogos_pila(db):
     """Siembra los códigos normativos de PILA si el catálogo está vacío o quedó viejo.
 
     Solo escribe cuando hace falta: compara contra el total esperado antes de
-    tocar nada, para no pagar ~95 upserts en cada arranque.
+    tocar nada, para no pagar ~1.350 upserts en cada arranque.
     """
     try:
         import models

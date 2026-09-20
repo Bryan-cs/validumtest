@@ -10,11 +10,13 @@ siembra es idempotente y marca como no vigente lo que el anexo dejó de listar,
 sin borrar filas — un afiliado puede seguir apuntando a un código derogado y su
 planilla histórica debe poder leerse.
 
-Lo que NO está aquí: los códigos de EPS, AFP, CCF y ARL, y los códigos DANE de
-departamento y municipio. El anexo no los contiene; el Ministerio los publica
-aparte. Hasta cargarlos, esos campos del aportante y del afiliado quedan sin
-validar contra catálogo.
+Los códigos de administradoras (EPS, AFP, CCF, ARL) y los DANE de departamento
+y municipio no salen del anexo — el anexo no los contiene. Vienen de
+`datos/referencia.json`, con su fuente anotada ahí mismo.
 """
+
+import json
+from pathlib import Path
 
 ANEXO_VERSION = "30"
 ANEXO_FECHA = "2026-07-24"
@@ -131,12 +133,45 @@ TIPO_DOC = {
     "TI": "Tarjeta de identidad",
 }
 
+# ── Datos de referencia que no vienen del anexo ──────────────────────────────
+# Viven en un JSON aparte y no en este módulo porque son ~1.250 entradas que
+# cambian por su cuenta —una EPS se liquida, un municipio se crea— y no tienen
+# por qué ensuciar el diff de los catálogos normativos.
+_REFERENCIA = json.loads((Path(__file__).parent / "datos" / "referencia.json")
+                         .read_text(encoding="utf-8"))
+
+FUENTE_ADMINISTRADORAS = _REFERENCIA["fuente_administradoras"]
+FUENTE_DANE = _REFERENCIA["fuente_dane"]
+
+# Un catálogo por subsistema: EPS, AFP, CCF, ARL, SENA, ICBF, ADRES.
+ADMINISTRADORAS = _REFERENCIA["administradoras"]
+
+DEPTO = _REFERENCIA["departamentos"]
+
+# El código DANE de municipio solo es único dentro de su departamento: "001" es
+# Medellín en Antioquia y Barranquilla en Atlántico. Por eso se guarda completo
+# (5 dígitos) con el departamento en `padre`, y el serializador lo parte en 2+3
+# al escribir los campos 9 y 10 del registro tipo 2.
+MUNICIPIO = {cod: nombre for cod, (nombre, _dep) in _REFERENCIA["municipios"].items()}
+MUNICIPIO_DEPTO = {cod: dep for cod, (_nom, dep) in _REFERENCIA["municipios"].items()}
+
 CATALOGOS = {
     "TIPO_APORTANTE": TIPO_APORTANTE,
     "TIPO_COTIZANTE": TIPO_COTIZANTE,
     "TIPO_PLANILLA":  TIPO_PLANILLA,
     "TIPO_DOC":       TIPO_DOC,
+    "DEPTO":          DEPTO,
+    "MUNICIPIO":      MUNICIPIO,
+    **ADMINISTRADORAS,
 }
+
+# Qué código de otro catálogo es el "padre" de cada entrada.
+PADRES = {"MUNICIPIO": MUNICIPIO_DEPTO}
+
+# Administradoras que ya no operan (EPS liquidadas o absorbidas, ARL que salió
+# del mercado). Se siembran como NO vigentes: no deben poder elegirse al crear
+# nada, pero una planilla de 2019 las referencia y su nombre debe poder leerse.
+HISTORICOS = _REFERENCIA["administradoras_historicas"]
 
 
 def sembrar(db) -> dict:
@@ -147,25 +182,40 @@ def sembrar(db) -> dict:
     import models
 
     creados = actualizados = derogados = 0
+    historicos_creados = 0
+
     for tipo, datos in CATALOGOS.items():
         existentes = {c.codigo: c for c in db.query(models.PilaCodigo).filter_by(tipo=tipo).all()}
+        padres = PADRES.get(tipo, {})
+        historicos = HISTORICOS.get(tipo, {})
 
         for codigo, nombre in datos.items():
+            padre = padres.get(codigo)
             fila = existentes.get(codigo)
             if fila is None:
-                db.add(models.PilaCodigo(tipo=tipo, codigo=codigo, nombre=nombre, vigente=True))
+                db.add(models.PilaCodigo(tipo=tipo, codigo=codigo, nombre=nombre,
+                                         padre=padre, vigente=True))
                 creados += 1
-            elif fila.nombre != nombre or not fila.vigente:
+            elif fila.nombre != nombre or fila.padre != padre or not fila.vigente:
                 fila.nombre = nombre
+                fila.padre = padre
                 fila.vigente = True
                 actualizados += 1
 
-        # Lo que el anexo dejó de listar se marca no vigente, nunca se borra:
-        # las planillas ya liquidadas siguen apuntando a esos códigos.
+        # Los derogados conocidos entran de una vez marcados como no vigentes,
+        # para poder resolver el nombre de un código viejo sin ofrecerlo.
+        for codigo, nombre in historicos.items():
+            if codigo not in existentes and codigo not in datos:
+                db.add(models.PilaCodigo(tipo=tipo, codigo=codigo, nombre=nombre, vigente=False))
+                historicos_creados += 1
+
+        # Lo que dejó de estar listado se marca no vigente, nunca se borra: las
+        # planillas ya liquidadas siguen apuntando a esos códigos.
         for codigo, fila in existentes.items():
             if codigo not in datos and fila.vigente:
                 fila.vigente = False
                 derogados += 1
 
     db.commit()
-    return {"creados": creados, "actualizados": actualizados, "derogados": derogados}
+    return {"creados": creados, "actualizados": actualizados,
+            "derogados": derogados, "historicos": historicos_creados}

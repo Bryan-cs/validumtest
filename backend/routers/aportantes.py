@@ -40,6 +40,21 @@ def calcular_dv(nit: str) -> str:
     return str(residuo) if residuo in (0, 1) else str(11 - residuo)
 
 
+def _codigo_valido(db: Session, tipo: str, codigo: str) -> bool:
+    """¿El código existe y está vigente en el catálogo PILA?
+
+    Si el catálogo de ese tipo está vacío (todavía no se sembró) no se bloquea
+    nada: es preferible dejar guardar a impedir trabajar por un dato de
+    referencia que falta.
+    """
+    if not codigo:
+        return True
+    hay_catalogo = db.query(models.PilaCodigo).filter_by(tipo=tipo).first() is not None
+    if not hay_catalogo:
+        return True
+    return db.query(models.PilaCodigo).filter_by(tipo=tipo, codigo=codigo, vigente=True).first() is not None
+
+
 def _to_dict(a: models.AportantePila) -> dict:
     from models import COL_TZ
     from datetime import timezone
@@ -79,7 +94,7 @@ def _to_dict(a: models.AportantePila) -> dict:
     }
 
 
-def _validar(data, actual: Optional[models.AportantePila] = None):
+def _validar(db: Session, data, actual: Optional[models.AportantePila] = None):
     """Valida los campos que el archivo plano rechaza después, cuando ya es tarde."""
     tipo_doc = getattr(data, "tipo_doc", None) or (actual.tipo_doc if actual else "NI")
     if tipo_doc and tipo_doc not in TIPOS_DOC:
@@ -97,6 +112,25 @@ def _validar(data, actual: Optional[models.AportantePila] = None):
         valor = getattr(data, campo, None)
         if valor and (not valor.isdigit() or len(valor) != largo):
             raise HTTPException(400, f"{campo} debe ser un código DANE de {largo} dígitos")
+
+    # Contra el catálogo: un código de ARL o un tipo de aportante inventado pasa
+    # la validación de formato y lo rechaza el operador días después.
+    tipo_aportante = getattr(data, "tipo_aportante", None)
+    if tipo_aportante and not _codigo_valido(db, "TIPO_APORTANTE", tipo_aportante):
+        raise HTTPException(400, f"tipo_aportante '{tipo_aportante}' no existe en el catálogo PILA vigente")
+
+    cod_arl = getattr(data, "cod_arl", None)
+    if cod_arl and not _codigo_valido(db, "ARL", cod_arl):
+        raise HTTPException(400, f"cod_arl '{cod_arl}' no existe en el catálogo de ARL vigente")
+
+    # El municipio se valida junto con su departamento: el código DANE de
+    # municipio solo es único dentro del departamento al que pertenece.
+    cod_depto = getattr(data, "cod_depto", None) or (actual.cod_depto if actual else None)
+    cod_mun = getattr(data, "cod_municipio", None)
+    if cod_depto and cod_mun:
+        completo = f"{cod_depto}{cod_mun}"
+        if not _codigo_valido(db, "MUNICIPIO", completo):
+            raise HTTPException(400, f"El municipio {cod_mun} no pertenece al departamento {cod_depto}")
 
 
 def _resolver_dv(num_doc: str, dv: Optional[str], tipo_doc: str) -> Optional[str]:
@@ -157,7 +191,7 @@ def obtener(aportante_id: int, db: Session = Depends(get_db),
 @router.post("", status_code=201)
 def crear(data: schemas.AportanteCreate, db: Session = Depends(get_db),
           token=Depends(require_admin_or_empleado)):
-    _validar(data)
+    _validar(db, data)
     if db.query(models.AportantePila).filter_by(cliente_ref=data.cliente_ref).first():
         raise HTTPException(409, f"Ya existe un aportante para el cliente '{data.cliente_ref}'")
 
@@ -197,7 +231,7 @@ def actualizar(aportante_id: int, data: schemas.AportanteUpdate,
     a = db.query(models.AportantePila).filter_by(id=aportante_id).first()
     if not a:
         raise HTTPException(404, "Aportante no encontrado")
-    _validar(data, a)
+    _validar(db, data, a)
 
     if data.cliente_ref is not None and data.cliente_ref != a.cliente_ref:
         if db.query(models.AportantePila).filter_by(cliente_ref=data.cliente_ref).first():
