@@ -314,7 +314,12 @@ def _get_json(sesion: Sesion, url: str, params: dict = None,
         r = cliente.get(url, params=params or {}, headers=sesion.headers)
         if r.status_code != 200:
             raise ErrorOperador(f"{url} respondió {r.status_code}: {r.text[:300]}")
-        return r.json()
+        # El operador anuncia application/json pero a veces responde el dato
+        # pelado —la URL de pago llega así—, que no es JSON válido.
+        try:
+            return r.json()
+        except ValueError:
+            return r.text.strip()
     except httpx.HTTPError as e:
         raise ErrorOperador(f"No se pudo consultar {url}: {e}") from e
     finally:
@@ -340,7 +345,11 @@ def totales(sesion: Sesion, numero_planilla: str, cliente: Optional[httpx.Client
 
 def url_pago(sesion: Sesion, numero_planilla: str,
              cliente: Optional[httpx.Client] = None) -> str:
-    """La URL con el botón de PSE. Abrirla inicia el pago real."""
+    """La URL con el botón de PSE. Abrirla inicia el pago real.
+
+    El operador la devuelve como texto pelado aunque anuncie JSON, y la
+    entrega incluso para planillas todavía sin numerar.
+    """
     _registrar("url_pago", planilla=numero_planilla)
     datos = _get_json(sesion, f"{BASE_PLANILLAS}/v1/planillas/{numero_planilla}/pago/url",
                       None, cliente, vacio={"url": ""})
@@ -427,11 +436,16 @@ def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str
                      "totales": None, "url_pago": ""}
         resultado.update(interpretar_validacion(respuesta))
 
-        # Los totales y el enlace de pago solo existen cuando la planilla ya
-        # quedó numerada; con errores pendientes el operador todavía no la
-        # numera.
-        numero = resultado.get("numero_planilla")
-        if numero:
-            resultado["totales"] = totales(sesion, numero, cliente=cliente)
-            resultado["url_pago"] = url_pago(sesion, numero, cliente=cliente)
+        # Los totales y el enlace se piden con el código, que el operador asigna
+        # apenas recibe la planilla. El número tarda: no lo asigna mientras
+        # queden errores. Pedirlos con el número dejaba el enlace vacío aunque
+        # el operador ya lo tuviera listo.
+        referencia = resultado.get("numero_planilla") or resultado.get("codigo_planilla")
+        if referencia:
+            try:
+                resultado["totales"] = totales(sesion, referencia, cliente=cliente)
+                resultado["url_pago"] = url_pago(sesion, referencia, cliente=cliente)
+            except ErrorOperador as e:
+                # Que falle el enlace no invalida el envío, que ya ocurrió.
+                log.warning(f"PILA: no se pudo obtener el pago de {referencia}: {e}")
         return resultado

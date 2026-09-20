@@ -146,6 +146,9 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
         "planilla_id": liquidadas[a.doc].id if a.doc in liquidadas else None,
         "estado": liquidadas[a.doc].estado if a.doc in liquidadas else None,
         "total": int(liquidadas[a.doc].total_general or 0) if a.doc in liquidadas else None,
+        "codigo_planilla": liquidadas[a.doc].planilla_corregida if a.doc in liquidadas else None,
+        "numero_planilla": liquidadas[a.doc].numero_planilla if a.doc in liquidadas else None,
+        "link_pago": liquidadas[a.doc].link_pago if a.doc in liquidadas else None,
     } for a in afiliados]
 
 
@@ -425,6 +428,40 @@ def estado_operador(token=Depends(require_admin_or_empleado)):
     """
     return {"modo": "real" if operador.modo_real() else "simulacion",
             "credenciales": operador.hay_credenciales()}
+
+
+@router.post("/{liquidacion_id}/pago")
+def refrescar_pago(liquidacion_id: int, db: Session = Depends(get_db),
+                   token=Depends(require_admin_or_empleado)):
+    """Vuelve a pedirle al operador el enlace de pago y los totales.
+
+    Sirve después de corregir inconsistencias: el enlace sigue siendo el mismo
+    trámite, pero los totales cambian cuando el operador ajusta la liquidación.
+    """
+    l = db.query(models.PlanillaLiquidacion).filter_by(id=liquidacion_id).first()
+    if not l:
+        raise HTTPException(404, "Liquidación no encontrada")
+    referencia = l.numero_planilla or l.planilla_corregida
+    if not referencia:
+        raise HTTPException(409, "Esta planilla todavía no se ha enviado al operador")
+
+    ap = db.query(models.AportantePila).filter_by(id=l.aportante_id).first()
+    try:
+        with operador._cliente_nuevo() as cliente:
+            sesion = operador.autenticar(cliente)
+            datos = operador.consultar_aportante(sesion, ap.tipo_doc or "NI",
+                                                 ap.num_doc, cliente)
+            operador.autorizar(sesion, ap.tipo_doc or "NI", ap.num_doc, cliente,
+                               aportante_id=datos.get("id"))
+            enlace = operador.url_pago(sesion, referencia, cliente)
+            resumen = operador.totales(sesion, referencia, cliente)
+    except operador.ErrorOperador as e:
+        raise HTTPException(502, str(e))
+
+    if enlace:
+        l.link_pago = enlace
+        db.commit()
+    return {"link_pago": l.link_pago, "totales": resumen, "referencia": referencia}
 
 
 @router.post("/{liquidacion_id}/anular")

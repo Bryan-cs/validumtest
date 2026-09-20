@@ -76,6 +76,7 @@ export default function Liquidacion() {
   const [previa, setPrevia] = useState(null);      // { afiliado, resumen }
   const [porAnular, setPorAnular] = useState(null);
   const [docDescarga, setDocDescarga] = useState({});   // planilla_id → tipo de documento
+  const [respuesta, setRespuesta] = useState(null);     // lo que contestó el operador
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
@@ -132,11 +133,15 @@ export default function Liquidacion() {
     mutationFn: async (persona) =>
       (await api.post(`/liquidacion/${persona.planilla_id}/enviar`)).data,
     onSuccess: (d) => {
+      setRespuesta(d);
       if (d.simulado) {
         toast.info('Simulación: no se envió nada al operador. ' +
                    'Cambia SUAPORTE_MODO a "real" para enviar de verdad.');
       } else if (d.numero_planilla) {
         toast.success(`Planilla numerada: ${d.numero_planilla}`);
+      } else if (d.errores?.length) {
+        toast.warning(`El operador recibió la planilla ${d.codigo_planilla} con ` +
+                      `${d.errores.length} error(es) por corregir`);
       } else {
         toast.success('Planilla enviada al operador');
       }
@@ -282,7 +287,13 @@ export default function Liquidacion() {
                     {p.estado !== 'numerada' && p.estado !== 'pagada' && (
                       <Btn size="sm" disabled={enviar.isPending}
                            onClick={() => enviar.mutate(p)}>
-                        Enviar al operador
+                        {p.codigo_planilla ? 'Reenviar' : 'Enviar al operador'}
+                      </Btn>
+                    )}
+                    {p.link_pago && (
+                      <Btn size="sm" variant="success"
+                           onClick={() => window.open(p.link_pago, '_blank', 'noopener')}>
+                        Pagar en PSE
                       </Btn>
                     )}
                     {p.estado !== 'pagada' && (
@@ -309,6 +320,53 @@ export default function Liquidacion() {
           ))}
         </div>
       )}
+
+      {/* ── Lo que respondió el operador ──────────────────────────────────── */}
+      <Modal open={!!respuesta} onClose={() => setRespuesta(null)}
+             title="Respuesta del operador" width={700}>
+        {respuesta && (
+          <>
+            <div style={{ fontSize: 13, color: C.text2, marginBottom: 14 }}>
+              {respuesta.codigo_planilla
+                ? <>Planilla <strong style={{ fontFamily: 'monospace', color: C.text }}>
+                    {respuesta.codigo_planilla}</strong> recibida.{' '}
+                   {respuesta.numero_planilla
+                     ? <>Quedó numerada como <strong>{respuesta.numero_planilla}</strong>.</>
+                     : 'El operador no la numera mientras tenga errores sin corregir.'}</>
+                : 'No se envió nada: el cliente está en modo simulación.'}
+            </div>
+
+            {(respuesta.errores || []).map((e, i) => (
+              <div key={i} style={{
+                border: '1px solid #FECACA', background: '#FEF2F2', borderRadius: 8,
+                padding: '10px 12px', marginBottom: 8, fontSize: 13,
+              }}>
+                <div style={{ fontWeight: 700, color: '#B91C1C', marginBottom: 3 }}>
+                  Error {e.tipo === 'empresa' ? 'de la empresa' : 'del cotizante'}
+                  {e.campos && <span style={{ fontWeight: 400, color: C.text2 }}>
+                    {' '}· línea {e.linea}, posiciones {e.campos}</span>}
+                  {e.autocorrige && <span style={{ color: '#059669', fontWeight: 400 }}>
+                    {' '}· el operador puede corregirlo</span>}
+                </div>
+                <div style={{ color: C.text }}>{e.descripcion}</div>
+              </div>
+            ))}
+
+            {(respuesta.advertencias || []).map((a, i) => (
+              <div key={i} style={{
+                border: '1px solid #FDE68A', background: '#FFFBEB', borderRadius: 8,
+                padding: '10px 12px', marginBottom: 8, fontSize: 13, color: '#92400E',
+              }}>
+                {a.descripcion}
+              </div>
+            ))}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+              <Btn variant="secondary" onClick={() => setRespuesta(null)}>Cerrar</Btn>
+            </div>
+          </>
+        )}
+      </Modal>
 
       {/* ── Previsualización de una persona ───────────────────────────────── */}
       <Modal
