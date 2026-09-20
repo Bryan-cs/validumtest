@@ -549,6 +549,30 @@ class AportanteUpdate(BaseModel):
     activo: Optional[bool] = None
 
 
+
+class LiquidacionRequest(BaseModel):
+    """Qué liquidar: un aportante y un período de cotización."""
+    aportante_id: int
+    anio: int
+    mes: int
+    tipo_planilla: str = "E"
+    operador: Optional[str] = None
+
+    @field_validator('mes')
+    @classmethod
+    def mes_valido(cls, v):
+        if not 1 <= v <= 12:
+            raise ValueError('mes debe estar entre 1 y 12')
+        return v
+
+    @field_validator('anio')
+    @classmethod
+    def anio_valido(cls, v):
+        if not 2010 <= v <= 2100:
+            raise ValueError('año fuera de rango')
+        return v
+
+
 # ── Multi-tenant: Organizaciones (gestionadas por el superadmin) ──────────────
 class OrganizacionCreate(BaseModel):
     """Crea una organización nueva + su usuario admin inicial."""

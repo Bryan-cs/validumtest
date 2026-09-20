@@ -328,6 +328,7 @@ from routers import organizaciones as organizaciones_router
 from routers import consultas as consultas_router
 from routers import aportantes as aportantes_router
 from routers import pila as pila_router
+from routers import liquidacion as liquidacion_router
 
 # Aislamiento multi-tenant: todas las rutas de datos se registran con la dependencia tenant_scope,
 # que fija la organización activa en el ContextVar (auto-filtra lecturas y auto-sella escrituras).
@@ -369,6 +370,7 @@ app.include_router(credenciales_router.router, dependencies=_INTERNO)
 app.include_router(consultas_router.router, dependencies=_INTERNO)
 app.include_router(aportantes_router.router, dependencies=_INTERNO)
 app.include_router(pila_router.router, dependencies=_INTERNO)
+app.include_router(liquidacion_router.router, dependencies=_INTERNO)
 
 
 # ─── HEALTH CHECK ─────────────────────────────────────────────────────────────

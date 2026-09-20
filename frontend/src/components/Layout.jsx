@@ -50,6 +50,7 @@ const navGroups = (rol) => {
       { to: '/cobro',        label: '💰 Cobro' },
       ...(esAdmin ? [{ to: '/planillas-ss', label: '📋 Planillas SS' }] : []),
       { to: '/aportantes',   label: '🏢 Aportantes' },
+      { to: '/liquidacion',  label: '🧾 Liquidar planilla' },
       ...(esAdmin ? [{ to: '/empleados', label: '💵 Nómina' }] : []),
     ],
   },
