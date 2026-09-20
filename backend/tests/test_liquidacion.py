@@ -1,5 +1,6 @@
 """Tests de liquidación PILA — cálculo, archivo plano y endpoints."""
 import itertools
+from pathlib import Path
 from decimal import Decimal
 
 import pytest
@@ -245,34 +246,37 @@ def test_posiciones_de_los_campos_calculados():
     assert linea[153:159] == "230301"            # campo 31, admin. de pensiones
     assert linea[165:171] == "EPS037"            # campo 33, EPS
     assert linea[183:185] == "30"                # campo 36, días de pensión
-    assert linea[237:244] == "1600000"           # campo 46, tarifa de pensión
+    assert linea[237:244] == "0.16000"           # campo 46, tarifa de pensión
     assert int(linea[244:253]) == int(d.cot_pension)   # campo 47
 
 
-def test_tarifa_se_escribe_sin_punto_decimal():
-    """Fracción con tantos decimales como posiciones tenga el campo.
+def test_tarifa_lleva_punto_decimal():
+    """Formato verificado contra un plano real aceptado por el operador.
 
-    Valores verificados contra el validador del operador: con un decimal menos
-    rechazaba las cinco tarifas del registro con "Valor inválido para campo".
+    Tres codificaciones sin punto —4, 5 y 6 decimales— fueron rechazadas con
+    "Valor invalido para campo" antes de tener el archivo de referencia.
     """
-    assert plano.formatear_tarifa("0.16", 7) == "1600000"       # pensión 16%
-    assert plano.formatear_tarifa("0.125", 7) == "1250000"      # salud 12,5%
-    assert plano.formatear_tarifa("0.04", 7) == "0400000"       # salud 4% y CCF
-    assert plano.formatear_tarifa("0.02", 7) == "0200000"       # SENA
-    assert plano.formatear_tarifa("0.03", 7) == "0300000"       # ICBF
-    assert plano.formatear_tarifa("0.00522", 9) == "005220000"  # ARL clase 1
-    assert plano.formatear_tarifa("0.0696", 9) == "069600000"   # ARL clase 5
-    assert plano.formatear_tarifa(0, 7) == "0000000"
+    assert plano.formatear_tarifa("0.16", 7) == "0.16000"        # pensión 16%
+    assert plano.formatear_tarifa("0.04", 7) == "0.04000"        # salud exonerada y CCF
+    assert plano.formatear_tarifa("0.125", 7) == "0.12500"       # salud 12,5%
+    assert plano.formatear_tarifa("0.0435", 9) == "0.0435000"    # ARL clase 4
+    assert plano.formatear_tarifa("0.00522", 9) == "0.0052200"   # ARL clase 1
+
+
+def test_tarifa_en_cero_no_va_en_ceros():
+    """Un cero también se escribe como decimal: el campo es de tarifa."""
+    assert plano.formatear_tarifa(0, 7) == "0.00000"
+    assert plano.formatear_tarifa(0, 9) == "0.0000000"
 
 
 def test_las_tarifas_llenan_su_campo_completo():
-    for tarifa, largo in (("0.16", 7), ("0.125", 7), ("0.00522", 9)):
+    for tarifa, largo in (("0.16", 7), ("0.125", 7), ("0.00522", 9), (0, 7)):
         assert len(plano.formatear_tarifa(tarifa, largo)) == largo
 
 
 def test_tarifa_que_no_cabe_es_un_error():
     with pytest.raises(ValueError, match="no cabe"):
-        plano.formatear_tarifa("1.5", 7)
+        plano.formatear_tarifa("15.5", 7)
 
 
 def test_valor_que_no_cabe_es_un_error_explicito():
@@ -295,10 +299,10 @@ def test_tarifas_en_su_posicion_dentro_del_registro():
     """Las posiciones que reportó el validador del operador: 238, 308, 381, 408."""
     d = motor.liquidar_afiliado(_Afiliado(), _Aportante(), 2026, 9)
     linea = plano.registro_tipo_2(plano.valores_desde_detalle(d, 1))
-    assert linea[237:244] == "1600000"           # campo 46, pensión
-    assert linea[307:314] == "1250000"           # campo 54, salud
-    assert linea[380:389] == "005220000"         # campo 61, riesgos
-    assert linea[407:414] == "0400000"           # campo 64, caja
+    assert linea[237:244] == "0.16000"           # campo 46, pensión
+    assert linea[307:314] == "0.12500"           # campo 54, salud
+    assert linea[380:389] == "0.0052200"         # campo 61, riesgos
+    assert linea[407:414] == "0.04000"           # campo 64, caja
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -503,3 +507,83 @@ def test_mes_invalido_rechazado(client, admin_token, afiliado_listo):
 
 def test_requiere_autenticacion(client):
     assert client.get("/liquidacion").status_code in (401, 403)
+
+
+# ─── Contraste contra un plano real del operador ──────────────────────────────
+#
+# `tests/fixtures/plano_referencia_operador.txt` es una planilla tipo E generada
+# por otro sistema y aceptada por el operador. Es la única fuente que dice cómo
+# se escriben de verdad los campos que el anexo no detalla: el formato de las
+# tarifas salió de aquí, después de que el validador rechazara tres
+# codificaciones distintas.
+
+def _referencia():
+    ruta = Path(__file__).parent / "fixtures" / "plano_referencia_operador.txt"
+    lineas = [l for l in ruta.read_text(encoding="latin-1").splitlines() if l.strip()]
+    return lineas[0], lineas[1]
+
+
+def test_la_referencia_tiene_los_largos_del_anexo():
+    encabezado, detalle = _referencia()
+    assert len(encabezado) == plano.LARGO_TIPO_1 == 359
+    assert len(detalle) == plano.LARGO_TIPO_2 == 693
+
+
+@pytest.mark.parametrize("campo,esperado", [
+    ("tipo_registro", "02"),
+    ("tipo_doc", "CC"),
+    ("tipo_cotizante", "01"),
+    ("primer_apellido", "CORONELL".ljust(20)),
+    ("primer_nombre", "DUVAL".ljust(20)),
+    ("cod_afp", "230201"),
+    ("cod_eps", "EPSC07"),
+    ("cod_ccf", "CCF68 "),
+    ("salario_basico", "001750905"),
+    ("ibc_pension", "000058364"),
+    ("cot_pension", "000009400"),
+    ("exonerado_salud_sena_icbf", "S"),
+    ("nov_RET", "X"),
+    ("fecha_RET", "2026-07-01"),
+])
+def test_el_mapa_de_campos_decodifica_la_referencia(campo, esperado):
+    """Si el mapa estuviera corrido, estos valores caerían en otra posición."""
+    _, detalle = _referencia()
+    c = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == campo)
+    assert detalle[c.inicio - 1 : c.inicio - 1 + c.longitud] == esperado
+
+
+@pytest.mark.parametrize("campo,tarifa", [
+    ("tarifa_pension", "0.16"),
+    ("tarifa_salud", "0.04"),
+    ("tarifa_arl", "0.0435"),
+    ("tarifa_ccf", "0.04"),
+    ("tarifa_sena", 0),
+    ("tarifa_icbf", 0),
+    ("tarifa_esap", 0),
+    ("tarifa_men", 0),
+])
+def test_las_tarifas_se_escriben_como_en_la_referencia(campo, tarifa):
+    """Byte por byte: el formateador debe producir lo mismo que el operador aceptó."""
+    _, detalle = _referencia()
+    c = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == campo)
+    en_referencia = detalle[c.inicio - 1 : c.inicio - 1 + c.longitud]
+    assert plano.formatear_tarifa(tarifa, c.longitud) == en_referencia
+
+
+def test_el_encabezado_de_la_referencia_tambien_encaja():
+    encabezado, _ = _referencia()
+    esperados = {
+        "tipo_registro": "01",
+        "tipo_doc_aportante": "NI",
+        "num_doc_aportante": "901760008".ljust(16),
+        "dv_aportante": "7",
+        "tipo_planilla": "E",
+        "cod_arl": "14-11 ",
+        "periodo_pago_otros": "2026-07",
+        "periodo_pago_salud": "2026-08",
+        "total_cotizantes": "00001",
+        "tipo_aportante": "01",
+    }
+    for nombre, esperado in esperados.items():
+        c = next(x for x in plano.CAMPOS_TIPO_1 if x.nombre == nombre)
+        assert encabezado[c.inicio - 1 : c.inicio - 1 + c.longitud] == esperado, nombre

@@ -66,6 +66,10 @@ class DetalleLiquidado:
     tarifa_arl: Decimal = Decimal("0")
     cot_arl: Decimal = Decimal("0")
     centro_trabajo: str = ""
+    # Campos 77 y 78: la ARL y la clase de riesgo del cotizante. El plano de
+    # referencia del operador los trae llenos.
+    cod_arl: str = ""
+    clase_riesgo: str = ""
 
     tarifa_ccf: Decimal = Decimal("0")
     valor_ccf: Decimal = Decimal("0")
@@ -236,6 +240,8 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.ibc_arl = ibc
         d.tarifa_arl = _dec(afiliado.tarifa_arl) or P.TARIFA_ARL_POR_CLASE[str(clase)]
         d.cot_arl = P.redondear_peso(ibc * d.tarifa_arl)
+        d.clase_riesgo = str(clase)
+        d.cod_arl = afiliado.cod_arl or getattr(aportante, "cod_arl", "") or ""
 
     # Parafiscales
     if d.cod_ccf:

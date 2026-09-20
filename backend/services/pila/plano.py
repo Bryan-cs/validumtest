@@ -167,6 +167,13 @@ def _formatear(campo: Campo, valor) -> str:
         valor = "" if campo.tipo == "A" else 0
 
     if campo.tipo == "N":
+        # Las tarifas llegan ya formateadas con punto decimal. El anexo marca
+        # esos campos como numericos, pero el operador los espera asi.
+        if isinstance(valor, str) and "." in valor:
+            if len(valor) != campo.longitud:
+                raise ValueError(f"campo {campo.numero} ({campo.nombre}): {valor!r} "
+                                 f"no mide {campo.longitud} posiciones")
+            return valor
         if isinstance(valor, str):
             valor = valor.strip() or 0
         if isinstance(valor, Decimal):
@@ -187,24 +194,25 @@ def _formatear(campo: Campo, valor) -> str:
 
 
 def formatear_tarifa(tarifa, longitud: int) -> str:
-    """Tarifa como fraccion, sin punto decimal, con tantos decimales como
-    posiciones tenga el campo.
+    """Tarifa como fraccion decimal CON punto, ocupando el campo completo.
 
-    Los campos de tarifa son de tipo N, o sea solo digitos: el punto no va. Como
-    toda tarifa es menor que 1, la parte entera no ocupa lugar y el campo se
-    llena con los decimales. En 7 posiciones, el 16% de pension es 0.1600000 y
-    se escribe "1600000"; el 4% de caja, "0400000". En las 9 posiciones de
-    riesgos laborales, el 0,522% es 0.005220000 y se escribe "005220000".
+    Verificado contra un plano real aceptado por el operador: el 16% de
+    pension se escribe "0.16000" en sus 7 posiciones y el 4,35% de riesgos
+    laborales, "0.0435000" en sus 9. O sea "0." mas tantos decimales como
+    posiciones queden libres. Una tarifa en cero no va en ceros sino en
+    "0.00000".
 
-    Un decimal de menos hacia que el operador rechazara las cinco tarifas del
-    registro con "Valor invalido para campo".
+    El anexo marca estos campos como numericos, pero el punto va: los tres
+    intentos sin el —con 4, 5 y 6 decimales— los rechazo el operador con
+    "Valor invalido para campo".
     """
     valor = Decimal(str(tarifa or 0))
-    escalado = int((valor * (10 ** longitud)).to_integral_value())
-    texto = str(escalado)
-    if len(texto) > longitud:
-        raise ValueError(f"la tarifa {valor} no cabe en {longitud} posiciones")
-    return texto.rjust(longitud, "0")
+    decimales = longitud - 2          # descontando el "0" y el punto
+    texto = f"{valor:.{decimales}f}"
+    if len(texto) != longitud:
+        raise ValueError(f"la tarifa {valor} no cabe en {longitud} posiciones "
+                         f"(quedo como {texto!r})")
+    return texto
 
 
 def _armar(campos, valores, largo_esperado):
@@ -285,6 +293,12 @@ def valores_desde_detalle(detalle, secuencia: int) -> dict:
         "valor_sena": detalle.valor_sena,
         "tarifa_icbf": formatear_tarifa(detalle.tarifa_icbf, 7),
         "valor_icbf": detalle.valor_icbf,
+        # ESAP y MEN casi nunca aplican, pero su tarifa va en "0.00000" y no en
+        # ceros: es un campo de tarifa y el operador lo lee como tal.
+        "tarifa_esap": formatear_tarifa(0, 7),
+        "tarifa_men": formatear_tarifa(0, 7),
+        "cod_arl_cotizante": detalle.cod_arl,
+        "clase_riesgo": detalle.clase_riesgo,
         # El anexo reporta este campo en "S"; con "X" el operador lo rechaza.
         "exonerado_salud_sena_icbf": "S" if detalle.exonerado else "",
         "fecha_ING": fechas.get("ING", ""),
