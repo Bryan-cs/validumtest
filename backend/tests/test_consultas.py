@@ -329,3 +329,172 @@ def test_log_consulta_registra_tambien_al_admin(client, db):
     assert fila.usuario == "admin"
     assert fila.organizacion_id == org.id
     assert "1019015048" in fila.detalle
+
+
+# --- RUAF --------------------------------------------------------------------
+
+def test_ruaf_parsea_las_cinco_secciones():
+    """Fixture con la estructura real del reporte SSRS, datos ficticios.
+
+    El reporte anida tablas: la externa contiene el informe entero como si fuera
+    una fila. Solo sirven las tablas HOJA, clasificadas por la firma de sus
+    columnas. Capturado de una respuesta real el 2026-09-19.
+    """
+    from services.consultas.ruaf import ConsultaRUAF
+
+    r = ConsultaRUAF.parsear(_fixture("ruaf_encontrado.html"))
+    assert r.encontrado is True
+    assert r.nombre == "MARIA FERNANDA GOMEZ RIVERA"
+    assert len(r.salud) == 1
+    assert len(r.pensiones) == 1
+    assert len(r.riesgos_laborales) == 2      # dos ARL activas a la vez
+    assert len(r.compensacion_familiar) == 1
+    assert len(r.cesantias) == 1
+
+
+def test_ruaf_no_sugiere_administradora_inactiva():
+    """La AFP del fixture figura Inactivo. Prellenar con un fondo al que la
+    persona ya no cotiza es peor que dejar el campo vacio: el empleado no tiene
+    como saber que el dato venia mal."""
+    from services.consultas.ruaf import ConsultaRUAF
+
+    r = ConsultaRUAF.parsear(_fixture("ruaf_encontrado.html"))
+    assert ConsultaRUAF.administradora_vigente(r.pensiones) is None
+    # salud y caja si estan vigentes
+    assert ConsultaRUAF.administradora_vigente(r.salud)
+    assert ConsultaRUAF.administradora_vigente(r.compensacion_familiar)
+
+
+def test_ruaf_normaliza_la_fecha_de_expedicion():
+    """El <input type="date"> entrega YYYY-MM-DD; RUAF espera dd/mm/aaaa."""
+    from services.consultas.ruaf import _fecha_ruaf
+
+    assert _fecha_ruaf("2016-04-14") == "14/04/2016"
+    assert _fecha_ruaf("14/04/2016") == "14/04/2016"
+    assert _fecha_ruaf("4/4/2016") == "04/04/2016"
+    assert _fecha_ruaf("") == ""
+
+
+def test_ruaf_exige_fecha_de_expedicion():
+    import asyncio
+    from services.consultas.ruaf import ConsultaRUAF, ErrorConsulta
+
+    with pytest.raises(ErrorConsulta):
+        asyncio.run(ConsultaRUAF.iniciar("CC", "1234567890", ""))
+
+
+def test_ruaf_tipo_doc_soportado():
+    from services.consultas.ruaf import ConsultaRUAF, TIPOS_DOC
+
+    assert ConsultaRUAF.tipo_doc_soportado("CC")
+    assert not ConsultaRUAF.tipo_doc_soportado("NIT")
+    assert TIPOS_DOC["CC"] == "5|CC"      # RUAF usa el formato "id|sigla"
+
+
+# --- endpoint unificado: RUAF primero, ADRES de respaldo ---------------------
+
+def test_sin_fecha_expedicion_no_intenta_ruaf(client, admin_token):
+    """Sin fecha solo se puede ADRES. Se valida por el rechazo de NIT, que
+    ADRES tampoco acepta, sin salir a la red."""
+    r = client.post("/consultas/iniciar",
+                    json={"tipo_doc": "NIT", "doc": "900123456"}, headers=_h(admin_token))
+    assert r.status_code == 422
+
+
+def test_iniciar_rechaza_documento_no_numerico(client, admin_token):
+    r = client.post("/consultas/iniciar",
+                    json={"tipo_doc": "CC", "doc": "ABCDEF"}, headers=_h(admin_token))
+    assert r.status_code == 422
+
+
+def test_iniciar_unificado_sin_token(client):
+    r = client.post("/consultas/iniciar", json={"tipo_doc": "CC", "doc": "1019015048"})
+    assert r.status_code in (401, 403)
+
+
+def test_resolver_unificado_sesion_inexistente(client, admin_token):
+    r = client.post("/consultas/resolver",
+                    json={"session_id": "no-existe-la-sesion", "captcha": "ABCD"},
+                    headers=_h(admin_token))
+    assert r.status_code == 410
+
+
+def test_cache_prefiere_ruaf_sobre_adres(client, admin_token, db):
+    """Con fecha de expedicion la fuente objetivo es RUAF, y su cache es el
+    unico que cuenta: un resultado viejo de ADRES solo tiene salud."""
+    import models
+
+    org = db.query(models.Organizacion).filter_by(slug="org-test").first()
+    for fuente, nombre in (("adres", "SOLO SALUD"), ("ruaf", "COMPLETO RUAF")):
+        db.add(models.ConsultaExterna(
+            organizacion_id=org.id, fuente=fuente, tipo_doc="CC", doc="6666666666",
+            exito=True, nombre=nombre,
+            respuesta=json.dumps({"nombre": nombre}), usuario="admin",
+            creado=_utcnow(), valido_hasta=_utcnow() + timedelta(days=30),
+        ))
+    db.commit()
+
+    r = client.post("/consultas/iniciar",
+                    json={"tipo_doc": "CC", "doc": "6666666666",
+                          "fecha_expedicion": "2016-04-14"},
+                    headers=_h(admin_token))
+    assert r.status_code == 200
+    body = r.json()
+    assert body["cacheado"] is True
+    assert body["fuente"] == "ruaf"
+    assert body["datos"]["nombre"] == "COMPLETO RUAF"
+
+
+def test_sugerencia_ruaf_no_prellena_arl(client, db):
+    """`Afiliado.arl` guarda el NIVEL de riesgo (1-5), no la entidad: meterle el
+    nombre de la ARL corromperia el campo. Se devuelve aparte, informativo."""
+    import models
+    from routers.consultas import _sugerencia_ruaf
+    from services.consultas.ruaf import ConsultaRUAF
+
+    org = db.query(models.Organizacion).filter_by(slug="org-test").first()
+    db.query(models.Lista).filter(models.Lista.nombre == "eps",
+                                  models.Lista.organizacion_id == org.id).delete()
+    db.add(models.Lista(organizacion_id=org.id, nombre="eps",
+                        items=json.dumps(["Nueva EPS"])))
+    db.commit()
+
+    datos = ConsultaRUAF.parsear(_fixture("ruaf_encontrado.html")).to_dict()
+    sug = _sugerencia_ruaf(db, datos)
+
+    assert "arl" not in sug["campos"]
+    assert sug["arl_reportada"]            # se informa igual
+    assert sug["campos"].get("eps") == "Nueva EPS"
+    assert "afp" not in sug["campos"]      # la del fixture esta inactiva
+
+
+
+def test_cache_de_adres_no_sirve_cuando_se_apunta_a_ruaf(client, admin_token, db):
+    """Con fecha de expedicion, un ADRES cacheado NO se devuelve como sustituto.
+
+    Si lo hiciera, agregar la fecha no cambiaria nada: el empleado la escribe
+    para obtener AFP, ARL y caja, y recibiria el mismo resultado de solo salud.
+    Se valida por el tipo de documento: PT lo acepta RUAF pero no se resuelve
+    desde cache de ADRES.
+    """
+    import models
+    from routers.consultas import _cache_lookup
+    from tenant import set_org, reset_org
+
+    org = db.query(models.Organizacion).filter_by(slug="org-test").first()
+    db.add(models.ConsultaExterna(
+        organizacion_id=org.id, fuente="adres", tipo_doc="CC", doc="4444444444",
+        exito=True, nombre="SOLO SALUD",
+        respuesta=json.dumps({"nombre": "SOLO SALUD"}), usuario="admin",
+        creado=_utcnow(), valido_hasta=_utcnow() + timedelta(days=30),
+    ))
+    db.commit()
+
+    tok = set_org(org.id)
+    try:
+        # existe para adres...
+        assert _cache_lookup(db, "adres", "4444444444") is not None
+        # ...y no para ruaf, que es la fuente objetivo cuando hay fecha
+        assert _cache_lookup(db, "ruaf", "4444444444") is None
+    finally:
+        reset_org(tok)

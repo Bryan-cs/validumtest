@@ -63,8 +63,31 @@ def init_db():
     db = SessionLocal()
     try:
         _seed(db)
+        _sembrar_catalogos_pila(db)
     finally:
         db.close()
+
+
+def _sembrar_catalogos_pila(db):
+    """Siembra los códigos normativos de PILA si el catálogo está vacío o quedó viejo.
+
+    Solo escribe cuando hace falta: compara contra el total esperado antes de
+    tocar nada, para no pagar ~95 upserts en cada arranque.
+    """
+    try:
+        import models
+        from services.pila import catalogos
+        esperados = sum(len(v) for v in catalogos.CATALOGOS.values())
+        vigentes = db.query(models.PilaCodigo).filter(models.PilaCodigo.vigente == True).count()  # noqa: E712
+        if vigentes != esperados:
+            resumen = catalogos.sembrar(db)
+            import logging
+            logging.getLogger("bbcfile").info(f"catálogos PILA sembrados: {resumen}")
+    except Exception as e:
+        # Un catálogo sin sembrar no debe impedir que arranque la aplicación:
+        # solo deja los selectores de PILA vacíos hasta que se corrija.
+        import logging
+        logging.getLogger("bbcfile").warning(f"no se pudieron sembrar los catálogos PILA: {e}")
 
 def _ensure_columns():
     """Agrega columnas nuevas si no existen (safety net para cuando Alembic falla)."""
@@ -79,6 +102,7 @@ def _ensure_columns():
             _missing.append((table, column, ddl))
     _check("afiliados", "ciudad", "ALTER TABLE afiliados ADD COLUMN ciudad VARCHAR(100)")
     _check("afiliados", "detalle", "ALTER TABLE afiliados ADD COLUMN detalle TEXT")
+    _check("afiliados", "fecha_expedicion", "ALTER TABLE afiliados ADD COLUMN fecha_expedicion VARCHAR(10)")
     _check("tareas", "privada", "ALTER TABLE tareas ADD COLUMN privada BOOLEAN DEFAULT 0")
     _check("tareas", "completado_en", "ALTER TABLE tareas ADD COLUMN completado_en TIMESTAMP")
     _check("tareas", "finalizado_en", "ALTER TABLE tareas ADD COLUMN finalizado_en TIMESTAMP")
@@ -95,6 +119,28 @@ def _ensure_columns():
     _check("seguimiento_arl", "tipo_afiliado", "ALTER TABLE seguimiento_arl ADD COLUMN tipo_afiliado VARCHAR(15) DEFAULT 'dependiente'")
     _check("usuarios", "ver_detalle", "ALTER TABLE usuarios ADD COLUMN ver_detalle BOOLEAN DEFAULT FALSE")
     _check("organizaciones", "precio_afiliado", "ALTER TABLE organizaciones ADD COLUMN precio_afiliado NUMERIC(12,2) DEFAULT 30000")
+
+    # Columnas PILA de afiliados (ver migración u5v6w7x8y9z0). Van en bucle y no
+    # como 24 _check sueltos porque entran todas juntas y con el mismo motivo.
+    # BOOLEAN DEFAULT FALSE y no DEFAULT 0: Postgres rechaza el 0 en un boolean.
+    for _col, _tipo in [
+        ("primer_apellido", "VARCHAR(20)"), ("segundo_apellido", "VARCHAR(30)"),
+        ("primer_nombre", "VARCHAR(20)"), ("segundo_nombre", "VARCHAR(30)"),
+        ("fecha_nacimiento", "VARCHAR(10)"), ("sexo", "VARCHAR(1)"),
+        ("tipo_cotizante", "VARCHAR(2)"), ("subtipo_cotizante", "VARCHAR(2)"),
+        ("extranjero_no_pension", "BOOLEAN DEFAULT FALSE"),
+        ("colombiano_exterior", "BOOLEAN DEFAULT FALSE"),
+        ("cod_depto_labor", "VARCHAR(2)"), ("cod_municipio_labor", "VARCHAR(3)"),
+        ("cod_eps", "VARCHAR(6)"), ("cod_afp", "VARCHAR(6)"),
+        ("cod_ccf", "VARCHAR(6)"), ("cod_arl", "VARCHAR(6)"),
+        ("clase_riesgo", "VARCHAR(1)"), ("tarifa_arl", "NUMERIC(7,5)"),
+        ("tipo_salario", "VARCHAR(1)"), ("salario_basico", "NUMERIC(15,2)"),
+        ("centro_trabajo", "VARCHAR(9)"),
+        ("cotizante_principal_tipo_doc", "VARCHAR(2)"),
+        ("cotizante_principal_doc", "VARCHAR(16)"),
+        ("horas_laboradas", "INTEGER"),
+    ]:
+        _check("afiliados", _col, f"ALTER TABLE afiliados ADD COLUMN {_col} {_tipo}")
 
     ver_detalle_recien_agregada = any(t == "usuarios" and c == "ver_detalle" for t, c, _ in _missing)
 

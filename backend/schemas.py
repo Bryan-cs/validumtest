@@ -78,6 +78,7 @@ class AfiliadoCreate(LargosDeColumna):
     detalle: str = ""
     ibc: Optional[float] = None
     fecha_ingreso: str = ""
+    fecha_expedicion: str = ""
 
     @field_validator('ibc', mode='before')
     @classmethod
@@ -479,6 +480,73 @@ class CredencialUpdate(BaseModel):
     usuario_portal: Optional[str] = None
     clave_portal: Optional[str] = None
     obs: Optional[str] = None
+
+
+
+# ── PILA: aportantes ─────────────────────────────────────────────────────────
+class AportanteCreate(BaseModel):
+    """Empresa aportante. `cliente_ref` enlaza con el `cliente_txt` de los afiliados.
+
+    El `dv` se calcula solo si no se envía; si se envía, se valida. Un NIT con
+    dígito errado lo rechaza el operador después de haber liquidado todo.
+    """
+    cliente_ref: str
+    razon_social: str
+    tipo_doc: str = "NI"
+    num_doc: str
+    dv: Optional[str] = None
+    tipo_persona: str = "J"
+    tipo_aportante: Optional[str] = None
+    clase_aportante: Optional[str] = None
+    cod_arl: Optional[str] = None
+    clase_riesgo: Optional[str] = None
+    actividad_economica: Optional[str] = None
+    cod_depto: Optional[str] = None
+    cod_municipio: Optional[str] = None
+    cod_sucursal: Optional[str] = None
+    nombre_sucursal: Optional[str] = None
+    exonerado_parafiscales: bool = False
+    direccion: Optional[str] = None
+    telefono: Optional[str] = None
+    email: Optional[str] = None
+
+    @field_validator('cliente_ref', 'razon_social', 'num_doc', mode='before')
+    @classmethod
+    def no_vacio(cls, v, info):
+        if not v or not str(v).strip():
+            raise ValueError(f'{info.field_name} es requerido')
+        return str(v).strip()
+
+    @field_validator('num_doc', mode='after')
+    @classmethod
+    def solo_digitos(cls, v):
+        limpio = v.replace(".", "").replace("-", "").replace(" ", "")
+        if not limpio.isdigit():
+            raise ValueError('num_doc debe contener solo dígitos')
+        return limpio
+
+
+class AportanteUpdate(BaseModel):
+    cliente_ref: Optional[str] = None
+    razon_social: Optional[str] = None
+    tipo_doc: Optional[str] = None
+    num_doc: Optional[str] = None
+    dv: Optional[str] = None
+    tipo_persona: Optional[str] = None
+    tipo_aportante: Optional[str] = None
+    clase_aportante: Optional[str] = None
+    cod_arl: Optional[str] = None
+    clase_riesgo: Optional[str] = None
+    actividad_economica: Optional[str] = None
+    cod_depto: Optional[str] = None
+    cod_municipio: Optional[str] = None
+    cod_sucursal: Optional[str] = None
+    nombre_sucursal: Optional[str] = None
+    exonerado_parafiscales: Optional[bool] = None
+    direccion: Optional[str] = None
+    telefono: Optional[str] = None
+    email: Optional[str] = None
+    activo: Optional[bool] = None
 
 
 # ── Multi-tenant: Organizaciones (gestionadas por el superadmin) ──────────────

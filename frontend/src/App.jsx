@@ -25,6 +25,7 @@ const NovedadesClientes   = lazy(() => import('./pages/NovedadesClientes'));
 const PlanillasSS         = lazy(() => import('./pages/PlanillasSS'));
 const Finanzas            = lazy(() => import('./pages/Finanzas'));
 const CredencialesPortales = lazy(() => import('./pages/CredencialesPortales'));
+const Aportantes = lazy(() => import('./pages/Aportantes'));
 const Organizaciones      = lazy(() => import('./pages/Organizaciones'));
 
 const qc = new QueryClient({
@@ -127,6 +128,7 @@ export default function App() {
             <Route path="actividad"        element={<PrivateRoute adminOnly><Page><Actividad /></Page></PrivateRoute>} />
             <Route path="novedades-clientes" element={<PrivateRoute adminOnly><Page><NovedadesClientes /></Page></PrivateRoute>} />
             <Route path="credenciales"       element={<PrivateRoute><Page><CredencialesPortales /></Page></PrivateRoute>} />
+            <Route path="aportantes"         element={<PrivateRoute><Page><Aportantes /></Page></PrivateRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

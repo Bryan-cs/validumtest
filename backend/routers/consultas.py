@@ -54,6 +54,7 @@ from services.consultas.adres import (
     SinResultados,
     captcha_a_data_url,
 )
+from services.consultas.ruaf import ConsultaRUAF, EstadoRuaf
 from tenant import current_org_id
 
 from .deps import require_admin_or_empleado
@@ -71,6 +72,8 @@ CONSULTAS_ENABLED = os.getenv("CONSULTAS_ENABLED", "true").lower() != "false"
 class IniciarReq(BaseModel):
     tipo_doc: str = Field(default="CC", max_length=10)
     doc: str = Field(min_length=3, max_length=20)
+    # RUAF la exige; sin ella solo se puede consultar ADRES (salud).
+    fecha_expedicion: str = Field(default="", max_length=12)
 
 
 class ResolverReq(BaseModel):
@@ -194,6 +197,55 @@ def _sugerencia(db: Session, datos: dict) -> dict:
     }
 
 
+def _sugerencia_ruaf(db: Session, datos: dict) -> dict:
+    """Campos que RUAF puede prellenar: EPS, AFP y CCF.
+
+    Solo se sugiere una administradora VIGENTE. Una persona arrastra fondos y
+    ARL historicas: prellenar con una inactiva es peor que dejar el campo vacio,
+    porque el empleado no tiene como saber que el dato venia mal.
+
+    ARL queda deliberadamente fuera: en este sistema `Afiliado.arl` guarda el
+    NIVEL de riesgo (1-5), no la entidad, asi que el nombre de la ARL no encaja
+    ahi. Se devuelve aparte como informacion.
+    """
+    from services.consultas.ruaf import ConsultaRUAF as _R
+
+    sug, sin_match = {}, {}
+    if datos.get("nombre"):
+        sug["nombre"] = datos["nombre"]
+
+    for subsistema, lista, campo in (
+        ("salud", "eps", "eps"),
+        ("pensiones", "afp", "afp"),
+        ("compensacion_familiar", "ccf", "ccf"),
+    ):
+        vigente = _R.administradora_vigente(datos.get(subsistema) or [])
+        if not vigente:
+            continue
+        match = _match_lista(db, lista, vigente)
+        if match:
+            sug[campo] = match
+        else:
+            sin_match[campo] = vigente
+
+    # Ciudad: la reporta salud como "Departamento -> Municipio".
+    for fila in (datos.get("salud") or []):
+        for k, v in fila.items():
+            if "municipio" in k.lower() and v and v.strip():
+                sug["ciudad"] = v.split("-")[-1].strip()
+                break
+        if "ciudad" in sug:
+            break
+
+    arl_vigente = _R.administradora_vigente(datos.get("riesgos_laborales") or [])
+    return {
+        "campos": sug,
+        "sin_match": sin_match or None,
+        # Informativo: no se puede prellenar porque el campo guarda el nivel.
+        "arl_reportada": arl_vigente,
+    }
+
+
 @router.post("/adres/iniciar")
 async def adres_iniciar(req: IniciarReq, db: Session = Depends(get_db),
                         token=Depends(require_admin_or_empleado)):
@@ -223,7 +275,7 @@ async def adres_iniciar(req: IniciarReq, db: Session = Depends(get_db),
 
     session_id = uuid.uuid4().hex
     _cache_set(f"consulta:sess:{session_id}",
-               {"org_id": org_id, "estado": estado.to_dict()},
+               {"org_id": org_id, "fuente": "adres", "estado": estado.to_dict()},
                ttl=TTL_SESION_SEG)
 
     return {
@@ -312,3 +364,144 @@ def historial(doc: str, db: Session = Depends(get_db),
         "creado": f.creado,
         "error_detalle": f.error_detalle,
     } for f in filas]
+
+
+# ─── Endpoints unificados ─────────────────────────────────────────────────────
+#
+# Preferencia: RUAF primero, ADRES como respaldo.
+#
+# RUAF es estrictamente superior — trae EPS, AFP, ARL, CCF y cesantias, mientras
+# ADRES solo cubre salud — pero exige la fecha de expedicion del documento. Si
+# no la hay, o si RUAF esta caido, se cae a ADRES en vez de dejar al empleado
+# sin nada.
+
+async def _iniciar_ruaf(org_id: int, req: "IniciarReq"):
+    estado, img = await ConsultaRUAF.iniciar(
+        req.tipo_doc, req.doc.strip(), req.fecha_expedicion.strip())
+    return "ruaf", estado, img
+
+
+async def _iniciar_adres(org_id: int, req: "IniciarReq"):
+    estado, img = await ConsultaADRES.iniciar(req.tipo_doc, req.doc.strip())
+    return "adres", estado, img
+
+
+@router.post("/iniciar")
+async def iniciar(req: IniciarReq, db: Session = Depends(get_db),
+                  token=Depends(require_admin_or_empleado)):
+    """Abre la consulta contra la mejor fuente disponible."""
+    _check_enabled()
+    org_id = _org_activa()
+    doc = (req.doc or "").strip()
+    if not doc.isdigit():
+        raise HTTPException(422, "El documento debe ser numerico")
+
+    tiene_fecha = bool((req.fecha_expedicion or "").strip())
+    puede_ruaf = tiene_fecha and ConsultaRUAF.tipo_doc_soportado(req.tipo_doc)
+    puede_adres = ConsultaADRES.tipo_doc_soportado(req.tipo_doc)
+    if not puede_ruaf and not puede_adres:
+        raise HTTPException(
+            422, f"Ninguna fuente consulta documentos tipo {req.tipo_doc}")
+
+    # Cache: solo cuenta el de la fuente que SE VA A USAR.
+    #
+    # Si hay fecha de expedicion se apunta a RUAF, y un resultado viejo de ADRES
+    # no sirve como sustituto: trae unicamente salud. Aceptarlo haria que
+    # agregar la fecha no cambiara nada — el empleado la escribe esperando AFP,
+    # ARL y caja, y recibiria lo mismo de antes sin entender por que.
+    fuente_objetivo = "ruaf" if puede_ruaf else "adres"
+    en_cache = _cache_lookup(db, fuente_objetivo, doc)
+    if en_cache:
+        sug = (_sugerencia_ruaf if fuente_objetivo == "ruaf" else _sugerencia)(db, en_cache)
+        return {"cacheado": True, "fuente": fuente_objetivo, "datos": en_cache,
+                "sugerencia": sug}
+
+    intentos = []
+    if puede_ruaf:
+        intentos.append(_iniciar_ruaf)
+    if puede_adres:
+        intentos.append(_iniciar_adres)
+
+    ultimo = None
+    for intento in intentos:
+        try:
+            fuente, estado, png = await intento(org_id, req)
+        except FuenteNoDisponible as e:
+            ultimo = e          # fuente caida o cambiada: probar la siguiente
+            continue
+        except ErrorConsulta as e:
+            ultimo = e
+            continue
+
+        session_id = uuid.uuid4().hex
+        _cache_set(f"consulta:sess:{session_id}",
+                   {"org_id": org_id, "fuente": fuente, "estado": estado.to_dict()},
+                   ttl=TTL_SESION_SEG)
+        return {
+            "cacheado": False,
+            "fuente": fuente,
+            "session_id": session_id,
+            "captcha": captcha_a_data_url(png),
+            "expira_seg": TTL_SESION_SEG,
+            # RUAF distingue mayusculas; ADRES manda solo digitos.
+            "captcha_sensible_mayusculas": fuente == "ruaf",
+        }
+
+    if isinstance(ultimo, FuenteNoDisponible):
+        raise HTTPException(502, str(ultimo))
+    raise HTTPException(422, str(ultimo) if ultimo else "No se pudo abrir la consulta")
+
+
+@router.post("/resolver")
+async def resolver(req: ResolverReq, db: Session = Depends(get_db),
+                   token=Depends(require_admin_or_empleado)):
+    """Envia el captcha resuelto a la fuente con la que se abrio la consulta."""
+    _check_enabled()
+    org_id = _org_activa()
+    crudo = _cache_get(f"consulta:sess:{req.session_id}")
+    if not crudo or crudo.get("org_id") != org_id:
+        raise HTTPException(410, "La consulta expiro. Genera un codigo nuevo.")
+
+    fuente = crudo.get("fuente", "adres")
+    usuario = token.get("sub", "?")
+    if fuente == "ruaf":
+        estado = EstadoRuaf.from_dict(crudo["estado"])
+        cliente, sugeridor = ConsultaRUAF, _sugerencia_ruaf
+    else:
+        estado = EstadoConsulta.from_dict(crudo["estado"])
+        cliente, sugeridor = ConsultaADRES, _sugerencia
+
+    def registrar(exito: bool, datos: dict = None, error: str = None):
+        d = datos or {}
+        db.add(models.ConsultaExterna(
+            organizacion_id=org_id, fuente=fuente,
+            tipo_doc=estado.tipo_doc, doc=estado.doc, exito=exito,
+            nombre=d.get("nombre"), eps=d.get("eps"), regimen=d.get("regimen"),
+            estado_afil=d.get("estado"), tipo_afiliado=d.get("tipo_afiliado"),
+            respuesta=json.dumps(d, ensure_ascii=False) if datos else None,
+            error_detalle=error, usuario=usuario,
+            valido_hasta=_utcnow() + timedelta(days=TTL_RESULTADO_DIAS) if exito else None,
+        ))
+        _log_consulta(db, org_id, usuario, fuente, estado.doc,
+                      "ok" if exito else f"fallo: {error}")
+        db.commit()
+
+    try:
+        resultado = await cliente.resolver(estado, req.captcha)
+    except CaptchaIncorrecto as e:
+        _cache_set(f"consulta:sess:{req.session_id}", None, ttl=1)
+        raise HTTPException(400, str(e))
+    except SinResultados as e:
+        registrar(False, error=str(e))
+        raise HTTPException(404, str(e))
+    except FuenteNoDisponible as e:
+        registrar(False, error=str(e))
+        raise HTTPException(502, str(e))
+    except ErrorConsulta as e:
+        registrar(False, error=str(e))
+        raise HTTPException(422, str(e))
+
+    datos = resultado.to_dict()
+    registrar(True, datos=datos)
+    _cache_set(f"consulta:sess:{req.session_id}", None, ttl=1)
+    return {"fuente": fuente, "datos": datos, "sugerencia": sugeridor(db, datos)}

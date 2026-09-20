@@ -114,6 +114,42 @@ class Afiliado(Base):
     ibc             = Column(Numeric(15, 2), nullable=True)   # IBC individual (None = usar global)
     fecha_ingreso   = Column(String(10))
     fecha_afiliacion= Column(String(10))
+    fecha_expedicion= Column(String(10))   # dd/mm/aaaa — RUAF la exige para consultar
+
+    # ── Campos PILA (Anexo Técnico 2 v30, registro tipo 2) ───────────────────
+    # Nullable a propósito: los afiliados ya cargados no los tienen y se
+    # completan por backfill. La liquidación valida que estén antes de generar.
+    # El nombre va partido en cuatro porque el registro tipo 2 los exige
+    # separados (campos 11-14), no como el `nombre` completo que ya existe.
+    primer_apellido  = Column(String(20))
+    segundo_apellido = Column(String(30))
+    primer_nombre    = Column(String(20))
+    segundo_nombre   = Column(String(30))
+    fecha_nacimiento = Column(String(10))    # AAAA-MM-DD
+    sexo             = Column(String(1))     # M | F
+    # Tipo y subtipo definen a qué subsistemas está obligado el cotizante.
+    tipo_cotizante    = Column(String(2), index=True)
+    subtipo_cotizante = Column(String(2))
+    extranjero_no_pension = Column(Boolean, default=False)
+    colombiano_exterior   = Column(Boolean, default=False)
+    cod_depto_labor     = Column(String(2))   # DANE
+    cod_municipio_labor = Column(String(3))   # DANE
+    # Códigos PILA de las administradoras. Los campos `eps`/`afp`/`ccf`/`arl`
+    # de arriba son texto libre y sirven para mostrar; estos son los que van
+    # al archivo plano y deben existir en `pila_codigos`.
+    cod_eps = Column(String(6))
+    cod_afp = Column(String(6))
+    cod_ccf = Column(String(6))
+    cod_arl = Column(String(6))
+    clase_riesgo = Column(String(1))          # 1..5
+    tarifa_arl   = Column(Numeric(7, 5))      # p.ej. 0.00522 para riesgo 1
+    tipo_salario   = Column(String(1))        # F fijo | V variable | I integral
+    salario_basico = Column(Numeric(15, 2))
+    centro_trabajo = Column(String(9))
+    # Para beneficiarios que cotizan a través de un cotizante principal.
+    cotizante_principal_tipo_doc = Column(String(2))
+    cotizante_principal_doc      = Column(String(16))
+    horas_laboradas = Column(Integer)         # solo cotizantes de tiempo parcial
     registrado_por  = Column(String(60))
     activo          = Column(Boolean, default=True)
     creado          = Column(DateTime(timezone=True), default=_utcnow)
@@ -514,3 +550,229 @@ class ConsultaExterna(Base):
     usuario         = Column(String(60), index=True)
     creado          = Column(DateTime(timezone=True), default=_utcnow)
     valido_hasta    = Column(DateTime(timezone=True), nullable=True)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PILA — Planilla Integrada de Liquidación de Aportes
+# Estructura según el Anexo Técnico 2 de la Resolución 2388 de 2016,
+# versión 30 (24-07-2026, modificada por la Resolución 1529 de 2026).
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class PilaCodigo(Base):
+    """Catálogo normativo de códigos PILA. Global: no lleva organizacion_id
+    porque la tabla la define la norma, no el cliente, y es idéntica para todas
+    las organizaciones. Por eso queda fuera del auto-filtro de tenant.py.
+
+    `tipo` agrupa el catálogo: EPS, AFP, CCF, ARL, TIPO_COTIZANTE,
+    SUBTIPO_COTIZANTE, TIPO_APORTANTE, TIPO_PLANILLA, TIPO_DOC, DEPTO, MUNICIPIO.
+    """
+    __tablename__ = "pila_codigos"
+    __table_args__ = (
+        UniqueConstraint('tipo', 'codigo', name='uq_pila_codigo_tipo_codigo'),
+        Index('ix_pila_codigo_tipo_vigente', 'tipo', 'vigente'),
+    )
+    id      = Column(Integer, primary_key=True, index=True)
+    tipo    = Column(String(24), nullable=False, index=True)
+    codigo  = Column(String(10), nullable=False, index=True)
+    nombre  = Column(String(200), nullable=False)
+    # Contexto del código: el departamento al que pertenece un municipio, o la
+    # clase de riesgo por defecto de una actividad económica.
+    padre   = Column(String(10), nullable=True, index=True)
+    vigente = Column(Boolean, default=True, index=True)
+    creado  = Column(DateTime(timezone=True), default=_utcnow)
+
+
+class AportantePila(Base):
+    """Empresa aportante con los datos que exige el registro tipo 1 (encabezado).
+
+    Hoy el aportante vive como texto libre en `Afiliado.empresa` / `Afiliado.cliente_txt`.
+    Ninguna planilla sale de un string: el encabezado necesita NIT con dígito de
+    verificación, tipo y clase de aportante, código ARL y sucursal. `cliente_ref`
+    es el puente con lo que ya existe (coincide con `Afiliado.cliente_txt`).
+    """
+    __tablename__ = "aportantes_pila"
+    __table_args__ = (
+        UniqueConstraint('organizacion_id', 'cliente_ref', name='uq_aportante_org_cliente'),
+        Index('ix_aportante_org_doc', 'organizacion_id', 'num_doc'),
+    )
+    id              = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
+    cliente_ref     = Column(String(150), nullable=False, index=True)
+
+    razon_social = Column(String(200), nullable=False)
+    tipo_doc     = Column(String(2), default="NI")   # NI | CC | CE | TI | PA
+    num_doc      = Column(String(16), nullable=False, index=True)
+    dv           = Column(String(1))                 # dígito de verificación del NIT
+    tipo_persona = Column(String(1), default="J")    # J jurídica | N natural
+
+    tipo_aportante  = Column(String(2))   # 01..17 (17 = pagador recicladores, Res. 1529/2026)
+    clase_aportante = Column(String(1))
+
+    cod_arl             = Column(String(6))
+    clase_riesgo        = Column(String(1))   # 1..5
+    actividad_economica = Column(String(7))   # CIIU + clase de riesgo
+
+    cod_depto       = Column(String(2))   # DANE
+    cod_municipio   = Column(String(3))   # DANE
+    cod_sucursal    = Column(String(10))
+    nombre_sucursal = Column(String(40))
+
+    # Artículo 114-1 ET: exonera de SENA, ICBF y salud patronal a los cotizantes
+    # con IBC bajo 10 SMLMV. Cambia el cálculo, no solo el reporte.
+    exonerado_parafiscales = Column(Boolean, default=False)
+
+    direccion = Column(String(200))
+    telefono  = Column(String(20))
+    email     = Column(String(100))
+
+    activo      = Column(Boolean, default=True, index=True)
+    creado      = Column(DateTime(timezone=True), default=_utcnow)
+    actualizado = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+
+class PlanillaLiquidacion(Base):
+    """Cabecera de una liquidación PILA: un período, un aportante, un tipo de planilla.
+
+    Distinta de `PlanillaPago`, que solo guarda archivos subidos a mano. Esta es la
+    planilla que el sistema liquida y, más adelante, envía al operador.
+
+    `periodo_cotizacion` y `periodo_pago` van separados a propósito: en PILA no
+    siempre coinciden, y el propio módulo de ADAX los trata como campos distintos.
+    """
+    __tablename__ = "planillas_liquidacion"
+    __table_args__ = (
+        Index('ix_liq_org_aportante_periodo', 'organizacion_id', 'aportante_id', 'periodo_cotizacion'),
+        Index('ix_liq_org_estado', 'organizacion_id', 'estado'),
+    )
+    id              = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
+    aportante_id    = Column(Integer, ForeignKey("aportantes_pila.id", ondelete="RESTRICT"),
+                             index=True, nullable=False)
+    cliente_ref     = Column(String(150), index=True)
+
+    tipo_planilla      = Column(String(1), nullable=False)   # E | Y | I | A | N | M | K | J | S | W
+    periodo_cotizacion = Column(String(7), nullable=False)   # AAAA-MM
+    periodo_pago       = Column(String(7), nullable=False)   # AAAA-MM
+    fecha_limite_pago  = Column(String(10))                  # AAAA-MM-DD
+
+    # borrador → generada → enviada → numerada → pagada | anulada
+    estado = Column(String(20), default="borrador", index=True)
+
+    operador           = Column(String(30))            # pago_simple | aportes_en_linea
+    numero_planilla    = Column(String(20), index=True)  # lo asigna el operador
+    planilla_corregida = Column(String(20))            # para tipo N: la planilla que corrige
+    link_pago          = Column(Text)
+    respuesta_operador = Column(Text)                  # JSON crudo, para diagnóstico
+
+    total_cotizantes = Column(Integer, default=0)
+    total_pension    = Column(Numeric(15, 2), default=0)
+    total_salud      = Column(Numeric(15, 2), default=0)
+    total_arl        = Column(Numeric(15, 2), default=0)
+    total_ccf        = Column(Numeric(15, 2), default=0)
+    total_sena       = Column(Numeric(15, 2), default=0)
+    total_icbf       = Column(Numeric(15, 2), default=0)
+    total_esap       = Column(Numeric(15, 2), default=0)
+    total_men        = Column(Numeric(15, 2), default=0)
+    total_fsp        = Column(Numeric(15, 2), default=0)
+    total_general    = Column(Numeric(15, 2), default=0)
+
+    archivo_ruta  = Column(Text)          # ruta en R2 del plano generado
+    observaciones = Column(Text, default="")
+    generado_por  = Column(String(60))
+    creado        = Column(DateTime(timezone=True), default=_utcnow)
+    actualizado   = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
+
+
+class PlanillaDetalle(Base):
+    """Un registro tipo 2 por cotizante: la liquidación congelada.
+
+    Copia nombre, documento y administradoras en vez de depender del afiliado: si
+    mañana el trabajador cambia de EPS o se retira, la planilla ya liquidada debe
+    seguir mostrando lo que se reportó y se pagó ese mes.
+
+    `linea_plana` conserva el registro tal como salió en el archivo. Es la única
+    forma de auditar contra lo que recibió el operador sin volver a calcular.
+    """
+    __tablename__ = "planillas_detalle"
+    __table_args__ = (
+        Index('ix_detalle_liq_doc', 'liquidacion_id', 'doc'),
+    )
+    id              = Column(Integer, primary_key=True, index=True)
+    organizacion_id = _org_fk()
+    liquidacion_id  = Column(Integer, ForeignKey("planillas_liquidacion.id", ondelete="CASCADE"),
+                             index=True, nullable=False)
+    afiliado_id     = Column(Integer, ForeignKey("afiliados.id", ondelete="SET NULL"), nullable=True)
+
+    secuencia = Column(Integer)   # consecutivo dentro de la planilla
+    tipo_doc  = Column(String(2))
+    doc       = Column(String(16), index=True)
+    # Longitudes del anexo: campos 11-14 son 20, 30, 20 y 30 caracteres.
+    primer_apellido  = Column(String(20))
+    segundo_apellido = Column(String(30))
+    primer_nombre    = Column(String(20))
+    segundo_nombre   = Column(String(30))
+
+    tipo_cotizante      = Column(String(2))
+    subtipo_cotizante   = Column(String(2))
+    cod_depto_labor     = Column(String(2))
+    cod_municipio_labor = Column(String(3))
+
+    cod_afp = Column(String(6))
+    cod_eps = Column(String(6))
+    cod_ccf = Column(String(6))
+
+    # Los cuatro pueden diferir en un mismo cotizante.
+    dias_pension = Column(Integer, default=0)
+    dias_salud   = Column(Integer, default=0)
+    dias_arl     = Column(Integer, default=0)
+    dias_ccf     = Column(Integer, default=0)
+
+    salario_basico = Column(Numeric(15, 2), default=0)
+    tipo_salario   = Column(String(1))
+    ibc_pension    = Column(Numeric(15, 2), default=0)
+    ibc_salud      = Column(Numeric(15, 2), default=0)
+    ibc_arl        = Column(Numeric(15, 2), default=0)
+    ibc_ccf        = Column(Numeric(15, 2), default=0)
+    ibc_otros_parafiscales = Column(Numeric(15, 2), default=0)
+
+    tarifa_pension       = Column(Numeric(7, 5), default=0)
+    cot_pension          = Column(Numeric(15, 2), default=0)
+    aporte_vol_afiliado  = Column(Numeric(15, 2), default=0)
+    aporte_vol_aportante = Column(Numeric(15, 2), default=0)
+    total_pension        = Column(Numeric(15, 2), default=0)
+    fsp_solidaridad      = Column(Numeric(15, 2), default=0)
+    fsp_subsistencia     = Column(Numeric(15, 2), default=0)
+
+    tarifa_salud = Column(Numeric(7, 5), default=0)
+    cot_salud    = Column(Numeric(15, 2), default=0)
+    valor_adres  = Column(Numeric(15, 2), default=0)   # UPC adicional o contribución solidaria
+
+    tarifa_arl     = Column(Numeric(7, 5), default=0)
+    centro_trabajo = Column(String(9))
+    cot_arl        = Column(Numeric(15, 2), default=0)
+
+    tarifa_ccf  = Column(Numeric(7, 5), default=0)
+    valor_ccf   = Column(Numeric(15, 2), default=0)
+    tarifa_sena = Column(Numeric(7, 5), default=0)
+    valor_sena  = Column(Numeric(15, 2), default=0)
+    tarifa_icbf = Column(Numeric(7, 5), default=0)
+    valor_icbf  = Column(Numeric(15, 2), default=0)
+    tarifa_esap = Column(Numeric(7, 5), default=0)
+    valor_esap  = Column(Numeric(15, 2), default=0)
+    tarifa_men  = Column(Numeric(7, 5), default=0)
+    valor_men   = Column(Numeric(15, 2), default=0)
+
+    # Banderas ING, RET, TDE, TAE, TDP, TAP, VSP, VST, SLN, IGE, LMA, VAC-LR,
+    # AVP, VCT, IRL y sus fechas de inicio/fin. JSON porque son 16 banderas y 14
+    # fechas que se reportan juntas o no se reportan: como columnas serían 30
+    # nulos en la mayoría de las filas.
+    novedades        = Column(Text, default="{}")
+    fechas_novedades = Column(Text, default="{}")
+
+    horas_laboradas              = Column(Integer)
+    cotizante_principal_tipo_doc = Column(String(2))
+    cotizante_principal_doc      = Column(String(16))
+
+    linea_plana = Column(Text)   # el registro tipo 2 exacto que se escribió
+    creado      = Column(DateTime(timezone=True), default=_utcnow)

@@ -11,6 +11,7 @@ explícitamente; el listener no cubre bulk UPDATE/DELETE, que se filtran a mano 
 Modelos excluidos del auto-filtro:
 - `Usuario`  → el superadmin (sin organización) debe poder listar/gestionar usuarios de cualquier org.
 - `Organizacion`, `LoginAttempt`, `TokenBlacklist` → globales, no tienen `organizacion_id`.
+- `PilaCodigo` → catálogo normativo de códigos PILA, idéntico para todas las organizaciones.
 """
 from contextvars import ContextVar
 from typing import Optional
@@ -43,6 +44,7 @@ def _tenant_models():
                 models.Notificacion, models.PlanillaPago, models.Documento, models.AvisoCliente,
                 models.CredencialPortal, models.SeguimientoArl,
                 models.ConsultaExterna,
+                models.AportantePila, models.PlanillaLiquidacion, models.PlanillaDetalle,
             ) if m.__name__ not in excluidos
         ]
     return _TENANT_MODELS
