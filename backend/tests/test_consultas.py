@@ -419,10 +419,16 @@ def test_resolver_unificado_sesion_inexistente(client, admin_token):
     assert r.status_code == 410
 
 
-def test_cache_prefiere_ruaf_sobre_adres(client, admin_token, db):
-    """Con fecha de expedicion la fuente objetivo es RUAF, y su cache es el
-    unico que cuenta: un resultado viejo de ADRES solo tiene salud."""
+def test_cache_prefiere_ruaf_sobre_adres(client, admin_token, db, monkeypatch):
+    """Con RUAF encendido y fecha de expedicion, su cache es el unico que cuenta:
+    un resultado viejo de ADRES solo tiene salud.
+
+    RUAF esta apagado por defecto (Railway no alcanza sispro.gov.co), asi que el
+    test lo enciende a proposito para cubrir esa rama.
+    """
     import models
+    import routers.consultas as rc
+    monkeypatch.setattr(rc, "RUAF_ENABLED", True)
 
     org = db.query(models.Organizacion).filter_by(slug="org-test").first()
     for fuente, nombre in (("adres", "SOLO SALUD"), ("ruaf", "COMPLETO RUAF")):
@@ -498,3 +504,35 @@ def test_cache_de_adres_no_sirve_cuando_se_apunta_a_ruaf(client, admin_token, db
         assert _cache_lookup(db, "ruaf", "4444444444") is None
     finally:
         reset_org(tok)
+
+
+
+def test_ruaf_apagado_por_defecto():
+    """Railway no alcanza sispro.gov.co: 25 s de timeout sin respuesta, incluso
+    www.sispro.gov.co. Verificado con sonda desde us-east4 el 2026-09-20.
+    Dejar RUAF activo solo suma 30 s de espera antes de caer al respaldo."""
+    import routers.consultas as rc
+
+    assert rc.RUAF_ENABLED is False
+
+
+def test_con_fecha_pero_ruaf_apagado_usa_adres(client, admin_token, db):
+    """Aunque venga la fecha de expedicion, la fuente objetivo es ADRES."""
+    import models
+
+    org = db.query(models.Organizacion).filter_by(slug="org-test").first()
+    db.add(models.ConsultaExterna(
+        organizacion_id=org.id, fuente="adres", tipo_doc="CC", doc="3333333333",
+        exito=True, nombre="VIA ADRES",
+        respuesta=json.dumps({"nombre": "VIA ADRES"}), usuario="admin",
+        creado=_utcnow(), valido_hasta=_utcnow() + timedelta(days=30),
+    ))
+    db.commit()
+
+    r = client.post("/consultas/iniciar",
+                    json={"tipo_doc": "CC", "doc": "3333333333",
+                          "fecha_expedicion": "2016-04-14"},
+                    headers=_h(admin_token))
+    assert r.status_code == 200
+    assert r.json()["fuente"] == "adres"
+    assert r.json()["datos"]["nombre"] == "VIA ADRES"

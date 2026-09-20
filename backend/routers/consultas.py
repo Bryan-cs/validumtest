@@ -68,6 +68,22 @@ TTL_RESULTADO_DIAS = int(os.getenv("CONSULTAS_TTL_DIAS", "30"))
 
 CONSULTAS_ENABLED = os.getenv("CONSULTAS_ENABLED", "true").lower() != "false"
 
+# RUAF APAGADO POR DEFECTO.
+#
+# Verificado el 2026-09-20 con una sonda desde us-east4: todo el dominio
+# sispro.gov.co (RUAF incluido) descarta los paquetes desde la red de Railway —
+# 25 s de timeout sin respuesta, incluso www.sispro.gov.co, que desde una IP
+# colombiana devuelve 200. No es lentitud: es un firewall.
+#
+# ADRES en cambio si responde (falla en 266 ms por su cadena TLS, que el backend
+# ya resuelve). Por eso el flujo queda en ADRES y RUAF no se intenta: esperar
+# 30 s para caer igual al respaldo solo empeora la experiencia.
+#
+# El scraper de RUAF queda en services/consultas/ruaf.py, probado y con tests.
+# Para revivirlo hace falta salida por IP colombiana (CONSULTAS_PROXY_URL) y
+# poner esta variable en true.
+RUAF_ENABLED = os.getenv("CONSULTAS_RUAF_ENABLED", "false").lower() == "true"
+
 
 class IniciarReq(BaseModel):
     tipo_doc: str = Field(default="CC", max_length=10)
@@ -397,7 +413,8 @@ async def iniciar(req: IniciarReq, db: Session = Depends(get_db),
         raise HTTPException(422, "El documento debe ser numerico")
 
     tiene_fecha = bool((req.fecha_expedicion or "").strip())
-    puede_ruaf = tiene_fecha and ConsultaRUAF.tipo_doc_soportado(req.tipo_doc)
+    puede_ruaf = (RUAF_ENABLED and tiene_fecha
+                  and ConsultaRUAF.tipo_doc_soportado(req.tipo_doc))
     puede_adres = ConsultaADRES.tipo_doc_soportado(req.tipo_doc)
     if not puede_ruaf and not puede_adres:
         raise HTTPException(

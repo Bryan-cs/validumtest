@@ -1693,20 +1693,9 @@ export default function Afiliados() {
                   ? 'ADRES consulta personas, no empresas'
                   : !/^\d{3,}$/.test(form.doc||'')
                     ? 'Escribe el número de documento para consultar'
-                    : (form.fecha_expedicion
-                        ? 'Consultar RUAF: EPS, AFP, ARL y caja'
-                        : 'Sin fecha de expedición solo se consulta salud (ADRES)')}
+                    : 'Consultar afiliación en salud en ADRES'}
                 style={{ flexShrink:0 }}>🔍</Btn>
             </div>
-          </div>
-          <div style={{ marginBottom:14 }}>
-            <label style={lbl}>Fecha de expedición del documento</label>
-            <input type="date" value={form.fecha_expedicion||''}
-              onChange={e=>sf('fecha_expedicion',e.target.value)}
-              style={{ ...inp2 }} />
-            <span style={{ fontSize:11, color:C.text2, marginTop:3, display:'block' }}>
-              RUAF la exige para consultar AFP, ARL y caja
-            </span>
           </div>
           <InputUp label="Cargo"    value={form.cargo||''}
             onChange={v=>sf('cargo', v.replace(/[^a-zA-ZáéíóúÁÉÍÓÚüÜñÑ0-9\s]/g, ''))} />
