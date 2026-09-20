@@ -326,3 +326,73 @@ def test_la_cadena_tls_incluye_el_intermedio_que_el_operador_omite():
     ctx = operador.contexto_tls()
     emisores = [c["issuer"] for c in ctx.get_ca_certs()]
     assert any("DigiCert Global Root G2" in str(e) for e in emisores)
+
+# ─── Interpretar lo que responde el operador ──────────────────────────────────
+#
+# Respuesta real del primer envío: el operador recibe la planilla, le asigna un
+# código y la deja sin numerar mientras tenga errores. Todo viene anidado en
+# `validacionPlanillas`, no en la raíz.
+
+RESPUESTA_REAL = {
+    "estadoValidacion": "OK",
+    "validacionPlanillas": [{
+        "codigoPlanilla": 287149577,
+        "numeroPlanilla": 0,
+        "cantidadErroresCotizante": 1,
+        "cantidadErroresEmpresa": 1,
+        "cantidadAdvertencias": 2,
+        "erroresCotizantePlanilla": [{
+            "idRegla": "eo.val.2.262",
+            "descripcion": "El cotizante aportará a la administradora de pension 230301 "
+                           "PORVENIR, pero se encuentra afiliado a la administradora "
+                           "230201 PROTECCION",
+            "identificacion": "CC1017234567", "autocorreccion": "Si",
+            "campoInicial": "154", "campoFinal": "159", "linea": "2"}],
+        "erroresEmpresaPlanilla": [{
+            "idRegla": "eo.val.1.018",
+            "descripcion": "El usuario no se encuentra asociado a la sucursal 01",
+            "identificacion": "", "autocorreccion": "No",
+            "campoInicial": "249", "campoFinal": "258", "linea": "1"}],
+        "advertenciasPlanilla": [{
+            "idRegla": "eo.val.2.380",
+            "descripcion": "el aporte a salud se realizará a la MIN002 ADRES",
+            "identificacion": "CC1017234567", "autocorreccion": "No",
+            "campoInicial": "8", "campoFinal": "13", "linea": "2"}],
+    }],
+}
+
+
+def test_saca_el_codigo_de_planilla_aunque_venga_anidado():
+    r = operador.interpretar_validacion(RESPUESTA_REAL)
+    assert r["codigo_planilla"] == "287149577"
+    assert r["estado_validacion"] == "OK"
+
+
+def test_numero_en_cero_significa_sin_numerar():
+    """Con errores pendientes el operador asigna código pero no número."""
+    r = operador.interpretar_validacion(RESPUESTA_REAL)
+    assert r["numero_planilla"] == ""
+
+
+def test_junta_los_errores_de_empresa_y_de_cotizante():
+    r = operador.interpretar_validacion(RESPUESTA_REAL)
+    assert len(r["errores"]) == 2
+    assert {e["tipo"] for e in r["errores"]} == {"empresa", "cotizante"}
+    assert len(r["advertencias"]) == 1
+
+
+def test_cada_error_dice_donde_y_si_se_autocorrige():
+    r = operador.interpretar_validacion(RESPUESTA_REAL)
+    afp = next(e for e in r["errores"] if e["regla"] == "eo.val.2.262")
+    assert afp["campos"] == "154-159", "el campo 31 del registro tipo 2, la AFP"
+    assert afp["linea"] == "2"
+    assert afp["autocorrige"] is True
+
+    sucursal = next(e for e in r["errores"] if e["regla"] == "eo.val.1.018")
+    assert sucursal["autocorrige"] is False
+
+
+def test_respuesta_sin_validaciones_no_revienta():
+    assert operador.interpretar_validacion({"estadoValidacion": "OK"})["estado_validacion"] == "OK"
+    assert operador.interpretar_validacion({})["estado_validacion"] == ""
+    assert operador.interpretar_validacion(None) == {}

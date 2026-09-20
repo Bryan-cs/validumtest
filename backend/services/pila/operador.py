@@ -369,9 +369,47 @@ def administradoras_de(sesion: Sesion, tipo_doc: str, num_doc: str,
 
 # ─── Recorrido completo ───────────────────────────────────────────────────────
 
+def interpretar_validacion(respuesta: dict) -> dict:
+    """Saca de la respuesta del operador lo que interesa.
+
+    El código de la planilla, los errores y las advertencias vienen anidados en
+    `validacionPlanillas`, no en la raíz. Cada error trae el campo exacto del
+    registro que lo causó y si el operador puede corregirlo solo.
+    """
+    if not isinstance(respuesta, dict):
+        return {}
+    validaciones = respuesta.get("validacionPlanillas") or []
+    if not validaciones:
+        return {"estado_validacion": respuesta.get("estadoValidacion", "")}
+
+    v = validaciones[0]
+
+    def _lista(clave, tipo):
+        return [{
+            "tipo": tipo,
+            "regla": x.get("idRegla", ""),
+            "descripcion": x.get("descripcion", ""),
+            "identificacion": x.get("identificacion", ""),
+            "linea": x.get("linea", ""),
+            "campos": f"{x.get('campoInicial', '')}-{x.get('campoFinal', '')}".strip("-"),
+            "autocorrige": str(x.get("autocorreccion", "")).strip().lower() == "si",
+        } for x in (v.get(clave) or [])]
+
+    # numeroPlanilla llega en 0 mientras la planilla tenga errores sin corregir.
+    numero = v.get("numeroPlanilla") or 0
+    return {
+        "estado_validacion": respuesta.get("estadoValidacion", ""),
+        "codigo_planilla": str(v.get("codigoPlanilla") or ""),
+        "numero_planilla": str(numero) if numero else "",
+        "errores": _lista("erroresEmpresaPlanilla", "empresa") +
+                   _lista("erroresCotizantePlanilla", "cotizante"),
+        "advertencias": _lista("advertenciasPlanilla", "advertencia"),
+    }
+
+
 def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str,
                     num_doc_aportante: str, tipo_archivo: str = "I") -> dict:
-    """Los cuatro pasos de una vez, reutilizando una sola conexión.
+    """Los pasos del recorrido de una vez, reutilizando una sola conexión.
 
     Devuelve lo que se pueda obtener en cada etapa. Si el operador rechaza la
     planilla, la excepción lleva su mensaje tal cual: es más útil que uno
@@ -379,21 +417,21 @@ def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str
     """
     with _cliente_nuevo() as cliente:
         sesion = autenticar(cliente)
-        autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente)
+        aportante = consultar_aportante(sesion, tipo_doc_aportante, num_doc_aportante, cliente)
+        autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente,
+                  aportante_id=aportante.get("id"))
         respuesta = validar_planilla(sesion, contenido, nombre_archivo,
                                      tipo_archivo=tipo_archivo, cliente=cliente)
 
-        numero = ""
-        for clave in ("numeroPlanilla", "numero", "codigoPlanilla", "codigo"):
-            if isinstance(respuesta, dict) and respuesta.get(clave):
-                numero = str(respuesta[clave])
-                break
-
         resultado = {"simulado": sesion.simulada, "respuesta": respuesta,
-                     "numero_planilla": numero, "inconsistencias": None,
                      "totales": None, "url_pago": ""}
+        resultado.update(interpretar_validacion(respuesta))
+
+        # Los totales y el enlace de pago solo existen cuando la planilla ya
+        # quedó numerada; con errores pendientes el operador todavía no la
+        # numera.
+        numero = resultado.get("numero_planilla")
         if numero:
-            resultado["inconsistencias"] = inconsistencias(sesion, numero, cliente=cliente)
             resultado["totales"] = totales(sesion, numero, cliente=cliente)
             resultado["url_pago"] = url_pago(sesion, numero, cliente=cliente)
         return resultado

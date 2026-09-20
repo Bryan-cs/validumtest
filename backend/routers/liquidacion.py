@@ -389,8 +389,14 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
         if resultado.get("numero_planilla"):
             l.numero_planilla = resultado["numero_planilla"][:20]
             l.estado = "numerada"
+        elif resultado.get("errores"):
+            # El operador recibió la planilla y le asignó código, pero no la
+            # numera mientras tenga errores sin corregir.
+            l.estado = "inconsistente"
         else:
             l.estado = "enviada"
+        if resultado.get("codigo_planilla"):
+            l.planilla_corregida = resultado["codigo_planilla"][:20]
         if resultado.get("url_pago"):
             l.link_pago = resultado["url_pago"]
     db.commit()
@@ -403,11 +409,12 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
 
     return {"simulado": resultado.get("simulado", False),
             "estado": l.estado,
+            "codigo_planilla": resultado.get("codigo_planilla"),
             "numero_planilla": l.numero_planilla,
             "link_pago": l.link_pago,
-            "inconsistencias": resultado.get("inconsistencias"),
-            "totales": resultado.get("totales"),
-            "respuesta": resultado.get("respuesta")}
+            "errores": resultado.get("errores", []),
+            "advertencias": resultado.get("advertencias", []),
+            "totales": resultado.get("totales")}
 
 
 @router.get("/operador/estado")
