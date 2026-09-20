@@ -79,6 +79,12 @@ export default function Liquidacion() {
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
+  const { data: operador } = useQuery({
+    queryKey: ['operador-estado'],
+    queryFn: async () => (await api.get('/liquidacion/operador/estado')).data,
+    staleTime: 5 * 60 * 1000,
+  });
+
   const { data: personas = [], isLoading, isError, refetch } = useQuery({
     queryKey: ['liquidacion-pendientes', anio, mes],
     queryFn: async () =>
@@ -120,6 +126,23 @@ export default function Liquidacion() {
       qc.invalidateQueries({ queryKey: ['liquidacion-pendientes'] });
     },
     onError: (e) => toast.error(e?.response?.data?.detail || 'No se pudo liquidar'),
+  });
+
+  const enviar = useMutation({
+    mutationFn: async (persona) =>
+      (await api.post(`/liquidacion/${persona.planilla_id}/enviar`)).data,
+    onSuccess: (d) => {
+      if (d.simulado) {
+        toast.info('Simulación: no se envió nada al operador. ' +
+                   'Cambia SUAPORTE_MODO a "real" para enviar de verdad.');
+      } else if (d.numero_planilla) {
+        toast.success(`Planilla numerada: ${d.numero_planilla}`);
+      } else {
+        toast.success('Planilla enviada al operador');
+      }
+      qc.invalidateQueries({ queryKey: ['liquidacion-pendientes'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'No se pudo enviar'),
   });
 
   const anular = useMutation({
@@ -197,6 +220,18 @@ export default function Liquidacion() {
         </div>
       </div>
 
+      {operador?.modo === 'simulacion' && (
+        <div style={{
+          border: '1px solid #FDE68A', background: '#FFFBEB', borderRadius: 10,
+          padding: '10px 14px', marginBottom: 14, fontSize: 13, color: '#92400E',
+        }}>
+          <strong>Envío en simulación.</strong> El botón «Enviar al operador» arma la
+          petición y la registra, pero no sale a la red. Enviar de verdad crea la
+          planilla en el operador y su enlace de pago mueve dinero.
+          {!operador?.credenciales && ' Además faltan credenciales configuradas.'}
+        </div>
+      )}
+
       {isLoading ? (
         <div style={{ display: 'grid', gap: 8 }}>
           {[1, 2, 3].map(i => <SkeletonCard key={i} height={64} />)}
@@ -244,6 +279,12 @@ export default function Liquidacion() {
                     <Btn size="sm" variant="secondary" onClick={() => descargar(p)}>
                       Descargar plano
                     </Btn>
+                    {p.estado !== 'numerada' && p.estado !== 'pagada' && (
+                      <Btn size="sm" disabled={enviar.isPending}
+                           onClick={() => enviar.mutate(p)}>
+                        Enviar al operador
+                      </Btn>
+                    )}
                     {p.estado !== 'pagada' && (
                       <Btn size="sm" variant="danger" onClick={() => setPorAnular(p)}>
                         Anular

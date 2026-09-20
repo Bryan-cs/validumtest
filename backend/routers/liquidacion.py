@@ -29,7 +29,7 @@ from database import get_db
 from routers.deps import require_admin, require_admin_or_empleado
 import models, schemas
 from crud_helpers import _log
-from services.pila import liquidacion as motor, plano
+from services.pila import liquidacion as motor, operador, plano
 
 router = APIRouter(prefix="/liquidacion", tags=["liquidacion"])
 
@@ -286,23 +286,12 @@ def obtener(liquidacion_id: int, db: Session = Depends(get_db),
     }
 
 
-@router.get("/{liquidacion_id}/plano", response_class=PlainTextResponse)
-def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
-                    db: Session = Depends(get_db),
-                    token=Depends(require_admin_or_empleado)):
+def _armar_plano(db: Session, l, tipo_doc: str = "") -> tuple:
+    """El texto del archivo plano de una liquidación y su nombre sugerido.
 
-    """El archivo plano de esa persona: encabezado más su registro tipo 2.
-
-    El detalle no se recalcula, sale de la línea congelada al liquidar.
-
-    `tipo_doc` baja el mismo plano identificando a la persona con otro
-    documento —CE, PA, PT— sin volver a liquidar. Pasa cuando alguien quedó
-    registrado con un documento en una administradora y con otro en el
-    operador, y solo acepta el que tiene en sus bases.
+    El detalle no se recalcula: sale de la línea congelada al liquidar. Solo el
+    encabezado se arma al vuelo porque lleva totales y períodos.
     """
-    l = db.query(models.PlanillaLiquidacion).filter_by(id=liquidacion_id).first()
-    if not l:
-        raise HTTPException(404, "Liquidación no encontrada")
     ap = db.query(models.AportantePila).filter_by(id=l.aportante_id).first()
     detalles = (db.query(models.PlanillaDetalle)
                   .filter_by(liquidacion_id=l.id)
@@ -310,6 +299,7 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
 
     forma, cod_sucursal, nombre_sucursal = plano.datos_sucursal(ap)
     periodo_otros, periodo_salud = plano.periodos_del_encabezado(l.periodo_cotizacion)
+
     encabezado = plano.registro_tipo_1({
         "modalidad_planilla": 1, "secuencia": 1,
         "razon_social": ap.razon_social,
@@ -327,24 +317,106 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
         "tipo_aportante": ap.tipo_aportante or 1, "cod_operador": 0,
     })
 
-    lineas_detalle = [d.linea_plana for d in detalles if d.linea_plana]
-
+    lineas = [d.linea_plana for d in detalles if d.linea_plana]
     if tipo_doc:
         tipo_doc = tipo_doc.strip().upper()
         if tipo_doc not in TIPOS_DOC_COTIZANTE:
             raise HTTPException(400, f"tipo_doc debe ser uno de: "
                                      f"{', '.join(sorted(TIPOS_DOC_COTIZANTE))}")
-        # El campo 3 son las posiciones 8 y 9 del registro tipo 2. Se cambian
-        # esas dos y nada mas: los valores liquidados quedan intactos.
-        lineas_detalle = [x[:7] + tipo_doc.ljust(2) + x[9:] for x in lineas_detalle]
+        # El campo 3 son las posiciones 8 y 9. Se cambian esas dos y nada más.
+        lineas = [x[:7] + tipo_doc.ljust(2) + x[9:] for x in lineas]
 
-    cuerpo = "\r\n".join([encabezado] + lineas_detalle)
     sufijo = f"_{tipo_doc}" if tipo_doc else ""
     nombre = (f"PILA_{l.afiliado_doc or ap.num_doc}_{l.periodo_cotizacion}"
               f"_{l.tipo_planilla}{sufijo}.txt")
+    return "\r\n".join([encabezado] + lineas) + "\r\n", nombre, ap
+
+
+@router.get("/{liquidacion_id}/plano", response_class=PlainTextResponse)
+def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
+                    db: Session = Depends(get_db),
+                    token=Depends(require_admin_or_empleado)):
+    """El archivo plano de esa persona: encabezado más su registro tipo 2.
+
+    `tipo_doc` baja el mismo plano identificando a la persona con otro
+    documento —CE, PA, PT— sin volver a liquidar. Pasa cuando alguien quedó
+    registrado con un documento en una administradora y con otro en el
+    operador, y solo acepta el que tiene en sus bases.
+    """
+    l = db.query(models.PlanillaLiquidacion).filter_by(id=liquidacion_id).first()
+    if not l:
+        raise HTTPException(404, "Liquidación no encontrada")
+    cuerpo, nombre, _ = _armar_plano(db, l, tipo_doc)
     return PlainTextResponse(
-        cuerpo + "\r\n",
-        headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+        cuerpo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@router.post("/{liquidacion_id}/enviar")
+def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
+                       db: Session = Depends(get_db),
+                       token=Depends(require_admin_or_empleado)):
+    """Manda la planilla al operador y guarda lo que responda.
+
+    Sustituye el recorrido manual: descargar, entrar al portal, subir, revisar
+    inconsistencias y volver por el enlace de pago.
+
+    El cliente arranca en modo simulación y no sale a la red mientras
+    `SUAPORTE_MODO` no sea "real": enviar crea un registro en el operador y el
+    enlace de pago mueve dinero.
+    """
+    l = db.query(models.PlanillaLiquidacion).filter_by(id=liquidacion_id).first()
+    if not l:
+        raise HTTPException(404, "Liquidación no encontrada")
+    if l.estado == "anulada":
+        raise HTTPException(409, "La planilla está anulada")
+    if l.numero_planilla:
+        raise HTTPException(409, f"Esta planilla ya fue enviada y quedó numerada "
+                                 f"como {l.numero_planilla}")
+
+    cuerpo, nombre, ap = _armar_plano(db, l)
+
+    try:
+        resultado = operador.enviar_planilla(
+            cuerpo, nombre, ap.tipo_doc or "NI", ap.num_doc, tipo_archivo=tipo_archivo)
+    except operador.ErrorOperador as e:
+        # El mensaje del operador es más útil que uno nuestro: se pasa tal cual.
+        raise HTTPException(502, str(e))
+
+    l.respuesta_operador = json.dumps(resultado, ensure_ascii=False, default=str)[:20000]
+    if not resultado.get("simulado"):
+        l.operador = l.operador or "suaporte"
+        if resultado.get("numero_planilla"):
+            l.numero_planilla = resultado["numero_planilla"][:20]
+            l.estado = "numerada"
+        else:
+            l.estado = "enviada"
+        if resultado.get("url_pago"):
+            l.link_pago = resultado["url_pago"]
+    db.commit()
+
+    _log(db, token.get("sub", ""), "envió planilla al operador", "Liquidación",
+         f"{l.afiliado_nombre} {l.periodo_cotizacion}"
+         + (" (simulación)" if resultado.get("simulado") else
+            f" — N.º {l.numero_planilla or 'sin número'}"))
+    db.commit()
+
+    return {"simulado": resultado.get("simulado", False),
+            "estado": l.estado,
+            "numero_planilla": l.numero_planilla,
+            "link_pago": l.link_pago,
+            "inconsistencias": resultado.get("inconsistencias"),
+            "totales": resultado.get("totales"),
+            "respuesta": resultado.get("respuesta")}
+
+
+@router.get("/operador/estado")
+def estado_operador(token=Depends(require_admin_or_empleado)):
+    """Si el envío al operador está configurado y en qué modo.
+
+    Lo consulta la pantalla para no ofrecer un botón que no va a funcionar.
+    """
+    return {"modo": "real" if operador.modo_real() else "simulacion",
+            "credenciales": operador.hay_credenciales()}
 
 
 @router.post("/{liquidacion_id}/anular")
