@@ -1,5 +1,6 @@
 """Tests de liquidación PILA — cálculo, archivo plano y endpoints."""
 import itertools
+import json
 from pathlib import Path
 from decimal import Decimal
 
@@ -47,6 +48,11 @@ class _Afiliado:
         self.primer_nombre = kw.get("primer_nombre", "JUAN")
         self.segundo_nombre = kw.get("segundo_nombre", "CARLOS")
         self.tipo_cotizante = kw.get("tipo_cotizante", "01")
+        # Lo contratado: es lo que decide qué subsistemas se liquidan.
+        clase = kw.get("clase_riesgo", "1")
+        self.servicios = json.dumps(kw.get(
+            "servicios", ["EPS", "AFP", "CCF"] + ([f"ARL {clase}"] if clase else [])))
+        self.arl = kw.get("arl", f"ARL {clase}" if clase else "")
         self.subtipo_cotizante = ""
         self.cod_depto_labor = ""
         self.cod_municipio_labor = ""
@@ -158,15 +164,6 @@ def test_arl_por_clase_de_riesgo(clase, tarifa):
     assert d.cot_arl == P.aproximar_aporte(SMLMV_2026 * Decimal(tarifa))
 
 
-def test_sin_administradora_no_se_liquida_ese_subsistema():
-    d = motor.liquidar_afiliado(_Afiliado(cod_ccf="", cod_afp=""), _Aportante(), 2026, 9)
-    assert d.cot_pension == 0
-    assert d.valor_ccf == 0
-    assert d.cot_salud > 0
-
-
-# ─── Exoneración artículo 114-1 ───────────────────────────────────────────────
-
 def test_exonerado_paga_solo_el_4_por_ciento_de_salud():
     d = motor.liquidar_afiliado(_Afiliado(), _Aportante(exonerado=True), 2026, 9)
     assert d.exonerado is True
@@ -205,15 +202,6 @@ def test_totales_suman_los_detalles():
     assert r.total_salud == sum(d.cot_salud for d in r.detalles)
     assert r.total_general == sum(d.total for d in r.detalles)
 
-
-def test_avisa_de_cotizantes_sin_codigos():
-    af = _Afiliado(cod_eps="", cod_afp="", cod_ccf="", clase_riesgo=None)
-    r = motor.liquidar([af], _Aportante(clase_riesgo=None), 2026, 9)
-    assert len(r.avisos) == 1
-    assert "sin códigos" in r.avisos[0]
-
-
-# ─── Archivo plano ────────────────────────────────────────────────────────────
 
 def test_largos_de_los_registros():
     assert plano.LARGO_TIPO_1 == 359
@@ -329,6 +317,8 @@ def afiliado_listo(client, db, admin_token):
         tipo_cotizante="01", cod_eps="EPS037", cod_afp="230301",
         cod_ccf="CCF03", clase_riesgo="1", salario_basico=SMLMV_2026,
         fecha_ingreso="2024-01-15",
+        # Lo contratado decide qué se liquida.
+        servicios=json.dumps(["EPS", "AFP"]), arl="",
     )
     db.add(af)
     db.commit()
@@ -355,6 +345,8 @@ def test_la_planilla_es_de_una_sola_persona(client, admin_token, afiliado_listo,
         doc=af.doc + "9", cliente_txt=af.cliente_txt, empresa=af.empresa,
         activo=True, estado="ACTIVO", primer_apellido="OTRA", primer_nombre="PERSONA",
         tipo_cotizante="01", cod_eps="EPS037", cod_afp="230301",
+        # Lo contratado decide qué se liquida.
+        servicios=json.dumps(["EPS", "AFP"]), arl="",
         clase_riesgo="1", salario_basico=SMLMV_2026, fecha_ingreso="2024-01-15"))
     db.commit()
 
@@ -388,6 +380,8 @@ def test_el_mismo_periodo_en_otra_persona_si_se_puede(client, admin_token, afili
         doc=af.doc + "7", cliente_txt=af.cliente_txt, empresa=af.empresa,
         activo=True, estado="ACTIVO", primer_apellido="SEGUNDA", primer_nombre="PERSONA",
         tipo_cotizante="01", cod_eps="EPS037", cod_afp="230301",
+        # Lo contratado decide qué se liquida.
+        servicios=json.dumps(["EPS", "AFP"]), arl="",
         clase_riesgo="1", salario_basico=SMLMV_2026, fecha_ingreso="2024-01-15")
     db.add(otro)
     db.commit()
@@ -431,7 +425,8 @@ def test_afiliado_sin_aportante_no_se_liquida(client, admin_token, db):
         organizacion_id=org, nombre="SIN EMPRESA", tipo_doc="CC", doc=f"77{n:04d}",
         cliente_txt=f"CLIENTE-INEXISTENTE-{n}", activo=True, estado="ACTIVO",
         primer_apellido="SIN", primer_nombre="EMPRESA", tipo_cotizante="01",
-        cod_eps="EPS037", salario_basico=SMLMV_2026)
+        cod_eps="EPS037", salario_basico=SMLMV_2026,
+        servicios=json.dumps(["EPS"]), arl="")
     db.add(af)
     db.commit()
     db.refresh(af)

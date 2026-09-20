@@ -87,6 +87,7 @@ def _detalle_a_dict(d) -> dict:
         "valor_sena": _n(d.valor_sena), "valor_icbf": _n(d.valor_icbf),
         "fsp": _n(d.fsp_solidaridad + d.fsp_subsistencia),
         "exonerado": d.exonerado,
+        "servicios": d.servicios,
         "novedades": list((d.novedades or {}).keys()),
         "total": _n(d.total),
     }

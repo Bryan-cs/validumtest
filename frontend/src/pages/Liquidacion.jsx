@@ -334,6 +334,12 @@ export default function Liquidacion() {
                 <span><strong>{previa.datos.detalle.dias}</strong> días</span>
                 <span>IBC <strong>{pesos(previa.datos.detalle.ibc)}</strong></span>
                 <span>Tipo cotizante <strong>{previa.datos.detalle.tipo_cotizante}</strong></span>
+                {(previa.datos.detalle.servicios || []).map(s => (
+                  <span key={s} style={{
+                    fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 4,
+                    background: '#EFF6FF', color: '#2563EB',
+                  }}>{s}</span>
+                ))}
                 {previa.datos.detalle.exonerado && (
                   <span style={{ color: '#7C3AED' }}>exonerado 114-1</span>
                 )}

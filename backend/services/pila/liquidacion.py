@@ -6,11 +6,12 @@ devuelve el cálculo para que el router lo persista en `planillas_detalle`.
 
 Dos decisiones de diseño que conviene tener presentes:
 
-1. **A qué subsistemas cotiza cada quien se deduce de sus administradoras.** Si
-   el afiliado tiene `cod_ccf`, se le liquida caja; si no, no. El tipo de
-   cotizante impone reglas adicionales que aquí no se modelan todavía —la tabla
-   del anexo cruza 51 tipos contra cada subsistema— así que el criterio es el
-   dato concreto del afiliado, que es el que el equipo mantiene al día.
+1. **A qué subsistemas cotiza cada quien sale de los servicios contratados**,
+   los que se marcan en el formulario del afiliado. Es el mismo criterio que
+   usa Cobro para facturar, vía `_servicios_afiliado`, así que lo que se cobra
+   y lo que se liquida salen de la misma fuente. Los códigos de administradora
+   sirven para llenar el archivo, no para decidir qué se liquida: un servicio
+   contratado sin su código se liquida igual y se avisa.
 
 2. **Los días salen de las novedades.** Sin novedad son 30. Con ingreso o retiro
    en el mes, los días transcurridos. PILA siempre trabaja sobre meses de 30
@@ -20,6 +21,8 @@ from dataclasses import dataclass, field
 from datetime import date
 from decimal import Decimal
 from typing import Optional
+
+from crud_helpers import _servicios_afiliado
 
 from . import parametros as P
 
@@ -83,6 +86,9 @@ class DetalleLiquidado:
     # El operador rechaza horas en cero. El plano de referencia reporta 8 por
     # cada día cotizado: 1 día -> 008.
     horas_laboradas: int = 0
+
+    # Los servicios contratados que se liquidaron, para poder explicarlo.
+    servicios: list = field(default_factory=list)
 
     exonerado: bool = False
     novedades: dict = field(default_factory=dict)
@@ -221,8 +227,18 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
 
     ibc = _ibc(base, dias, smlmv)
 
+    # Lo contratado manda. `_servicios_afiliado` normaliza a EPS, AFP, CCF y
+    # "ARL <clase>", y deduce la clase de riesgo del campo `arl` cuando no
+    # viene marcada como servicio.
+    servicios = _servicios_afiliado(afiliado)
+    d.servicios = servicios
+    contrata_salud = "EPS" in servicios
+    contrata_pension = "AFP" in servicios
+    contrata_caja = "CCF" in servicios
+    clase_contratada = next((s.split()[-1] for s in servicios if s.startswith("ARL")), None)
+
     # Pensión
-    if d.cod_afp:
+    if contrata_pension:
         d.dias_pension = dias
         d.ibc_pension = ibc
         d.tarifa_pension = P.TARIFA_PENSION
@@ -231,7 +247,7 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
 
     # Salud. La exoneración del artículo 114-1 quita la parte patronal a los
     # cotizantes por debajo de 10 SMLMV; el 4% del trabajador no se toca.
-    if d.cod_eps:
+    if contrata_salud:
         d.dias_salud = dias
         d.ibc_salud = ibc
         exonera = bool(getattr(aportante, "exonerado_parafiscales", False)) and \
@@ -242,8 +258,13 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
 
     # Riesgos laborales: la tarifa sale de la clase de riesgo del afiliado y,
     # si no la tiene, de la del aportante.
-    clase = afiliado.clase_riesgo or getattr(aportante, "clase_riesgo", None)
-    if clase and str(clase) in P.TARIFA_ARL_POR_CLASE:
+    # Riesgos solo si está contratado. La clase sale del servicio ("ARL 3"); el
+    # dato del afiliado o del aportante sirve de respaldo para saber cuál es,
+    # nunca para decidir que se cotiza.
+    clase = clase_contratada or (afiliado.clase_riesgo or
+                                 getattr(aportante, "clase_riesgo", None)
+                                 if clase_contratada else None)
+    if clase_contratada and str(clase) in P.TARIFA_ARL_POR_CLASE:
         d.dias_arl = dias
         d.ibc_arl = ibc
         d.tarifa_arl = _dec(afiliado.tarifa_arl) or P.TARIFA_ARL_POR_CLASE[str(clase)]
@@ -252,13 +273,13 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.cod_arl = afiliado.cod_arl or getattr(aportante, "cod_arl", "") or ""
 
     # Parafiscales
-    if d.cod_ccf:
+    if contrata_caja:
         d.dias_ccf = dias
         d.ibc_ccf = ibc
         d.tarifa_ccf = P.TARIFA_CCF
         d.valor_ccf = P.aproximar_aporte(ibc * P.TARIFA_CCF)
 
-    if d.cod_ccf and not d.exonerado:
+    if contrata_caja and not d.exonerado:
         d.tarifa_sena = P.TARIFA_SENA
         d.valor_sena = P.aproximar_aporte(ibc * P.TARIFA_SENA)
         d.tarifa_icbf = P.TARIFA_ICBF
@@ -274,13 +295,24 @@ def liquidar(afiliados, aportante, anio: int, mes: int) -> ResumenLiquidacion:
     for af in afiliados:
         d = liquidar_afiliado(af, aportante, anio, mes)
 
-        # Un cotizante sin ninguna administradora no aporta a nada: entra igual
-        # en el detalle pero se avisa, porque casi siempre significa que le
-        # falta el backfill de códigos, no que no deba cotizar.
-        if not (d.cod_afp or d.cod_eps or d.cod_ccf or d.cot_arl):
+        quien = f"{d.doc} {d.primer_nombre} {d.primer_apellido}".strip()
+
+        # Sin servicios contratados no hay nada que liquidar.
+        if not d.servicios:
             resumen.avisos.append(
-                f"{d.doc} {d.primer_nombre} {d.primer_apellido}: sin códigos de "
-                f"administradora, no se le liquidó ningún aporte")
+                f"{quien}: no tiene servicios contratados, no se liquidó nada")
+
+        # Un servicio contratado sin su código se liquida igual, pero el archivo
+        # sale con ese campo en blanco y el operador lo va a rechazar.
+        faltantes = [nombre for contrata, codigo, nombre in (
+            ("EPS" in d.servicios, d.cod_eps, "EPS"),
+            ("AFP" in d.servicios, d.cod_afp, "AFP"),
+            ("CCF" in d.servicios, d.cod_ccf, "caja de compensación"),
+        ) if contrata and not codigo]
+        if faltantes:
+            resumen.avisos.append(
+                f"{quien}: tiene contratado {', '.join(faltantes)} pero le falta el "
+                f"código. El archivo saldrá con ese campo vacío.")
 
         resumen.detalles.append(d)
         resumen.total_pension += d.cot_pension
