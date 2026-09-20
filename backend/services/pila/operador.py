@@ -28,9 +28,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import ssl
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Optional
 
+import certifi
 import httpx
 
 log = logging.getLogger("bbcfile")
@@ -41,6 +44,25 @@ BASE_PLANILLAS = os.getenv("SUAPORTE_BASE_PLANILLAS",
                            "https://www.suaporte.com.co/api/generadorPlanillas")
 
 TIMEOUT = float(os.getenv("SUAPORTE_TIMEOUT", "60"))
+
+# El servidor del operador envía solo su certificado de hoja y omite el
+# intermedio de DigiCert, así que la verificación falla con
+# CERTIFICATE_VERIFY_FAILED. Se completa la cadena con el intermedio publicado
+# por DigiCert en vez de desactivar la verificación: por aquí viajan las
+# credenciales. `SUAPORTE_CA_BUNDLE` permite apuntar a otro bundle si el
+# operador cambia de emisor.
+_INTERMEDIO = Path(__file__).parent / "datos" / "suaporte_intermedio.pem"
+
+
+def contexto_tls() -> ssl.SSLContext:
+    ctx = ssl.create_default_context(cafile=os.getenv("SUAPORTE_CA_BUNDLE") or certifi.where())
+    if not os.getenv("SUAPORTE_CA_BUNDLE") and _INTERMEDIO.exists():
+        ctx.load_verify_locations(cafile=str(_INTERMEDIO))
+    return ctx
+
+
+def _cliente_nuevo() -> httpx.Client:
+    return httpx.Client(timeout=TIMEOUT, verify=contexto_tls())
 
 # Headers que devuelve cada paso y que hay que arrastrar a los siguientes.
 HEADERS_SESION = ("token", "faces", "refresh-token", "refresh-token-date", "refresh-token-ttl")
@@ -96,6 +118,34 @@ def _tomar(headers, nombres) -> dict:
     return {n: bajos[n.lower()] for n in nombres if n.lower() in bajos}
 
 
+def cifrar(dato: str, cliente: Optional[httpx.Client] = None) -> str:
+    """Cifra un dato con el servicio RSA del operador y lo devuelve en Base64.
+
+    El login rechaza la contraseña en texto plano con "El dato no tiene formato
+    de cifrado válido", así que este paso es obligatorio aunque la
+    documentación diga que admite ambas formas. No requiere autenticación.
+    """
+    propio = cliente is None
+    cliente = cliente or _cliente_nuevo()
+    try:
+        r = cliente.post(f"{BASE_AUTH}/crypto/cifrar-datos", json={"datoACifrar": dato})
+        if r.status_code != 200:
+            raise ErrorOperador(f"No se pudo cifrar ({r.status_code}): {r.text[:200]}")
+        cuerpo = r.json()
+        cifrado = cuerpo.get("datoCifrado") or cuerpo.get("data") or cuerpo.get("dato")
+        if isinstance(cifrado, dict):
+            cifrado = cifrado.get("datoCifrado")
+        if not cifrado:
+            raise ErrorOperador(f"El cifrado no devolvió dato: {str(cuerpo)[:200]}")
+        return cifrado
+    except httpx.HTTPError as e:
+        raise ErrorOperador(f"No se pudo cifrar el dato: {e}") from e
+    finally:
+        if propio:
+            cliente.close()
+
+
+
 # ─── Paso 1: autenticación ────────────────────────────────────────────────────
 
 def autenticar(cliente: Optional[httpx.Client] = None) -> Sesion:
@@ -115,10 +165,12 @@ def autenticar(cliente: Optional[httpx.Client] = None) -> Sesion:
     _registrar("login", usuario=usuario, url=f"{BASE_AUTH}/login")
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=TIMEOUT)
+    cliente = cliente or _cliente_nuevo()
     try:
+        # La contraseña viaja cifrada: el login rechaza el texto plano.
+        secreto = contrasena if os.getenv("SUAPORTE_CIFRAR", "1") == "0"             else cifrar(contrasena, cliente)
         r = cliente.post(f"{BASE_AUTH}/login",
-                         json={"usuario": usuario, "contrasena": contrasena},
+                         json={"usuario": usuario, "contrasena": secreto},
                          headers={"clave-secreta": clave,
                                   "Content-Type": "application/json"})
         if r.status_code != 200:
@@ -135,13 +187,45 @@ def autenticar(cliente: Optional[httpx.Client] = None) -> Sesion:
             cliente.close()
 
 
+def consultar_aportante(sesion: Sesion, tipo_doc: str, num_doc: str,
+                        cliente: Optional[httpx.Client] = None) -> dict:
+    """Los datos del aportante en el operador, incluido su id interno.
+
+    Ese id es el que pide la autorización: el servicio recibe un entero, no el
+    número de documento. Si el usuario no tiene permisos sobre el aportante, el
+    operador lo dice aquí y no hay que llegar a la autorización para saberlo.
+    """
+    if sesion.simulada or not modo_real():
+        return {"simulado": True, "id": 0, "razonSocial": "(simulado)"}
+
+    _registrar("consultar_aportante", aportante=f"{tipo_doc}{num_doc}")
+    propio = cliente is None
+    cliente = cliente or _cliente_nuevo()
+    try:
+        r = cliente.get(f"{BASE_GESTION}/aportante/{tipo_doc}/{num_doc}",
+                        headers=sesion.sesion)
+        if r.status_code != 200:
+            raise ErrorOperador(f"No se pudo consultar el aportante "
+                                f"{tipo_doc} {num_doc}: {r.text[:250]}")
+        return r.json()
+    except httpx.HTTPError as e:
+        raise ErrorOperador(f"No se pudo consultar el aportante: {e}") from e
+    finally:
+        if propio:
+            cliente.close()
+
+
+
 # ─── Paso 2: autorización sobre el aportante ──────────────────────────────────
 
 def autorizar(sesion: Sesion, tipo_doc: str, num_doc: str,
-              cliente: Optional[httpx.Client] = None) -> Sesion:
+              cliente: Optional[httpx.Client] = None,
+              aportante_id: Optional[int] = None) -> Sesion:
     """Pide permiso para operar sobre ese aportante.
 
     Es el paso que responde "este usuario sí puede liquidarle a esta empresa".
+    El servicio identifica al aportante por su id interno, no por el documento,
+    así que si no se conoce se consulta primero.
     """
     _registrar("autorizacion", aportante=f"{tipo_doc}{num_doc}")
 
@@ -151,10 +235,13 @@ def autorizar(sesion: Sesion, tipo_doc: str, num_doc: str,
         return sesion
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=TIMEOUT)
+    cliente = cliente or _cliente_nuevo()
     try:
+        if aportante_id is None:
+            aportante_id = consultar_aportante(sesion, tipo_doc, num_doc, cliente).get("id")
+
         r = cliente.get(f"{BASE_GESTION}/authorization/user/contributor",
-                        params={"id": num_doc, "tipoIdentificacion": tipo_doc,
+                        params={"id": aportante_id, "tipoIdentificacion": tipo_doc,
                                 "numeroIdentificacion": num_doc},
                         headers=sesion.sesion)
         if r.status_code == 401:
@@ -196,7 +283,7 @@ def validar_planilla(sesion: Sesion, contenido: str, nombre_archivo: str,
                 "mensaje": "No se envió nada: el cliente está en modo simulación."}
 
     propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=TIMEOUT)
+    cliente = cliente or _cliente_nuevo()
     try:
         r = cliente.post(
             f"{BASE_PLANILLAS}/v1/planillas/validacion",
@@ -222,7 +309,7 @@ def _get_json(sesion: Sesion, url: str, params: dict = None,
     if sesion.simulada or not modo_real():
         return vacio if vacio is not None else {"simulado": True}
     propio = cliente is None
-    cliente = cliente or httpx.Client(timeout=TIMEOUT)
+    cliente = cliente or _cliente_nuevo()
     try:
         r = cliente.get(url, params=params or {}, headers=sesion.headers)
         if r.status_code != 200:
@@ -290,7 +377,7 @@ def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str
     planilla, la excepción lleva su mensaje tal cual: es más útil que uno
     nuestro.
     """
-    with httpx.Client(timeout=TIMEOUT) as cliente:
+    with _cliente_nuevo() as cliente:
         sesion = autenticar(cliente)
         autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente)
         respuesta = validar_planilla(sesion, contenido, nombre_archivo,

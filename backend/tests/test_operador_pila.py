@@ -99,6 +99,24 @@ def _cliente_falso(manejador):
     return httpx.Client(transport=httpx.MockTransport(manejador))
 
 
+def _con_cifrado(manejador):
+    """Envuelve un manejador para que resuelva solo la llamada de cifrado."""
+    def envuelto(request):
+        if "cifrar-datos" in str(request.url):
+            return httpx.Response(200, json={"datoCifrado": "CIFRADO=="})
+        return manejador(request)
+    return envuelto
+
+
+def _con_aportante(manejador, aportante_id=4005036):
+    """Igual, pero resolviendo también la consulta del aportante."""
+    def envuelto(request):
+        if "/aportante/" in str(request.url):
+            return httpx.Response(200, json={"id": aportante_id, "razonSocial": "X"})
+        return manejador(request)
+    return envuelto
+
+
 def test_login_guarda_los_cinco_headers_de_sesion(modo_real):
     def responder(request):
         assert request.headers["clave-secreta"] == "clave-de-prueba"
@@ -107,7 +125,7 @@ def test_login_guarda_los_cinco_headers_de_sesion(modo_real):
             "token": "T1", "faces": "F1", "refresh-token": "R1",
             "refresh-token-date": "D1", "refresh-token-ttl": "3600"})
 
-    with _cliente_falso(responder) as c:
+    with _cliente_falso(_con_cifrado(responder)) as c:
         sesion = operador.autenticar(c)
     assert sesion.sesion == {"token": "T1", "faces": "F1", "refresh-token": "R1",
                              "refresh-token-date": "D1", "refresh-token-ttl": "3600"}
@@ -118,7 +136,7 @@ def test_los_headers_se_leen_sin_importar_mayusculas(modo_real):
     def responder(request):
         return httpx.Response(200, headers={"Token": "T1", "Refresh-Token": "R1",
                                             "faces": "F1"})
-    with _cliente_falso(responder) as c:
+    with _cliente_falso(_con_cifrado(responder)) as c:
         sesion = operador.autenticar(c)
     assert sesion.sesion["token"] == "T1"
     assert sesion.sesion["refresh-token"] == "R1"
@@ -127,7 +145,7 @@ def test_los_headers_se_leen_sin_importar_mayusculas(modo_real):
 def test_login_sin_token_es_error(modo_real):
     def responder(request):
         return httpx.Response(200, headers={"faces": "F1"})
-    with _cliente_falso(responder) as c:
+    with _cliente_falso(_con_cifrado(responder)) as c:
         with pytest.raises(operador.ErrorOperador, match="token"):
             operador.autenticar(c)
 
@@ -135,7 +153,7 @@ def test_login_sin_token_es_error(modo_real):
 def test_credenciales_rechazadas(modo_real):
     def responder(request):
         return httpx.Response(401, text="usuario o clave incorrectos")
-    with _cliente_falso(responder) as c:
+    with _cliente_falso(_con_cifrado(responder)) as c:
         with pytest.raises(operador.ErrorOperador, match="401"):
             operador.autenticar(c)
 
@@ -144,7 +162,7 @@ def test_autorizacion_negada_sobre_el_aportante(modo_real):
     def responder(request):
         return httpx.Response(401)
     sesion = operador.Sesion(sesion={"token": "T1"})
-    with _cliente_falso(responder) as c:
+    with _cliente_falso(_con_aportante(responder)) as c:
         with pytest.raises(operador.ErrorOperador, match="no está autorizado"):
             operador.autorizar(sesion, "NI", "900123456", c)
 
@@ -155,7 +173,7 @@ def test_autorizacion_agrega_sus_cuatro_headers(modo_real):
         return httpx.Response(200, headers={"profiles": "P", "contributor": "C",
                                             "appId": "A", "refrescar": "false"})
     sesion = operador.Sesion(sesion={"token": "T1"})
-    with _cliente_falso(responder) as c:
+    with _cliente_falso(_con_aportante(responder)) as c:
         operador.autorizar(sesion, "NI", "900123456", c)
     assert sesion.autorizada
     assert set(sesion.autorizacion) == {"profiles", "contributor", "appId", "refrescar"}
@@ -244,3 +262,67 @@ def test_enviar_en_simulacion_no_numera_la_planilla(client, admin_token, db, mon
     db.refresh(fila)
     assert fila.estado == "generada", "la simulación no cambia el estado"
     assert fila.respuesta_operador, "pero sí deja rastro de lo que se habría enviado"
+
+# ─── Lo que enseñó el primer contacto con el operador real ────────────────────
+
+def test_la_contrasena_va_cifrada(modo_real):
+    """El login rechaza el texto plano con "El dato no tiene formato de cifrado
+    válido", aunque la documentación diga que admite ambas formas."""
+    llamadas = []
+
+    def responder(request):
+        llamadas.append(str(request.url))
+        if "cifrar-datos" in str(request.url):
+            assert json.loads(request.content)["datoACifrar"] == "0000"
+            return httpx.Response(200, json={"datoCifrado": "CIFRADO=="})
+        assert json.loads(request.content)["contrasena"] == "CIFRADO=="
+        return httpx.Response(200, headers={"token": "T1"})
+
+    with _cliente_falso(responder) as c:
+        operador.autenticar(c)
+    assert any("cifrar-datos" in u for u in llamadas), "se cifra antes de autenticar"
+
+
+def test_se_puede_desactivar_el_cifrado(modo_real, monkeypatch):
+    monkeypatch.setenv("SUAPORTE_CIFRAR", "0")
+
+    def responder(request):
+        assert "cifrar-datos" not in str(request.url)
+        assert json.loads(request.content)["contrasena"] == "0000"
+        return httpx.Response(200, headers={"token": "T1"})
+
+    with _cliente_falso(responder) as c:
+        operador.autenticar(c)
+
+
+def test_la_autorizacion_usa_el_id_interno_no_el_documento(modo_real):
+    """El servicio recibe un entero. Mandarle el documento devuelve
+    "El aportante no existe"."""
+    def responder(request):
+        if "/aportante/NI/901760008" in str(request.url):
+            return httpx.Response(200, json={"id": 4005036, "razonSocial": "CARSECOOP"})
+        assert dict(request.url.params)["id"] == "4005036"
+        return httpx.Response(200, headers={"profiles": "P", "contributor": "C",
+                                            "appId": "A", "refrescar": "true"})
+
+    sesion = operador.Sesion(sesion={"token": "T1"})
+    with _cliente_falso(responder) as c:
+        operador.autorizar(sesion, "NI", "901760008", c)
+    assert sesion.autorizada
+
+
+def test_sin_permisos_sobre_el_aportante_se_sabe_en_la_consulta(modo_real):
+    def responder(request):
+        return httpx.Response(400, json={"message": "No cuenta con permisos para "
+                                                    "este aportante"})
+    sesion = operador.Sesion(sesion={"token": "T1"})
+    with _cliente_falso(responder) as c:
+        with pytest.raises(operador.ErrorOperador, match="No cuenta con permisos"):
+            operador.consultar_aportante(sesion, "CC", "8487324", c)
+
+
+def test_la_cadena_tls_incluye_el_intermedio_que_el_operador_omite():
+    """El servidor envía solo su hoja; sin el intermedio falla la verificación."""
+    ctx = operador.contexto_tls()
+    emisores = [c["issuer"] for c in ctx.get_ca_certs()]
+    assert any("DigiCert Global Root G2" in str(e) for e in emisores)
