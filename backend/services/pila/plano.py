@@ -234,6 +234,20 @@ def registro_tipo_2(valores: dict) -> str:
     return _armar(CAMPOS_TIPO_2, {"tipo_registro": 2, **valores}, LARGO_TIPO_2)
 
 
+def datos_sucursal(aportante):
+    """Forma de presentación y sucursal del encabezado.
+
+    El anexo permite presentar en forma "U" (única) con la sucursal en blanco,
+    pero el operador rechaza el archivo así: "Para la forma de presentación S el
+    código de sucursal es obligatorio". El plano de referencia que sí acepta
+    usa "S" con la sucursal "01", y eso es lo que se replica. Si el aportante
+    tiene su propia sucursal cargada, manda la suya.
+    """
+    codigo = (getattr(aportante, "cod_sucursal", "") or "").strip() or "01"
+    nombre = (getattr(aportante, "nombre_sucursal", "") or "").strip() or codigo
+    return "S", codigo, nombre
+
+
 def valores_desde_detalle(detalle, secuencia: int) -> dict:
     """Traduce un DetalleLiquidado a los campos del registro tipo 2.
 
@@ -311,6 +325,7 @@ def generar(aportante, liquidacion, resumen, modalidad: int = 1) -> str:
 
     Devuelve el texto con saltos CRLF, que es como lo esperan los operadores.
     """
+    forma, cod_sucursal, nombre_sucursal = datos_sucursal(aportante)
     encabezado = registro_tipo_1({
         "modalidad_planilla": modalidad,
         "secuencia": 1,
@@ -321,9 +336,9 @@ def generar(aportante, liquidacion, resumen, modalidad: int = 1) -> str:
         "tipo_planilla": liquidacion.tipo_planilla,
         "planilla_asociada": 0,
         "fecha_planilla_asociada": "",
-        "forma_presentacion": "U",
-        "cod_sucursal": aportante.cod_sucursal or "",
-        "nombre_sucursal": aportante.nombre_sucursal or "",
+        "forma_presentacion": forma,
+        "cod_sucursal": cod_sucursal,
+        "nombre_sucursal": nombre_sucursal,
         "cod_arl": aportante.cod_arl or "",
         "periodo_pago_otros": liquidacion.periodo_cotizacion,
         "periodo_pago_salud": liquidacion.periodo_pago,

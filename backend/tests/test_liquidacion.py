@@ -587,3 +587,41 @@ def test_el_encabezado_de_la_referencia_tambien_encaja():
     for nombre, esperado in esperados.items():
         c = next(x for x in plano.CAMPOS_TIPO_1 if x.nombre == nombre)
         assert encabezado[c.inicio - 1 : c.inicio - 1 + c.longitud] == esperado, nombre
+
+def test_sucursal_replica_la_referencia():
+    """El operador exige sucursal aunque el anexo permita la forma "U".
+
+    Con "U" y la sucursal en blanco devolvio: "Para la forma de presentacion S
+    el codigo de sucursal es obligatorio".
+    """
+    class SinSucursal:
+        cod_sucursal = ""
+        nombre_sucursal = ""
+
+    class ConSucursal:
+        cod_sucursal = "07"
+        nombre_sucursal = "MEDELLIN"
+
+    assert plano.datos_sucursal(SinSucursal()) == ("S", "01", "01")
+    assert plano.datos_sucursal(ConSucursal()) == ("S", "07", "MEDELLIN")
+
+
+def test_el_encabezado_nunca_sale_sin_sucursal():
+    class Aportante:
+        razon_social = "DEMO SAS"
+        tipo_doc = "NI"; num_doc = "900123456"; dv = "8"
+        tipo_aportante = "01"; cod_arl = "14-11"
+        cod_sucursal = ""; nombre_sucursal = ""
+
+    forma, codigo, nombre = plano.datos_sucursal(Aportante())
+    linea = plano.registro_tipo_1({
+        "modalidad_planilla": 1, "secuencia": 1,
+        "razon_social": "DEMO SAS", "tipo_doc_aportante": "NI",
+        "num_doc_aportante": "900123456", "dv_aportante": 8,
+        "tipo_planilla": "E", "forma_presentacion": forma,
+        "cod_sucursal": codigo, "nombre_sucursal": nombre,
+        "periodo_pago_otros": "2026-09", "periodo_pago_salud": "2026-10",
+        "total_cotizantes": 1, "tipo_aportante": "01",
+    })
+    assert linea[247] == "S"                      # campo 11
+    assert linea[248:258].strip() != ""           # campo 12, obligatorio con S

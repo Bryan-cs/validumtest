@@ -308,14 +308,15 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
                   .filter_by(liquidacion_id=l.id)
                   .order_by(models.PlanillaDetalle.secuencia).all())
 
+    forma, cod_sucursal, nombre_sucursal = plano.datos_sucursal(ap)
     encabezado = plano.registro_tipo_1({
         "modalidad_planilla": 1, "secuencia": 1,
         "razon_social": ap.razon_social,
         "tipo_doc_aportante": ap.tipo_doc or "NI", "num_doc_aportante": ap.num_doc,
         "dv_aportante": ap.dv or 0, "tipo_planilla": l.tipo_planilla,
         "planilla_asociada": 0, "fecha_planilla_asociada": "",
-        "forma_presentacion": "U",
-        "cod_sucursal": ap.cod_sucursal or "", "nombre_sucursal": ap.nombre_sucursal or "",
+        "forma_presentacion": forma,
+        "cod_sucursal": cod_sucursal, "nombre_sucursal": nombre_sucursal,
         "cod_arl": ap.cod_arl or "",
         "periodo_pago_otros": l.periodo_cotizacion, "periodo_pago_salud": l.periodo_pago,
         "numero_planilla": l.numero_planilla or 0,
