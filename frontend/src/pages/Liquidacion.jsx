@@ -17,6 +17,11 @@ const ESTADO_STYLE = {
 
 const pesos = (n) => '$' + (Number(n) || 0).toLocaleString('es-CO');
 
+// Tipos de documento que acepta el campo 3 del registro tipo 2. Se puede bajar
+// el mismo plano con otro documento cuando el operador tiene a la persona
+// registrada con uno distinto al que está en el sistema.
+const TIPOS_DOC = ['CC', 'CE', 'TI', 'PA', 'CD', 'SC', 'PE', 'PT'];
+
 const inp = {
   padding: '9px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
   background: C.surface, fontSize: 13, color: C.text, outline: 'none',
@@ -70,6 +75,7 @@ export default function Liquidacion() {
   const [soloPendientes, setSoloPendientes] = useState(false);
   const [previa, setPrevia] = useState(null);      // { afiliado, resumen }
   const [porAnular, setPorAnular] = useState(null);
+  const [docDescarga, setDocDescarga] = useState({});   // planilla_id → tipo de documento
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
@@ -131,13 +137,17 @@ export default function Liquidacion() {
 
   // El plano viaja con el token, así que se baja por blob y no por enlace.
   const descargar = async (persona) => {
+    // Si se eligió un documento distinto al de la persona, se manda al backend
+    // para que cambie solo ese campo del registro.
+    const tipo = docDescarga[persona.planilla_id] || persona.tipo_doc || 'CC';
+    const qs = tipo && tipo !== persona.tipo_doc ? `?tipo_doc=${tipo}` : '';
     try {
-      const r = await api.get(`/liquidacion/${persona.planilla_id}/plano`,
+      const r = await api.get(`/liquidacion/${persona.planilla_id}/plano${qs}`,
                               { responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([r.data], { type: 'text/plain' }));
       const a = document.createElement('a');
       a.href = url;
-      a.download = `PILA_${persona.doc}_${periodo}.txt`;
+      a.download = `PILA_${persona.doc}_${periodo}_${tipo}.txt`;
       document.body.appendChild(a); a.click(); a.remove();
       URL.revokeObjectURL(url);
     } catch {
@@ -222,7 +232,15 @@ export default function Liquidacion() {
                     {pesos(p.total)}
                   </div>
                   <EstadoBadge estado={p.estado} />
-                  <div style={{ display: 'flex', gap: 6 }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <select
+                      style={{ ...inp, padding: '6px 8px', fontSize: 12, width: 72 }}
+                      title="Documento con el que se identifica a la persona en el archivo"
+                      value={docDescarga[p.planilla_id] || p.tipo_doc || 'CC'}
+                      onChange={e => setDocDescarga(d => ({ ...d, [p.planilla_id]: e.target.value }))}
+                    >
+                      {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                     <Btn size="sm" variant="secondary" onClick={() => descargar(p)}>
                       Descargar plano
                     </Btn>

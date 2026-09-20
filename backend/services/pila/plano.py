@@ -187,15 +187,24 @@ def _formatear(campo: Campo, valor) -> str:
 
 
 def formatear_tarifa(tarifa, longitud: int) -> str:
-    """Tarifa sin punto decimal, con la escala que exige el campo.
+    """Tarifa como fraccion, sin punto decimal, con tantos decimales como
+    posiciones tenga el campo.
 
-    Una tarifa de 0.125 en un campo de 7 sale como "0125000": un digito para la
-    parte entera y el resto para los decimales.
+    Los campos de tarifa son de tipo N, o sea solo digitos: el punto no va. Como
+    toda tarifa es menor que 1, la parte entera no ocupa lugar y el campo se
+    llena con los decimales. En 7 posiciones, el 16% de pension es 0.1600000 y
+    se escribe "1600000"; el 4% de caja, "0400000". En las 9 posiciones de
+    riesgos laborales, el 0,522% es 0.005220000 y se escribe "005220000".
+
+    Un decimal de menos hacia que el operador rechazara las cinco tarifas del
+    registro con "Valor invalido para campo".
     """
     valor = Decimal(str(tarifa or 0))
-    decimales = longitud - 1
-    escalado = int((valor * (10 ** decimales)).to_integral_value())
-    return str(escalado).rjust(longitud, "0")[:longitud]
+    escalado = int((valor * (10 ** longitud)).to_integral_value())
+    texto = str(escalado)
+    if len(texto) > longitud:
+        raise ValueError(f"la tarifa {valor} no cabe en {longitud} posiciones")
+    return texto.rjust(longitud, "0")
 
 
 def _armar(campos, valores, largo_esperado):
@@ -276,7 +285,8 @@ def valores_desde_detalle(detalle, secuencia: int) -> dict:
         "valor_sena": detalle.valor_sena,
         "tarifa_icbf": formatear_tarifa(detalle.tarifa_icbf, 7),
         "valor_icbf": detalle.valor_icbf,
-        "exonerado_salud_sena_icbf": "X" if detalle.exonerado else "",
+        # El anexo reporta este campo en "S"; con "X" el operador lo rechaza.
+        "exonerado_salud_sena_icbf": "S" if detalle.exonerado else "",
         "fecha_ING": fechas.get("ING", ""),
         "fecha_RET": fechas.get("RET", ""),
     }

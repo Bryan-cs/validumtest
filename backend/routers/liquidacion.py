@@ -35,6 +35,10 @@ router = APIRouter(prefix="/liquidacion", tags=["liquidacion"])
 
 ESTADOS_BORRABLES = {"borrador", "generada", "anulada"}
 
+# Valores válidos del campo 3 del registro tipo 2 (tipo de documento del
+# cotizante), tal como los lista el Anexo Técnico 2.
+TIPOS_DOC_COTIZANTE = {"CC", "CE", "TI", "PA", "CD", "SC", "PE", "PT"}
+
 
 def _periodo(anio: int, mes: int) -> str:
     return f"{anio:04d}-{mes:02d}"
@@ -283,11 +287,18 @@ def obtener(liquidacion_id: int, db: Session = Depends(get_db),
 
 
 @router.get("/{liquidacion_id}/plano", response_class=PlainTextResponse)
-def descargar_plano(liquidacion_id: int, db: Session = Depends(get_db),
+def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
+                    db: Session = Depends(get_db),
                     token=Depends(require_admin_or_empleado)):
+
     """El archivo plano de esa persona: encabezado más su registro tipo 2.
 
     El detalle no se recalcula, sale de la línea congelada al liquidar.
+
+    `tipo_doc` baja el mismo plano identificando a la persona con otro
+    documento —CE, PA, PT— sin volver a liquidar. Pasa cuando alguien quedó
+    registrado con un documento en una administradora y con otro en el
+    operador, y solo acepta el que tiene en sus bases.
     """
     l = db.query(models.PlanillaLiquidacion).filter_by(id=liquidacion_id).first()
     if not l:
@@ -314,8 +325,21 @@ def descargar_plano(liquidacion_id: int, db: Session = Depends(get_db),
         "tipo_aportante": ap.tipo_aportante or 1, "cod_operador": 0,
     })
 
-    cuerpo = "\r\n".join([encabezado] + [d.linea_plana for d in detalles if d.linea_plana])
-    nombre = f"PILA_{l.afiliado_doc or ap.num_doc}_{l.periodo_cotizacion}_{l.tipo_planilla}.txt"
+    lineas_detalle = [d.linea_plana for d in detalles if d.linea_plana]
+
+    if tipo_doc:
+        tipo_doc = tipo_doc.strip().upper()
+        if tipo_doc not in TIPOS_DOC_COTIZANTE:
+            raise HTTPException(400, f"tipo_doc debe ser uno de: "
+                                     f"{', '.join(sorted(TIPOS_DOC_COTIZANTE))}")
+        # El campo 3 son las posiciones 8 y 9 del registro tipo 2. Se cambian
+        # esas dos y nada mas: los valores liquidados quedan intactos.
+        lineas_detalle = [x[:7] + tipo_doc.ljust(2) + x[9:] for x in lineas_detalle]
+
+    cuerpo = "\r\n".join([encabezado] + lineas_detalle)
+    sufijo = f"_{tipo_doc}" if tipo_doc else ""
+    nombre = (f"PILA_{l.afiliado_doc or ap.num_doc}_{l.periodo_cotizacion}"
+              f"_{l.tipo_planilla}{sufijo}.txt")
     return PlainTextResponse(
         cuerpo + "\r\n",
         headers={"Content-Disposition": f'attachment; filename="{nombre}"'})

@@ -245,14 +245,34 @@ def test_posiciones_de_los_campos_calculados():
     assert linea[153:159] == "230301"            # campo 31, admin. de pensiones
     assert linea[165:171] == "EPS037"            # campo 33, EPS
     assert linea[183:185] == "30"                # campo 36, días de pensión
-    assert linea[237:244] == "0160000"           # campo 46, tarifa de pensión
+    assert linea[237:244] == "1600000"           # campo 46, tarifa de pensión
     assert int(linea[244:253]) == int(d.cot_pension)   # campo 47
 
 
 def test_tarifa_se_escribe_sin_punto_decimal():
-    assert plano.formatear_tarifa("0.125", 7) == "0125000"
-    assert plano.formatear_tarifa("0.00522", 9) == "000522000"
+    """Fracción con tantos decimales como posiciones tenga el campo.
+
+    Valores verificados contra el validador del operador: con un decimal menos
+    rechazaba las cinco tarifas del registro con "Valor inválido para campo".
+    """
+    assert plano.formatear_tarifa("0.16", 7) == "1600000"       # pensión 16%
+    assert plano.formatear_tarifa("0.125", 7) == "1250000"      # salud 12,5%
+    assert plano.formatear_tarifa("0.04", 7) == "0400000"       # salud 4% y CCF
+    assert plano.formatear_tarifa("0.02", 7) == "0200000"       # SENA
+    assert plano.formatear_tarifa("0.03", 7) == "0300000"       # ICBF
+    assert plano.formatear_tarifa("0.00522", 9) == "005220000"  # ARL clase 1
+    assert plano.formatear_tarifa("0.0696", 9) == "069600000"   # ARL clase 5
     assert plano.formatear_tarifa(0, 7) == "0000000"
+
+
+def test_las_tarifas_llenan_su_campo_completo():
+    for tarifa, largo in (("0.16", 7), ("0.125", 7), ("0.00522", 9)):
+        assert len(plano.formatear_tarifa(tarifa, largo)) == largo
+
+
+def test_tarifa_que_no_cabe_es_un_error():
+    with pytest.raises(ValueError, match="no cabe"):
+        plano.formatear_tarifa("1.5", 7)
 
 
 def test_valor_que_no_cabe_es_un_error_explicito():
@@ -260,10 +280,25 @@ def test_valor_que_no_cabe_es_un_error_explicito():
         plano.registro_tipo_2({"secuencia": 123456789})
 
 
-def test_marca_de_exonerado_en_su_posicion():
+def test_marca_de_exonerado_va_en_S():
+    """El anexo reporta el campo 76 en "S"; con "X" el operador lo rechaza."""
     d = motor.liquidar_afiliado(_Afiliado(), _Aportante(exonerado=True), 2026, 9)
     linea = plano.registro_tipo_2(plano.valores_desde_detalle(d, 1))
-    assert linea[505] == "X"                     # campo 76
+    assert linea[505] == "S"                     # campo 76
+
+    sin_exonerar = motor.liquidar_afiliado(_Afiliado(), _Aportante(exonerado=False), 2026, 9)
+    linea = plano.registro_tipo_2(plano.valores_desde_detalle(sin_exonerar, 1))
+    assert linea[505] == " "
+
+
+def test_tarifas_en_su_posicion_dentro_del_registro():
+    """Las posiciones que reportó el validador del operador: 238, 308, 381, 408."""
+    d = motor.liquidar_afiliado(_Afiliado(), _Aportante(), 2026, 9)
+    linea = plano.registro_tipo_2(plano.valores_desde_detalle(d, 1))
+    assert linea[237:244] == "1600000"           # campo 46, pensión
+    assert linea[307:314] == "1250000"           # campo 54, salud
+    assert linea[380:389] == "005220000"         # campo 61, riesgos
+    assert linea[407:414] == "0400000"           # campo 64, caja
 
 
 # ─── Endpoints ────────────────────────────────────────────────────────────────
@@ -427,6 +462,31 @@ def test_pendientes_marca_quien_ya_tiene_planilla(client, admin_token, afiliado_
     assert fila["planilla_id"] is not None
     assert fila["estado"] == "generada"
     assert fila["total"] > 0
+
+
+def test_descargar_con_otro_tipo_de_documento(client, admin_token, afiliado_listo):
+    """Cambia solo el campo 3; el resto del registro queda igual."""
+    liq_id = client.post("/liquidacion", headers=_h(admin_token), json={
+        "afiliado_id": afiliado_listo["afiliado_id"],
+        "anio": 2026, "mes": 9}).json()["id"]
+
+    original = client.get(f"/liquidacion/{liq_id}/plano",
+                          headers=_h(admin_token)).text.rstrip("\r\n").split("\r\n")
+    con_ce = client.get(f"/liquidacion/{liq_id}/plano?tipo_doc=CE",
+                        headers=_h(admin_token)).text.rstrip("\r\n").split("\r\n")
+
+    assert original[1][7:9] == "CC"
+    assert con_ce[1][7:9] == "CE"
+    assert original[1][9:] == con_ce[1][9:], "solo cambia el tipo de documento"
+    assert original[0] == con_ce[0], "el encabezado no se toca"
+
+
+def test_tipo_de_documento_invalido_al_descargar(client, admin_token, afiliado_listo):
+    liq_id = client.post("/liquidacion", headers=_h(admin_token), json={
+        "afiliado_id": afiliado_listo["afiliado_id"],
+        "anio": 2026, "mes": 9}).json()["id"]
+    r = client.get(f"/liquidacion/{liq_id}/plano?tipo_doc=ZZ", headers=_h(admin_token))
+    assert r.status_code == 400
 
 
 def test_afiliado_inexistente(client, admin_token):
