@@ -151,40 +151,6 @@ class Afiliado(Base):
     horas_laboradas = Column(Integer)         # solo cotizantes de tiempo parcial
     fecha_expedicion= Column(String(10))   # dd/mm/aaaa — RUAF la exige para consultar
 
-    # ── Campos PILA (Anexo Técnico 2 v30, registro tipo 2) ───────────────────
-    # Nullable a propósito: los afiliados ya cargados no los tienen y se
-    # completan por backfill. La liquidación valida que estén antes de generar.
-    # El nombre va partido en cuatro porque el registro tipo 2 los exige
-    # separados (campos 11-14), no como el `nombre` completo que ya existe.
-    primer_apellido  = Column(String(20))
-    segundo_apellido = Column(String(30))
-    primer_nombre    = Column(String(20))
-    segundo_nombre   = Column(String(30))
-    fecha_nacimiento = Column(String(10))    # AAAA-MM-DD
-    sexo             = Column(String(1))     # M | F
-    # Tipo y subtipo definen a qué subsistemas está obligado el cotizante.
-    tipo_cotizante    = Column(String(2), index=True)
-    subtipo_cotizante = Column(String(2))
-    extranjero_no_pension = Column(Boolean, default=False)
-    colombiano_exterior   = Column(Boolean, default=False)
-    cod_depto_labor     = Column(String(2))   # DANE
-    cod_municipio_labor = Column(String(3))   # DANE
-    # Códigos PILA de las administradoras. Los campos `eps`/`afp`/`ccf`/`arl`
-    # de arriba son texto libre y sirven para mostrar; estos son los que van
-    # al archivo plano y deben existir en `pila_codigos`.
-    cod_eps = Column(String(6))
-    cod_afp = Column(String(6))
-    cod_ccf = Column(String(6))
-    cod_arl = Column(String(6))
-    clase_riesgo = Column(String(1))          # 1..5
-    tarifa_arl   = Column(Numeric(7, 5))      # p.ej. 0.00522 para riesgo 1
-    tipo_salario   = Column(String(1))        # F fijo | V variable | I integral
-    salario_basico = Column(Numeric(15, 2))
-    centro_trabajo = Column(String(9))
-    # Para beneficiarios que cotizan a través de un cotizante principal.
-    cotizante_principal_tipo_doc = Column(String(2))
-    cotizante_principal_doc      = Column(String(16))
-    horas_laboradas = Column(Integer)         # solo cotizantes de tiempo parcial
     registrado_por  = Column(String(60))
     activo          = Column(Boolean, default=True)
     creado          = Column(DateTime(timezone=True), default=_utcnow)

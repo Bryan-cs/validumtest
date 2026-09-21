@@ -23,6 +23,7 @@ from decimal import Decimal
 from typing import Optional
 
 from crud_helpers import _servicios_afiliado
+from . import obligaciones
 
 from . import parametros as P
 
@@ -197,6 +198,15 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
     if base <= 0:
         base = smlmv
 
+    # El salario básico no es el IBC y va en su propio campo del registro tipo
+    # 2. Se ven iguales en la mayoría de los casos, pero no lo son: en el plano
+    # de referencia que el operador aceptó, el salario es 1.750.905 y el IBC de
+    # pensión 58.364, porque el cotizante trabajó un día. Escribir el IBC aquí
+    # hace que el archivo declare un salario que no es el del contrato.
+    salario = _dec(getattr(afiliado, "salario_basico", None))
+    if salario <= 0:
+        salario = base
+
     ap_ap = afiliado.primer_apellido or ""
     if not ap_ap:
         ap_ap, ap_seg, nom_pri, nom_seg = _partir_nombre(getattr(afiliado, "nombre", ""))
@@ -217,7 +227,7 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         cod_municipio_labor=afiliado.cod_municipio_labor or aportante.cod_municipio or "",
         cod_afp=afiliado.cod_afp or "", cod_eps=afiliado.cod_eps or "",
         cod_ccf=afiliado.cod_ccf or "",
-        salario_basico=P.redondear_peso(base),
+        salario_basico=P.redondear_peso(salario),
         tipo_salario=(afiliado.tipo_salario or "F")[:1],
         centro_trabajo=afiliado.centro_trabajo or "",
         novedades=novedades, fechas_novedades=fechas,
@@ -313,6 +323,12 @@ def liquidar(afiliados, aportante, anio: int, mes: int) -> ResumenLiquidacion:
             resumen.avisos.append(
                 f"{quien}: tiene contratado {', '.join(faltantes)} pero le falta el "
                 f"código. El archivo saldrá con ese campo vacío.")
+
+        # Lo contratado manda para liquidar, pero el operador valida contra el
+        # tipo de cotizante. Cuando los dos no coinciden el rechazo es seguro,
+        # así que conviene decirlo aquí y no después de subir el archivo.
+        for choque in obligaciones.revisar(d.tipo_cotizante, d.servicios):
+            resumen.avisos.append(f"{quien}: {choque}")
 
         resumen.detalles.append(d)
         resumen.total_pension += d.cot_pension

@@ -418,6 +418,20 @@ export default function Liquidacion() {
               <Total etiqueta="Total" valor={previa.datos.totales.general} destacado />
             </div>
 
+            {/* Los avisos deciden si la planilla sirve, asi que se quedan a la
+                vista junto al boton y no solo en un toast que se desvanece. */}
+            {!!previa.datos.avisos?.length && (
+              <div style={{ marginTop: 16, padding: 12, borderRadius: 8,
+                            background: '#FEF3C7', border: '1px solid #FCD34D' }}>
+                <strong style={{ color: '#92400E', fontSize: 13 }}>
+                  Revisa antes de liquidar
+                </strong>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, color: '#78350F', fontSize: 13 }}>
+                  {previa.datos.avisos.map((a, i) => <li key={i}>{a}</li>)}
+                </ul>
+              </div>
+            )}
+
             <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 20 }}>
               <Btn variant="secondary" onClick={() => setPrevia(null)}>Cerrar</Btn>
               <Btn disabled={liquidar.isPending}
