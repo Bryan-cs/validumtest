@@ -358,17 +358,29 @@ def test_solo_eps_sin_caja_en_la_ficha_tambien_usa_ccf68():
     assert d.cod_depto_labor == "99"
 
 
-def test_compensar_fuera_de_bogota_pasa_a_comcaja():
-    """CCF24 no cubre otro departamento: el operador pide COMCAJA."""
+def test_colsubsidio_se_reporta_aunque_el_aportante_este_en_otro_depto():
+    """La caja de la ficha se paga. El DANE pasa a uno que esa caja cubre."""
+    d = _liquidar(["EPS", "CCF"], cod_ccf="CCF22", cod_depto_labor="08",
+                  cod_municipio_labor="573")
+    assert d.cod_ccf == "CCF22"
+    assert d.cod_depto_labor == "11"
+    assert d.cod_municipio_labor == "001"
+    assert int(d.ibc_ccf) == 1750905
+
+
+def test_compensar_fuera_de_bogota_se_queda_y_el_dane_pasa_a_bogota():
     d = _liquidar(["EPS", "CCF"], cod_ccf="CCF24", cod_depto_labor="76")
-    assert d.cod_ccf == "CCF68"
-    assert d.cod_depto_labor == "99"
+    assert d.cod_ccf == "CCF24"
+    assert d.cod_depto_labor == "11"
+    assert d.cod_municipio_labor == "001"
 
 
 def test_compensar_en_bogota_se_queda():
-    d = _liquidar(["EPS", "CCF"], cod_ccf="CCF24", cod_depto_labor="11")
+    d = _liquidar(["EPS", "CCF"], cod_ccf="CCF24", cod_depto_labor="11",
+                  cod_municipio_labor="001")
     assert d.cod_ccf == "CCF24"
     assert d.cod_depto_labor == "11"
+    assert d.cod_municipio_labor == "001"
 
 
 def test_un_tipo_que_no_cotiza_a_caja_no_se_la_inventa():

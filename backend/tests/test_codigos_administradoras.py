@@ -103,12 +103,30 @@ def test_cambiar_la_eps_desde_el_formulario_no_deja_el_codigo_viejo(client, admi
     assert client.get(f"/afiliados/{id_}", headers=_h(admin_token)).json()["cod_eps"] == "EPS017"
 
 
-def test_un_codigo_puesto_a_mano_manda(client, admin_token):
-    """Alguien pudo tener una razon para elegir otro: no se le pisa."""
+def test_cambiar_la_eps_pisa_el_codigo_viejo_aunque_el_formulario_lo_mande(client, admin_token):
+    """El formulario reenvía el cod_eps anterior al guardar. El nombre manda."""
+    creado = client.post("/afiliados", headers=_h(admin_token), json={
+        "nombre": "CODIGO PEGADO", "doc": "97000555", "tipo_doc": "CC",
+        "fecha_afiliacion": "2026-01-01", "servicios": ["EPS"], "eps": "Nueva EPS",
+    })
+    id_ = creado.json()["id"]
+    assert client.get(f"/afiliados/{id_}", headers=_h(admin_token)).json()["cod_eps"] == "EPS037"
+
+    client.put(f"/afiliados/{id_}", headers=_h(admin_token), json={
+        "nombre": "CODIGO PEGADO", "doc": "97000555", "tipo_doc": "CC",
+        "fecha_afiliacion": "2026-01-01", "servicios": ["EPS"],
+        "eps": "Famisanar", "cod_eps": "EPS037",
+    })
+    quedo = client.get(f"/afiliados/{id_}", headers=_h(admin_token)).json()
+    assert quedo["eps"] == "Famisanar"
+    assert quedo["cod_eps"] == "EPS017"
+
+
+def test_un_codigo_a_mano_se_conserva_si_el_nombre_no_resuelve(client, admin_token):
     r = client.post("/afiliados", headers=_h(admin_token), json={
         "nombre": "CODIGO A MANO", "doc": "97000333", "tipo_doc": "CC",
         "fecha_afiliacion": "2026-01-01", "servicios": ["EPS"],
-        "eps": "Nueva EPS", "cod_eps": "EPS002",
+        "eps": "", "cod_eps": "EPS002",
     })
     quedo = client.get(f"/afiliados/{r.json()['id']}", headers=_h(admin_token)).json()
     assert quedo["cod_eps"] == "EPS002"

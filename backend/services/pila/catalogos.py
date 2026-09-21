@@ -273,6 +273,19 @@ def caja_cubre_depto(codigo: str, depto: str) -> bool:
     return (depto or "").strip() in CCF_DEPTOS.get((codigo or "").strip(), set())
 
 
+def sede_de_caja(codigo: str) -> tuple:
+    """Departamento y municipio cabecera donde esa caja sí cubre.
+
+    El operador rechaza el código si el DANE del campo 9 queda fuera. Cuando
+    la ficha trae Colsubsidio y el aportante está en otro departamento, se
+    conserva la caja y el lugar de labor pasa a uno que ella cubre.
+    """
+    deptos = CCF_DEPTOS.get((codigo or "").strip()) or set()
+    if not deptos:
+        return "", ""
+    return sorted(deptos)[0], "001"
+
+
 def caja_del_departamento(depto: str, preferida: str = "") -> str:
     """Caja que el operador acepta en ese departamento.
 

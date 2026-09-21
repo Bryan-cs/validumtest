@@ -500,6 +500,11 @@ export default function Afiliados() {
       payload.eps = limpiar_(payload.eps, listas.eps);
       payload.afp = limpiar_(payload.afp, listas.afp);
       payload.ccf = limpiar_(payload.ccf, listas.ccf);
+      // El plano usa estos códigos. El formulario no los edita: si viajan
+      // pegados del GET, un cambio de Famisanar deja Nueva EPS en el archivo.
+      payload.cod_eps = '';
+      payload.cod_afp = '';
+      payload.cod_ccf = '';
       const res = modal==='nuevo' ? await api.post('/afiliados',payload) : await api.put(`/afiliados/${modal.id}`,payload);
       return res;
     },

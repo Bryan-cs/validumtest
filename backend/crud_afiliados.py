@@ -107,20 +107,18 @@ CAMPOS_PILA = (
 def _deducir_codigos_pila(afiliado):
     """Completa el código PILA de cada administradora desde su nombre.
 
-    El formulario guarda el nombre —"Compensar"— y el archivo plano necesita
-    el código —"EPS008"—. Son campos distintos y el formulario solo llena el
-    primero, asi que quien lo llenaba bien se encontraba con que el campo del
-    archivo salía vacío y el operador rechazaba la planilla.
+    El formulario guarda el nombre —"Famisanar"— y el archivo plano necesita
+    el código —"EPS017"—. Son campos distintos y el formulario solo llena el
+    primero. Si el código ya venía de otra EPS y no se pisa, Enlace recibe
+    Nueva EPS mientras la ficha muestra Famisanar.
 
-    Solo rellena lo que está vacío: un código puesto a mano manda, porque
-    alguien pudo tener una razón para elegir otro.
+    El nombre de la ficha manda cuando el catálogo lo reconoce. Un código a
+    mano solo se conserva si el nombre no resuelve (vacío o desconocido).
     """
     from services.pila.catalogos import buscar_codigo
     for tipo, nombre, codigo in (("EPS", "eps", "cod_eps"),
                                  ("AFP", "afp", "cod_afp"),
                                  ("CCF", "ccf", "cod_ccf")):
-        if (getattr(afiliado, codigo, "") or "").strip():
-            continue
         hallado = buscar_codigo(tipo, getattr(afiliado, nombre, "") or "")
         if hallado:
             setattr(afiliado, codigo, hallado)

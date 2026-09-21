@@ -431,18 +431,28 @@ def _llenar_ccf(d: DetalleLiquidado, dias: int, ibc: Decimal, token: bool,
     d.ibc_ccf = base
     d.tarifa_ccf = P.TARIFA_CCF
     d.valor_ccf = P.aproximar_aporte(base * P.TARIFA_CCF)
-    from services.pila.catalogos import buscar_codigo, caja_cubre_depto
+    from services.pila.catalogos import buscar_codigo, caja_cubre_depto, sede_de_caja
     if not (d.cod_ccf or "").strip():
         hallado = buscar_codigo("CCF", getattr(afiliado, "ccf", "") or "")
         if hallado:
             d.cod_ccf = hallado
-    # COMCAJA (CCF68) en 99/773: es la que el operador acepta cuando no hay
-    # caja contratada o cuando la de la ficha (Compensar CCF24, Comfenalco
-    # Antioquia CCF03) no cubre el departamento del campo 9.
-    if token or not caja_cubre_depto(d.cod_ccf, d.cod_depto_labor):
+    # Sin caja contratada: COMCAJA (CCF68) en 99/773, como el plano de ARUS.
+    # Con caja en la ficha se reporta esa (Colsubsidio, Compensar). Si el
+    # departamento de labor no la cubre, se mueve el DANE a uno que sí, en
+    # vez de cambiar la caja por COMCAJA.
+    if token or not (d.cod_ccf or "").strip():
         d.cod_ccf = P.COD_CCF_SIN_CONTRATO
         d.cod_depto_labor = P.DEPTO_CCF_SIN_CONTRATO
         d.cod_municipio_labor = P.MUN_CCF_SIN_CONTRATO
+    elif not caja_cubre_depto(d.cod_ccf, d.cod_depto_labor):
+        depto, mun = sede_de_caja(d.cod_ccf)
+        if depto:
+            d.cod_depto_labor = depto
+            d.cod_municipio_labor = mun
+        else:
+            d.cod_ccf = P.COD_CCF_SIN_CONTRATO
+            d.cod_depto_labor = P.DEPTO_CCF_SIN_CONTRATO
+            d.cod_municipio_labor = P.MUN_CCF_SIN_CONTRATO
 
 
 def _debe_declarar_caja_sin_contrato(d: DetalleLiquidado) -> bool:
