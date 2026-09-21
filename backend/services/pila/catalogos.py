@@ -234,6 +234,18 @@ def buscar_codigo(tipo: str, nombre: str) -> str:
     if not catalogo or not str(nombre or "").strip():
         return ""
 
+    crudo = str(nombre).strip()
+
+    # Un codigo escrito tal cual manda sobre todo lo demas. Tambien cubre las
+    # entradas de lista que lo llevan entre parentesis para desempatar dos
+    # administradoras que se llaman igual.
+    if crudo in catalogo:
+        return crudo
+    import re
+    for entre_parentesis in re.findall(r"\(([^)]+)\)", crudo):
+        if entre_parentesis.strip() in catalogo:
+            return entre_parentesis.strip()
+
     buscado = _normalizar(nombre)
     if not buscado:
         return ""
@@ -247,6 +259,23 @@ def buscar_codigo(tipo: str, nombre: str) -> str:
     parciales = [cod for cod, nom in catalogo.items()
                  if buscado in _normalizar(nom) or _normalizar(nom) in buscado]
     return parciales[0] if len(parciales) == 1 else ""
+
+
+def nombres_para_listas(tipo: str) -> list:
+    """Los nombres de un subsistema, listos para un desplegable.
+
+    Cada entrada tiene que resolver a un unico codigo, asi que cuando dos
+    administradoras se llaman igual se les agrega el suyo entre parentesis.
+    Sin eso, elegir una de las dos dejaria el campo del archivo vacio, que es
+    justo lo que esto viene a evitar.
+    """
+    catalogo = CATALOGOS.get((tipo or "").strip().upper()) or {}
+    veces = {}
+    for nombre in catalogo.values():
+        veces[nombre] = veces.get(nombre, 0) + 1
+    entradas = [f"{nombre} ({codigo})" if veces[nombre] > 1 else nombre
+                for codigo, nombre in catalogo.items()]
+    return sorted(set(entradas))
 
 
 def sembrar(db) -> dict:

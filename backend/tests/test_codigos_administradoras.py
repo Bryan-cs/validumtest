@@ -119,3 +119,72 @@ def test_sin_nombre_de_eps_no_se_inventa_codigo(client, admin_token):
     })
     quedo = client.get(f"/afiliados/{r.json()['id']}", headers=_h(admin_token)).json()
     assert not quedo["cod_eps"]
+
+
+# ─── Las listas del formulario salen del catalogo ─────────────────────────────
+#
+# Se mantenian a mano y se desincronizaron: el formulario ofrecia "Coomeva",
+# que ya no esta vigente, y le faltaban decenas de administradoras que si lo
+# estan. Y sus nombres no coincidian con los del catalogo, asi que elegir uno
+# correcto dejaba el codigo del archivo vacio.
+
+from services.pila.catalogos import nombres_para_listas
+
+
+@pytest.mark.parametrize("tipo", ["EPS", "AFP", "CCF"])
+def test_toda_entrada_de_lista_resuelve_a_un_codigo(tipo):
+    """Es el punto entero: no puede haber opciones sin codigo."""
+    entradas = nombres_para_listas(tipo)
+    assert entradas
+    sin_codigo = [e for e in entradas if not buscar_codigo(tipo, e)]
+    assert sin_codigo == []
+
+
+@pytest.mark.parametrize("tipo", ["EPS", "AFP", "CCF"])
+def test_cada_entrada_lleva_a_un_codigo_distinto(tipo):
+    """Dos opciones que apunten al mismo codigo confundirian a quien elige."""
+    entradas = nombres_para_listas(tipo)
+    codigos = [buscar_codigo(tipo, e) for e in entradas]
+    assert len(set(codigos)) == len(codigos)
+
+
+def test_las_que_se_llaman_igual_se_desempatan_con_su_codigo():
+    """Dos AFP Skandia: sin el codigo, elegir una dejaria el campo vacio."""
+    skandia = [e for e in nombres_para_listas("AFP") if "SKANDIA" in e]
+    assert len(skandia) == 2
+    assert {buscar_codigo("AFP", e) for e in skandia} == {"230901", "230904"}
+
+
+def test_un_codigo_escrito_tal_cual_se_acepta():
+    assert buscar_codigo("EPS", "EPS037") == "EPS037"
+    assert buscar_codigo("AFP", "230301") == "230301"
+
+
+def test_sincronizar_deja_las_listas_alineadas(client, admin_token):
+    r = client.post("/listas/sincronizar-pila", headers=_h(admin_token))
+    assert r.status_code == 200, r.text
+    cambios = r.json()
+    assert set(cambios) == {"eps", "afp", "ccf"}
+
+    listas = client.get("/listas", headers=_h(admin_token)).json()
+    for lista, tipo in (("eps", "EPS"), ("afp", "AFP"), ("ccf", "CCF")):
+        entradas = listas[lista]
+        assert entradas[0] == "N/A"          # para poder dejarlo sin administradora
+        for e in entradas[1:]:
+            assert buscar_codigo(tipo, e), f"{lista}: {e!r} no resuelve"
+
+
+def test_sincronizar_dice_que_entro_y_que_salio(client, admin_token):
+    client.put("/listas/eps", headers=_h(admin_token),
+               json={"items": ["Coomeva", "Cafesalud"]})
+    cambios = client.post("/listas/sincronizar-pila", headers=_h(admin_token)).json()
+    assert "Coomeva" in cambios["eps"]["retiradas"]
+    assert cambios["eps"]["total"] > 20
+
+
+def test_sincronizar_dos_veces_no_cambia_nada(client, admin_token):
+    client.post("/listas/sincronizar-pila", headers=_h(admin_token))
+    segunda = client.post("/listas/sincronizar-pila", headers=_h(admin_token)).json()
+    for lista in ("eps", "afp", "ccf"):
+        assert segunda[lista]["agregadas"] == []
+        assert segunda[lista]["retiradas"] == []

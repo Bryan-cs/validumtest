@@ -46,6 +46,43 @@ def get_listas(db):
     _cache_set("listas:all", result, ttl=TTL_LISTAS)
     return result
 
+# Las listas del formulario que tienen que salir del catalogo PILA, porque
+# cada opcion se traduce despues a un codigo del archivo plano.
+LISTAS_DE_ADMINISTRADORAS = {"eps": "EPS", "afp": "AFP", "ccf": "CCF"}
+
+# Primera opcion de cada una, para poder dejar el campo sin administradora.
+SIN_ADMINISTRADORA = "N/A"
+
+
+def sincronizar_listas_pila(db, user="sistema"):
+    """Rehace las listas de EPS, AFP y caja desde el catalogo PILA.
+
+    Se mantenian a mano y se desincronizaron: el formulario ofrecia "Coomeva",
+    que ya no esta vigente, y le faltaban decenas de administradoras que si lo
+    estan. Peor aun, los nombres no coincidian con los del catalogo, asi que
+    elegir uno correcto dejaba el codigo del archivo vacio.
+
+    Cada entrada resuelve a un unico codigo; las que se llaman igual llevan el
+    suyo entre parentesis. Devuelve que entro y que salio, para poder revisar
+    el cambio antes de darlo por bueno.
+    """
+    from services.pila.catalogos import nombres_para_listas
+
+    cambios = {}
+    for lista, tipo in LISTAS_DE_ADMINISTRADORAS.items():
+        antes = set(json.loads(
+            (db.query(models.Lista).filter_by(nombre=lista).first() or
+             models.Lista(items="[]")).items or "[]"))
+        nuevos = [SIN_ADMINISTRADORA] + nombres_para_listas(tipo)
+        update_lista(db, lista, nuevos, user=user)
+        cambios[lista] = {
+            "total": len(nuevos),
+            "agregadas": sorted(set(nuevos) - antes),
+            "retiradas": sorted(antes - set(nuevos)),
+        }
+    return cambios
+
+
 def update_lista(db, nombre, items, user="sistema"):
     l = db.query(models.Lista).filter_by(nombre=nombre).first()
     if not l: l = models.Lista(nombre=nombre); db.add(l)
