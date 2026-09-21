@@ -78,7 +78,7 @@ export function StatCard({ label, value, color, icon, trend, trendUp = true, cli
   );
 }
 
-export function Btn({ type = 'button', children, onClick, variant = 'primary', size = 'md', disabled, style }) {
+export function Btn({ type = 'button', children, onClick, variant = 'primary', size = 'md', disabled, style, title }) {
   const variantMap = {
     primary:   'default',
     secondary: 'outline',
@@ -96,6 +96,7 @@ export function Btn({ type = 'button', children, onClick, variant = 'primary', s
       variant={variantMap[variant] || 'default'}
       size={sizeMap[size] || 'default'}
       style={style}
+      title={title}
       className={cn(
         variant === 'accent' && 'bg-[var(--c-accent)] hover:bg-[var(--c-accent)]/90 text-white',
         variant === 'success' && 'text-[var(--c-green)] border-[var(--c-green)] hover:bg-[var(--c-green-bg)]',

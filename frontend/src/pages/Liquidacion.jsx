@@ -44,6 +44,36 @@ function EstadoBadge({ estado }) {
   );
 }
 
+function Chip({ children, tone = 'neutral' }) {
+  const tones = {
+    neutral: { background: C.surface2, color: C.text2 },
+    blue:    { background: C.blueBg, color: C.blue },
+    amber:   { background: C.amberBg, color: C.amber },
+    green:   { background: C.greenBg, color: C.green },
+  };
+  const t = tones[tone] || tones.neutral;
+  return (
+    <span style={{
+      fontSize: 11, fontWeight: 600, lineHeight: '16px', padding: '2px 8px',
+      borderRadius: 999, whiteSpace: 'nowrap', ...t,
+    }}>{children}</span>
+  );
+}
+
+function Resumen({ etiqueta, valor, detalle }) {
+  return (
+    <div style={{
+      flex: '1 1 140px', padding: '12px 14px', borderRadius: 12,
+      background: C.surface, border: `1px solid ${C.border}`,
+    }}>
+      <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '0.04em',
+                    textTransform: 'uppercase', color: C.text2 }}>{etiqueta}</div>
+      <div style={{ fontSize: 20, fontWeight: 700, marginTop: 2, color: C.text,
+                    fontVariantNumeric: 'tabular-nums' }}>{valor}</div>
+      {detalle && <div style={{ fontSize: 12, color: C.text2, marginTop: 2 }}>{detalle}</div>}
+    </div>
+  );
+}
 function Total({ etiqueta, valor, destacado }) {
   if (!destacado && !valor) return null;
   return (
@@ -321,64 +351,79 @@ export default function Liquidacion() {
     <div>
       <PageHeader
         title="Liquidación de planillas"
-        subtitle="Una planilla por persona y período, con su propio archivo plano"
+        subtitle={`${MESES[Number(mes) - 1] || ''} ${anio} · liquida, envía y descarga el comprobante`}
       />
 
+      <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+        <Resumen etiqueta="Por liquidar" valor={pendientes}
+                 detalle={pendientes ? 'Facturadas, sin plano' : 'Este mes ya está liquidado'} />
+        <Resumen etiqueta="Con plano" valor={personas.length - pendientes}
+                 detalle="Listas para enviar o pagar" />
+        <Resumen etiqueta="En pantalla" valor={`${visibles.length} de ${personas.length}`}
+                 detalle={busqueda || empresa || subtipo || tipoDocFiltro || soloPendientes
+                   ? 'Con el filtro activo' : 'Sin filtro'} />
+      </div>
+
       <div style={{
-        border: `1px solid ${C.border}`, borderRadius: 10, padding: 16,
-        background: C.surface, marginBottom: 18,
-        display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap',
+        border: `1px solid ${C.border}`, borderRadius: 12, padding: 14,
+        background: C.surface, marginBottom: 16,
+        display: 'grid', gap: 12,
       }}>
-        <div>
-          <label style={lbl}>Mes de cotización</label>
-          <select style={inp} value={mes} onChange={e => { setMes(e.target.value); setPrevia(null); }}>
-            {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
-          </select>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div>
+            <label style={lbl}>Mes</label>
+            <select style={inp} value={mes} onChange={e => { setMes(e.target.value); setPrevia(null); }}>
+              {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={lbl}>Año</label>
+            <input style={{ ...inp, width: 90 }} value={anio} inputMode="numeric"
+                   onChange={e => { setAnio(e.target.value); setPrevia(null); }} />
+          </div>
+          <div style={{ flex: 1, minWidth: 220 }}>
+            <label style={lbl}>Buscar persona</label>
+            <input style={{ ...inp, width: '100%' }} value={busqueda}
+                   placeholder="Nombre, documento o empresa…"
+                   onChange={e => setBusqueda(e.target.value)} />
+          </div>
         </div>
-        <div>
-          <label style={lbl}>Año</label>
-          <input style={{ ...inp, width: 90 }} value={anio} inputMode="numeric"
-                 onChange={e => { setAnio(e.target.value); setPrevia(null); }} />
-        </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <label style={lbl}>Buscar</label>
-          <input style={{ ...inp, width: '100%' }} value={busqueda}
-                 placeholder="Nombre, documento o cliente…"
-                 onChange={e => setBusqueda(e.target.value)} />
-        </div>
-        <div style={{ minWidth: 160 }}>
-          <label style={lbl}>Empresa</label>
-          <select style={{ ...inp, width: '100%' }} value={empresa}
-                  onChange={e => { setEmpresa(e.target.value); setElegidas(new Set()); }}>
-            <option value="">Todas</option>
-            {EMPRESAS.map(x => <option key={x} value={x}>{x}</option>)}
-          </select>
-        </div>
-        <div style={{ minWidth: 170 }}>
-          <label style={lbl}>Subtipo</label>
-          <select style={{ ...inp, width: '100%' }} value={subtipo}
-                  onChange={e => setSubtipo(e.target.value)}>
-            <option value="">Todos</option>
-            {Object.entries(SUBTIPOS).map(([k, v]) =>
-              <option key={k} value={k}>{k} · {v}</option>)}
-          </select>
-        </div>
-        <div style={{ minWidth: 110 }}>
-          <label style={lbl}>Documento</label>
-          <select style={{ ...inp, width: '100%' }} value={tipoDocFiltro}
-                  onChange={e => setTipoDocFiltro(e.target.value)}>
-            <option value="">Todos</option>
-            {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
-          </select>
-        </div>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6,
-                        fontSize: 13, color: C.text2, paddingBottom: 9 }}>
-          <input type="checkbox" checked={soloPendientes}
-                 onChange={e => setSoloPendientes(e.target.checked)} />
-          Solo sin liquidar
-        </label>
-        <div style={{ fontSize: 12, color: C.text2, paddingBottom: 10 }}>
-          {pendientes} de {personas.length} facturados sin planilla en {periodo}
+        <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 160, flex: 1 }}>
+            <label style={lbl}>Empresa</label>
+            <select style={{ ...inp, width: '100%' }} value={empresa}
+                    onChange={e => { setEmpresa(e.target.value); setElegidas(new Set()); }}>
+              <option value="">Todas</option>
+              {EMPRESAS.map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+          <div style={{ minWidth: 180, flex: 1 }}>
+            <label style={lbl}>Subtipo</label>
+            <select style={{ ...inp, width: '100%' }} value={subtipo}
+                    onChange={e => setSubtipo(e.target.value)}>
+              <option value="">Todos</option>
+              {Object.entries(SUBTIPOS).map(([k, v]) =>
+                <option key={k} value={k}>{k} · {v}</option>)}
+            </select>
+          </div>
+          <div style={{ minWidth: 110 }}>
+            <label style={lbl}>Documento</label>
+            <select style={{ ...inp, width: '100%' }} value={tipoDocFiltro}
+                    onChange={e => setTipoDocFiltro(e.target.value)}>
+              <option value="">Todos</option>
+              {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+          <label style={{
+            display: 'flex', alignItems: 'center', gap: 8, fontSize: 13,
+            color: C.text, padding: '8px 12px', borderRadius: 8, cursor: 'pointer',
+            border: `1px solid ${soloPendientes ? '#FCD34D' : C.border}`,
+            background: soloPendientes ? C.amberBg : C.surface, marginBottom: 0,
+          }}>
+            <input type="checkbox" checked={soloPendientes}
+                   onChange={e => setSoloPendientes(e.target.checked)} />
+            Solo sin liquidar
+          </label>
         </div>
       </div>
 
@@ -440,15 +485,24 @@ export default function Liquidacion() {
               </Btn>
             </div>
           )}
-          {visibles.map(p => (
+          {visibles.map(p => {
+            const elegida = elegidas.has(p.planilla_id);
+            const riel = !p.planilla_id ? '#D97706'
+              : p.estado === 'pagada' ? '#059669'
+              : p.estado === 'anulada' ? '#DC2626'
+              : p.desactualizada ? '#D97706'
+              : '#2563EB';
+            return (
             <div key={p.id} style={{
-              border: `1px solid ${C.border}`, borderRadius: 10, padding: 12,
-              background: C.surface, display: 'flex', alignItems: 'center',
-              gap: 12, flexWrap: 'wrap',
+              border: `1px solid ${elegida ? '#93C5FD' : C.border}`,
+              borderLeft: `4px solid ${riel}`,
+              borderRadius: 12, padding: '14px 16px',
+              background: elegida ? '#F8FBFF' : C.surface,
+              display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap',
             }}>
               {p.planilla_id && p.se_envia !== false && (
-                <input type="checkbox" style={{ width: 16, height: 16 }}
-                       checked={elegidas.has(p.planilla_id)}
+                <input type="checkbox" style={{ width: 16, height: 16, marginTop: 4 }}
+                       checked={elegida}
                        onChange={() => alternar(p)}
                        disabled={!!empresaDeLaSeleccion
                                  && empresaDeLaSeleccion !== p.cliente}
@@ -456,48 +510,43 @@ export default function Liquidacion() {
                          ? `Un archivo plano lleva una sola empresa: ya hay ${empresaDeLaSeleccion} en la selección`
                          : 'Incluir en un archivo con varias personas'} />
               )}
-              <div style={{ flex: 1, minWidth: 210 }}>
-                <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nombre}</div>
-                <div style={{ fontSize: 12, color: C.text2, fontFamily: 'monospace' }}>
-                  {p.tipo_doc} {p.doc}
-                  {p.cliente && <span style={{ fontFamily: 'inherit' }}> · {p.cliente}</span>}
+              <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em' }}>{p.nombre}</div>
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                  <Chip>{p.tipo_doc} {p.doc}</Chip>
+                  {p.cliente && <Chip tone="blue">{p.cliente}</Chip>}
                   {p.subtipo != null && p.subtipo !== '' && (
-                    <span style={{ fontFamily: 'inherit' }}>
-                      {' '}· subtipo {p.subtipo}
-                    </span>
+                    <Chip>Subtipo {p.subtipo}{SUBTIPOS[String(p.subtipo)] ? ` · ${SUBTIPOS[String(p.subtipo)]}` : ''}</Chip>
                   )}
-                  {/* La factura del mismo periodo, para no tener que abrir
-                      Facturacion a comprobarlo. */}
                   {p.factura_codigo && (
-                    <span style={{ fontFamily: 'inherit', color: C.text2 }}>
-                      {' '}· factura {p.factura_codigo}
-                      {p.factura_estado ? ` (${p.factura_estado})` : ''}
-                    </span>
+                    <Chip tone={p.factura_estado === 'pendiente' ? 'amber' : 'green'}>
+                      {p.factura_codigo}{p.factura_estado ? ` · ${p.factura_estado}` : ''}
+                    </Chip>
                   )}
                 </div>
-                {/* El plano se congela al liquidar. Si los datos cambiaron
-                    despues, descargar trae el archivo viejo sin avisar. */}
                 {p.sin_afiliado && (
-                  <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 4 }}>
+                  <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 8 }}>
                     Hay factura de {p.factura_codigo} pero el afiliado ya no está
                     en el sistema. No se puede liquidar.
                   </div>
                 )}
                 {p.desactualizada && (
-                  <div style={{ fontSize: 12, color: '#92400E', marginTop: 4 }}>
-                    Los datos de la persona cambiaron despues de liquidar. El plano
-                    saldra con los valores anteriores: anula y vuelve a liquidar.
+                  <div style={{ fontSize: 12, color: '#92400E', marginTop: 8 }}>
+                    Los datos cambiaron después de liquidar. Anula y vuelve a liquidar
+                    antes de enviar: el plano guardado es el anterior.
                   </div>
                 )}
               </div>
 
               {p.planilla_id ? (
-                <>
-                  <div style={{ fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-                    {pesos(p.total)}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, marginLeft: 'auto' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>
+                      {pesos(p.total)}
+                    </span>
+                    <EstadoBadge estado={p.estado} />
                   </div>
-                  <EstadoBadge estado={p.estado} />
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                     <select
                       style={{ ...inp, padding: '6px 8px', fontSize: 12, width: 72 }}
                       title="Documento con el que se identifica a la persona en el archivo"
@@ -506,8 +555,8 @@ export default function Liquidacion() {
                     >
                       {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
-                    <Btn size="sm" variant="secondary" onClick={() => descargar(p)}>
-                      Descargar plano
+                    <Btn size="sm" variant="secondary" onClick={() => descargar(p)} title="Descargar el archivo plano">
+                      Plano
                     </Btn>
                     {p.se_envia === false && (
                       <span style={{ fontSize: 12, color: '#92400E' }}>
@@ -518,21 +567,23 @@ export default function Liquidacion() {
                       <Btn size="sm" disabled={enviar.isPending || p.desactualizada}
                            title={p.desactualizada
                              ? 'Los datos cambiaron despues de liquidar: anula y vuelve a liquidar'
-                             : undefined}
+                             : 'Enviar esta planilla al operador'}
                            onClick={() => enviar.mutate(p)}>
-                        {p.codigo_planilla ? 'Reenviar' : 'Enviar al operador'}
+                        {p.codigo_planilla ? 'Reenviar' : 'Enviar'}
                       </Btn>
                     )}
                     {p.codigo_planilla && !p.numero_planilla && p.estado !== 'pagada' && p.estado !== 'anulada' && (
                       <Btn size="sm" disabled={corregir.isPending}
+                           title="Pedirle al operador que corrija los errores que él mismo marcó"
                            onClick={() => corregir.mutate(p.planilla_id)}>
-                        {corregir.isPending ? 'Corrigiendo…' : 'Que el operador corrija'}
+                        {corregir.isPending ? 'Corrigiendo…' : 'Corregir'}
                       </Btn>
                     )}
                     {p.link_pago && (
                       <Btn size="sm" variant="success"
+                           title="Abrir el pago en PSE"
                            onClick={() => window.open(p.link_pago, '_blank', 'noopener')}>
-                        Pagar en PSE
+                        Pagar
                       </Btn>
                     )}
                     {p.numero_planilla && (
@@ -547,22 +598,23 @@ export default function Liquidacion() {
                       </Btn>
                     )}
                   </div>
-                </>
+                </div>
               ) : (
-                <div style={{ display: 'flex', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignSelf: 'center' }}>
                   <Btn size="sm" variant="secondary"
                        disabled={previsualizar.isPending}
                        onClick={() => previsualizar.mutate(p)}>
                     Previsualizar
                   </Btn>
-                  <Btn size="sm" disabled={liquidar.isPending}
+                  <Btn size="sm" disabled={liquidar.isPending || p.sin_afiliado}
                        onClick={() => liquidar.mutate(p)}>
                     Liquidar
                   </Btn>
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
