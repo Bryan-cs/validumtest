@@ -69,16 +69,18 @@ def test_modo_real_solo_con_la_variable_exacta(monkeypatch):
 
 def test_sin_credenciales_falla_con_mensaje_accionable(monkeypatch):
     """Solo en modo real: la simulación debe correr en una máquina sin secretos."""
-    for v in ("SUAPORTE_USUARIO", "SUAPORTE_CONTRASENA", "SUAPORTE_CLAVE_SECRETA"):
+    for v in ("SUAPORTE_USUARIO", "SUAPORTE_CONTRASENA", "SUAPORTE_CLAVE_SECRETA",
+              "PAGOSIMPLE_API_KEY", "PAGOSIMPLE_USUARIO", "PILA_OPERADOR"):
         monkeypatch.delenv(v, raising=False)
     monkeypatch.setenv("SUAPORTE_MODO", "real")
     assert operador.hay_credenciales() is False
-    with pytest.raises(operador.ErrorOperador, match="SUAPORTE_USUARIO"):
+    with pytest.raises(operador.ErrorOperador, match="PAGOSIMPLE_API_KEY"):
         operador.autenticar()
 
 
 def test_la_simulacion_corre_sin_credenciales(monkeypatch):
-    for v in ("SUAPORTE_USUARIO", "SUAPORTE_CONTRASENA", "SUAPORTE_CLAVE_SECRETA"):
+    for v in ("SUAPORTE_USUARIO", "SUAPORTE_CONTRASENA", "SUAPORTE_CLAVE_SECRETA",
+              "PAGOSIMPLE_API_KEY", "PILA_OPERADOR"):
         monkeypatch.delenv(v, raising=False)
     monkeypatch.delenv("SUAPORTE_MODO", raising=False)
     assert operador.autenticar().simulada is True
@@ -434,3 +436,23 @@ def test_el_codigo_de_planilla_viaja_como_texto(monkeypatch):
     p = operador.corregir_planilla(
         operador.Sesion(simulada=True), 287172522)["parametros"]
     assert p["codigoPlanilla"] == "287172522"
+
+
+def test_pagosimple_usa_simple_co_y_la_clave_de_api(modo_real, monkeypatch):
+    monkeypatch.setenv("PILA_OPERADOR", "pagosimple")
+    monkeypatch.setenv("PAGOSIMPLE_API_KEY", "clave-pagosimple")
+    llamadas = []
+
+    def responder(request):
+        llamadas.append((str(request.url), dict(request.headers)))
+        if "cifrar-datos" in str(request.url):
+            return httpx.Response(200, json={"datoCifrado": "CIFRADO=="})
+        assert request.headers.get("clave-secreta") == "clave-pagosimple"
+        return httpx.Response(200, headers={"token": "T1"})
+
+    with _cliente_falso(responder) as c:
+        operador.autenticar(c)
+    assert any("simple.co/auth/login" in u for u, _ in llamadas)
+    assert operador.operador_nombre() == "pagosimple"
+    assert operador.credenciales()[2] == "clave-pagosimple"
+

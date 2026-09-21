@@ -1,9 +1,10 @@
-"""Cliente del operador de información (SuAporte — Enlace Operativo / ARUS).
+"""Cliente del operador de información PILA.
 
-Sustituye el recorrido manual de descargar el plano, entrar al portal, subirlo,
-revisar inconsistencias y volver por el enlace de pago. Todo eso son llamadas.
+SuAporte (Enlace Operativo / ARUS) y PagoSimple (Simple S.A.) usan el mismo
+encadenado de APIs; cambia el dominio y la clave secreta. Se elige con
+`PILA_OPERADOR=pagosimple` o `suaporte`.
 
-El encadenado que exige el operador, en este orden:
+El recorrido, en este orden:
 
 1. `POST /auth/login` con la clave secreta en un header. Devuelve cinco headers
    de sesión (`token`, `faces`, `refresh-token` y sus dos fechas) que hay que
@@ -17,11 +18,10 @@ El encadenado que exige el operador, en este orden:
 **Modo simulación.** Por defecto el cliente no sale a la red: arma la petición,
 la registra y devuelve una respuesta marcada como simulada. Enviar una planilla
 crea un registro real en el operador y el enlace de pago mueve dinero, así que
-el envío real se habilita explícitamente con `SUAPORTE_MODO=real` y conviene
-que la primera vez la dispare una persona, no un test.
+el envío real se habilita explícitamente con `SUAPORTE_MODO=real`.
 
-Credenciales: `SUAPORTE_USUARIO` (tipo + número, p.ej. CC8487324),
-`SUAPORTE_CONTRASENA` y `SUAPORTE_CLAVE_SECRETA`. Nunca en el código.
+Credenciales: usuario (tipo + número, p.ej. CC8487324), contraseña y la clave
+de API (`PAGOSIMPLE_API_KEY` o `SUAPORTE_CLAVE_SECRETA`). Nunca en el código.
 """
 from __future__ import annotations
 
@@ -38,10 +38,37 @@ import httpx
 
 log = logging.getLogger("bbcfile")
 
-BASE_AUTH = os.getenv("SUAPORTE_BASE_AUTH", "https://www.suaporte.com.co/auth")
-BASE_GESTION = os.getenv("SUAPORTE_BASE_GESTION", "https://www.suaporte.com.co/api/gestion")
-BASE_PLANILLAS = os.getenv("SUAPORTE_BASE_PLANILLAS",
-                           "https://www.suaporte.com.co/api/generadorPlanillas")
+def operador_nombre() -> str:
+    """suaporte | pagosimple. Lo elige PILA_OPERADOR, no el código."""
+    nombre = (os.getenv("PILA_OPERADOR") or "suaporte").strip().lower()
+    return "pagosimple" if nombre in ("pagosimple", "pago_simple", "simple") else "suaporte"
+
+
+def _base_auth() -> str:
+    if operador_nombre() == "pagosimple":
+        return os.getenv("PAGOSIMPLE_BASE_AUTH", "https://www.simple.co/auth")
+    return os.getenv("SUAPORTE_BASE_AUTH", "https://www.suaporte.com.co/auth")
+
+
+def _base_gestion() -> str:
+    if operador_nombre() == "pagosimple":
+        return os.getenv("PAGOSIMPLE_BASE_GESTION", "https://www.simple.co/api/gestion")
+    return os.getenv("SUAPORTE_BASE_GESTION", "https://www.suaporte.com.co/api/gestion")
+
+
+def _base_planillas() -> str:
+    if operador_nombre() == "pagosimple":
+        return os.getenv("PAGOSIMPLE_BASE_PLANILLAS",
+                         "https://www.simple.co/api/generadorPlanillas")
+    return os.getenv("SUAPORTE_BASE_PLANILLAS",
+                     "https://www.suaporte.com.co/api/generadorPlanillas")
+
+
+# Alias para tests y lecturas antiguas: se resuelven al importar. El envío
+# usa las funciones, que sí ven un cambio de PILA_OPERADOR en caliente.
+BASE_AUTH = _base_auth()
+BASE_GESTION = _base_gestion()
+BASE_PLANILLAS = _base_planillas()
 
 TIMEOUT = float(os.getenv("SUAPORTE_TIMEOUT", "60"))
 
@@ -95,9 +122,12 @@ def modo_real() -> bool:
 
 
 def credenciales() -> tuple:
-    usuario = os.getenv("SUAPORTE_USUARIO", "")
-    contrasena = os.getenv("SUAPORTE_CONTRASENA", "")
-    clave = os.getenv("SUAPORTE_CLAVE_SECRETA", "")
+    usuario = os.getenv("PAGOSIMPLE_USUARIO") or os.getenv("SUAPORTE_USUARIO", "")
+    contrasena = os.getenv("PAGOSIMPLE_CONTRASENA") or os.getenv("SUAPORTE_CONTRASENA", "")
+    if operador_nombre() == "pagosimple":
+        clave = os.getenv("PAGOSIMPLE_API_KEY") or os.getenv("SUAPORTE_CLAVE_SECRETA", "")
+    else:
+        clave = os.getenv("SUAPORTE_CLAVE_SECRETA", "")
     return usuario, contrasena, clave
 
 
@@ -128,7 +158,7 @@ def cifrar(dato: str, cliente: Optional[httpx.Client] = None) -> str:
     propio = cliente is None
     cliente = cliente or _cliente_nuevo()
     try:
-        r = cliente.post(f"{BASE_AUTH}/crypto/cifrar-datos", json={"datoACifrar": dato})
+        r = cliente.post(f"{_base_auth()}/crypto/cifrar-datos", json={"datoACifrar": dato})
         if r.status_code != 200:
             raise ErrorOperador(f"No se pudo cifrar ({r.status_code}): {r.text[:200]}")
         cuerpo = r.json()
@@ -154,22 +184,22 @@ def autenticar(cliente: Optional[httpx.Client] = None) -> Sesion:
     # En simulación no se piden credenciales: sirve para revisar el armado de
     # las peticiones en una máquina que no tiene los secretos.
     if not modo_real():
-        _registrar("login", usuario=usuario or "(sin configurar)", url=f"{BASE_AUTH}/login")
+        _registrar("login", usuario=usuario or "(sin configurar)", url=f"{_base_auth()}/login")
         return Sesion(sesion={h: f"simulado-{h}" for h in HEADERS_SESION}, simulada=True)
 
     if not all((usuario, contrasena, clave)):
         raise ErrorOperador(
-            "Faltan credenciales del operador. Define SUAPORTE_USUARIO, "
-            "SUAPORTE_CONTRASENA y SUAPORTE_CLAVE_SECRETA.")
+            "Faltan credenciales del operador. Define usuario, contraseña y "
+            "PAGOSIMPLE_API_KEY (o SUAPORTE_CLAVE_SECRETA).")
 
-    _registrar("login", usuario=usuario, url=f"{BASE_AUTH}/login")
+    _registrar("login", usuario=usuario, url=f"{_base_auth()}/login")
 
     propio = cliente is None
     cliente = cliente or _cliente_nuevo()
     try:
         # La contraseña viaja cifrada: el login rechaza el texto plano.
         secreto = contrasena if os.getenv("SUAPORTE_CIFRAR", "1") == "0"             else cifrar(contrasena, cliente)
-        r = cliente.post(f"{BASE_AUTH}/login",
+        r = cliente.post(f"{_base_auth()}/login",
                          json={"usuario": usuario, "contrasena": secreto},
                          headers={"clave-secreta": clave,
                                   "Content-Type": "application/json"})
@@ -202,7 +232,7 @@ def consultar_aportante(sesion: Sesion, tipo_doc: str, num_doc: str,
     propio = cliente is None
     cliente = cliente or _cliente_nuevo()
     try:
-        r = cliente.get(f"{BASE_GESTION}/aportante/{tipo_doc}/{num_doc}",
+        r = cliente.get(f"{_base_gestion()}/aportante/{tipo_doc}/{num_doc}",
                         headers=sesion.sesion)
         if r.status_code != 200:
             raise ErrorOperador(f"No se pudo consultar el aportante "
@@ -240,7 +270,7 @@ def autorizar(sesion: Sesion, tipo_doc: str, num_doc: str,
         if aportante_id is None:
             aportante_id = consultar_aportante(sesion, tipo_doc, num_doc, cliente).get("id")
 
-        r = cliente.get(f"{BASE_GESTION}/authorization/user/contributor",
+        r = cliente.get(f"{_base_gestion()}/authorization/user/contributor",
                         params={"id": aportante_id, "tipoIdentificacion": tipo_doc,
                                 "numeroIdentificacion": num_doc},
                         headers=sesion.sesion)
@@ -286,7 +316,7 @@ def validar_planilla(sesion: Sesion, contenido: str, nombre_archivo: str,
     cliente = cliente or _cliente_nuevo()
     try:
         r = cliente.post(
-            f"{BASE_PLANILLAS}/v1/planillas/validacion",
+            f"{_base_planillas()}/v1/planillas/validacion",
             params={"parametros": parametros},
             files={"archivo": (nombre_archivo, contenido.encode("latin-1"), "text/plain")},
             headers=sesion.headers)
@@ -340,7 +370,7 @@ def corregir_planilla(sesion: Sesion, codigo_planilla: str,
     propio = cliente is None
     cliente = cliente or _cliente_nuevo()
     try:
-        r = cliente.post(f"{BASE_PLANILLAS}/v1/planillas/{codigo_planilla}/correccion",
+        r = cliente.post(f"{_base_planillas()}/v1/planillas/{codigo_planilla}/correccion",
                          json=cuerpo, headers=sesion.headers)
         if r.status_code not in (200, 201):
             raise ErrorOperador(f"El operador no pudo corregir la planilla "
@@ -381,7 +411,7 @@ def inconsistencias(sesion: Sesion, codigo_planilla: str, desde: int = 0,
     """Los errores y alertas de la planilla, que hoy se revisan a mano."""
     _registrar("inconsistencias", planilla=codigo_planilla)
     return _get_json(sesion,
-                     f"{BASE_PLANILLAS}/v1/planillas/{codigo_planilla}/inconsistencias",
+                     f"{_base_planillas()}/v1/planillas/{codigo_planilla}/inconsistencias",
                      {"registro-inicial": desde, "limite": limite}, cliente,
                      vacio={"simulado": True, "inconsistencias": []})
 
@@ -400,7 +430,7 @@ def totales(sesion: Sesion, numero_planilla: str, cliente: Optional[httpx.Client
     que el motor no lo calcula: la cifra que manda es esta.
     """
     _registrar("totales", planilla=numero_planilla)
-    return _get_json(sesion, f"{BASE_PLANILLAS}/v1/planillas/{numero_planilla}/totales",
+    return _get_json(sesion, f"{_base_planillas()}/v1/planillas/{numero_planilla}/totales",
                      None, cliente)
 
 
@@ -412,7 +442,7 @@ def url_pago(sesion: Sesion, numero_planilla: str,
     entrega incluso para planillas todavía sin numerar.
     """
     _registrar("url_pago", planilla=numero_planilla)
-    datos = _get_json(sesion, f"{BASE_PLANILLAS}/v1/planillas/{numero_planilla}/pago/url",
+    datos = _get_json(sesion, f"{_base_planillas()}/v1/planillas/{numero_planilla}/pago/url",
                       None, cliente, vacio={"url": ""})
     if isinstance(datos, str):
         return datos
@@ -433,7 +463,7 @@ def administradoras_de(sesion: Sesion, tipo_doc: str, num_doc: str,
     _registrar("bdua_ruaf", documento=f"{tipo_doc}{num_doc}")
     return _get_json(
         sesion,
-        f"{BASE_PLANILLAS}/v1/administradoras/bdua-ruaf/{tipo_doc}/{num_doc}",
+        f"{_base_planillas()}/v1/administradoras/bdua-ruaf/{tipo_doc}/{num_doc}",
         None, cliente, vacio={"simulado": True})
 
 

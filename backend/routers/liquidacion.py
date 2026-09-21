@@ -524,7 +524,7 @@ def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
         l.respuesta_operador = crudo
         if resultado.get("simulado"):
             continue
-        l.operador = l.operador or "suaporte"
+        l.operador = l.operador or operador.operador_nombre()
         if resultado.get("numero_planilla"):
             l.numero_planilla = resultado["numero_planilla"][:20]
             l.estado = "numerada"
@@ -801,7 +801,7 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
 
     l.respuesta_operador = json.dumps(resultado, ensure_ascii=False, default=str)[:20000]
     if not resultado.get("simulado"):
-        l.operador = l.operador or "suaporte"
+        l.operador = l.operador or operador.operador_nombre()
         if resultado.get("numero_planilla"):
             l.numero_planilla = resultado["numero_planilla"][:20]
             l.estado = "numerada"
@@ -884,7 +884,8 @@ def estado_operador(token=Depends(require_admin_or_empleado)):
     Lo consulta la pantalla para no ofrecer un botón que no va a funcionar.
     """
     return {"modo": "real" if operador.modo_real() else "simulacion",
-            "credenciales": operador.hay_credenciales()}
+            "credenciales": operador.hay_credenciales(),
+            "operador": operador.operador_nombre()}
 
 
 @router.post("/{liquidacion_id}/pago")
