@@ -272,7 +272,8 @@ TIPOS_POR_PLANILLA = {
     # Los demas casos traen sus propios tipos: contratistas (59), cesantes
     # (52), concejales y ediles (34, 35, 36, 60), contrato sindical (53),
     # reincorporacion (61) y prestacion humanitaria (63).
-    "Y": {"16", "34", "35", "36", "52", "53", "57", "59", "60", "61", "63"},
+    # La tabla completa, tal como la imprime el anexo. Faltaba el 40.
+    "Y": {"16", "34", "35", "36", "40", "52", "53", "57", "59", "60", "61", "63"},
 }
 
 
