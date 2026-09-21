@@ -246,6 +246,20 @@ TIPOS_CON_TIPO_SALARIO = {"01", "02", "18", "20", "22", "30", "31", "32",
 TIPOS_POR_PLANILLA = {
     "E": {"01", "12", "15", "18", "19", "20", "21", "22", "30", "31", "32",
           "40", "51", "54", "55", "62", "68", "71"},
+    # La planilla I la trae el anexo con su tabla completa, en la seccion de
+    # tipos de planilla. Es la de los aportantes registrados como
+    # "I - Independiente", y es donde viven los cotizantes que no tienen las
+    # obligaciones de un dependiente:
+    #
+    #    3  Independiente                              salud y pension
+    #   33  Beneficiario del Fondo de Solidaridad      salud y pension
+    #   40  Beneficiario de UPC adicional              salud
+    #   42  Cotizante pago solo salud (Ley 1250/2008)  salud
+    #   43  Pensiones con pago por tercero             pension
+    #   56  Prepensionado con aporte voluntario        salud
+    #   57  Independiente voluntario a riesgos         riesgos
+    #   59  Independiente por prestacion de servicios  salud, pension y riesgos
+    "I": {"03", "33", "40", "42", "43", "56", "57", "59"},
 }
 
 
