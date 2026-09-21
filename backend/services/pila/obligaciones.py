@@ -249,9 +249,11 @@ def es_regimen_exceptuado(subtipo) -> bool:
     return normalizar_subtipo(subtipo) == SUBTIPO_REGIMEN_EXCEPTUADO
 
 
-# Documentos que el anexo acepta para un extranjero no obligado a pensión
-# (sección 2.1.2.3.3). Con cédula de ciudadanía la marca no tiene sentido.
-DOCS_EXTRANJERO = ("CE", "PA", "CD", "SC", "PE")
+# Documentos que se aceptan con la marca del campo 7. El anexo lista cinco en
+# la sección 2.1.2.3.3; el operador acepta dos más y lo dice en el texto del
+# rechazo: "solo son permitidos los tipos de documentos PA, CE, CD, SC, PE, PT
+# y PC". Con cédula de ciudadanía la marca no tiene sentido y la rechaza.
+DOCS_EXTRANJERO = ("CE", "PA", "CD", "SC", "PE", "PT", "PC")
 
 
 def revisar(tipo_cotizante: str, servicios, extranjero_no_pension: bool = False,

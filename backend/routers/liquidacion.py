@@ -37,7 +37,7 @@ ESTADOS_BORRABLES = {"borrador", "generada", "anulada"}
 
 # Valores válidos del campo 3 del registro tipo 2 (tipo de documento del
 # cotizante), tal como los lista el Anexo Técnico 2.
-TIPOS_DOC_COTIZANTE = {"CC", "CE", "TI", "PA", "CD", "SC", "PE", "PT"}
+TIPOS_DOC_COTIZANTE = {"CC", "CE", "TI", "PA", "CD", "SC", "PE", "PT", "PC"}
 
 
 def _periodo(anio: int, mes: int) -> str:
@@ -387,6 +387,16 @@ def _armar_plano(db: Session, l, tipo_doc: str = "") -> tuple:
     })
 
     lineas = [d.linea_plana for d in detalles if d.linea_plana]
+
+    # Si nadie pidio un documento en concreto, lo decide el subtipo del
+    # afiliado. Dejarlo en manos de quien llame al endpoint era fragil: el
+    # envio salio una vez con la cedula de ciudadania y el operador lo
+    # rechazo, porque la marca de extranjero no vale con CC.
+    if not tipo_doc and l.afiliado_id:
+        af = db.query(models.Afiliado).filter_by(id=l.afiliado_id).first()
+        if af:
+            tipo_doc = perfiles.documento_sugerido(af.subtipo, af.tipo_doc)
+
     if tipo_doc:
         tipo_doc = tipo_doc.strip().upper()
         if tipo_doc not in TIPOS_DOC_COTIZANTE:

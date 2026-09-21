@@ -116,3 +116,36 @@ def test_todos_los_subtipos_del_formulario_estan_mapeados():
 def test_cada_perfil_se_explica():
     for clave, p in perfiles.PERFILES.items():
         assert p.descripcion, clave
+
+
+# ─── El documento lo decide el servidor, no quien llame ───────────────────────
+#
+# Un envio salio con cedula de ciudadania y el operador lo rechazo: "El
+# cotizante CC1017234567 no puede ser marcado como extranjero no obligado a
+# cotizar pensiones". El frontend mandaba el documento correcto pero el envio
+# no dependia de eso, y no debe depender.
+
+def test_una_cedula_de_ciudadania_no_sirve_con_la_marca():
+    assert perfiles.documento_sugerido("20", "CC") == "CE"
+    assert perfiles.documento_sugerido("22", "CC") == "CE"
+
+
+def test_la_tarjeta_de_identidad_tampoco():
+    assert perfiles.documento_sugerido("20", "TI") == "CE"
+
+
+@pytest.mark.parametrize("doc", ["CE", "PA", "CD", "SC", "PE", "PT", "PC"])
+def test_un_documento_que_el_operador_acepta_se_respeta(doc):
+    """No se pisa el documento real de alguien por poner CE porque si."""
+    assert perfiles.documento_sugerido("22", doc) == ""
+
+
+def test_la_lista_es_la_que_devolvio_el_operador():
+    """"solo son permitidos PA, CE, CD, SC, PE, PT y PC" — dos mas que el anexo."""
+    assert set(ob.DOCS_EXTRANJERO) == {"CE", "PA", "CD", "SC", "PE", "PT", "PC"}
+
+
+def test_los_documentos_aceptados_se_pueden_pedir_en_el_plano():
+    """De nada sirve aceptarlos si el endpoint del plano los rechaza."""
+    from routers.liquidacion import TIPOS_DOC_COTIZANTE
+    assert set(ob.DOCS_EXTRANJERO) <= TIPOS_DOC_COTIZANTE

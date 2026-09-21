@@ -62,10 +62,16 @@ def perfil(subtipo) -> Perfil:
 def documento_sugerido(subtipo, tipo_doc_actual: str = "") -> str:
     """Con qué documento conviene mandar a esta persona al operador.
 
-    Devuelve cadena vacía cuando el subtipo no pide uno distinto del que ya
-    tiene el afiliado, para que el resto del sistema no haga nada.
+    Devuelve cadena vacía cuando no hay nada que cambiar. Lo que el perfil
+    pide no es "cédula de extranjería" sino "un documento que el operador
+    acepte con la marca del campo 7", y hay siete que sirven. Si la persona ya
+    tiene uno de esos —un permiso por protección temporal, un pasaporte— se
+    respeta: es su documento real y cambiarlo por CE sería empeorarlo.
     """
+    from .obligaciones import DOCS_EXTRANJERO
+
     pedido = perfil(subtipo).tipo_doc
-    if not pedido or pedido == (tipo_doc_actual or "").strip().upper():
+    actual = (tipo_doc_actual or "").strip().upper()
+    if not pedido or actual == pedido or actual in DOCS_EXTRANJERO:
         return ""
     return pedido
