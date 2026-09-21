@@ -219,19 +219,14 @@ def test_el_aviso_llega_al_resumen():
     assert any("toda persona lleva EPS" in a for a in avisos)
 
 
-# ─── Grupos que se tramitan por fuera ─────────────────────────────────────────
+# ─── Quién se envía al operador ───────────────────────────────────────────────
 #
-# El subtipo 20 no se envia al operador desde aqui. Se liquida y se puede
-# bajar el archivo para revisarlo, pero el envio se corta: que el boton este
-# disponible y el operador la rechace despues es peor que decirlo antes.
+# El envío es el que deja el enlace de pago. Todos los subtipos del formulario
+# salen por el mismo camino, incluido el 20.
 
-@pytest.mark.parametrize("subtipo", ["0", "3", "4", "22"])
-def test_los_demas_grupos_si_se_envian(subtipo):
+@pytest.mark.parametrize("subtipo", ["0", "3", "4", "20", "22"])
+def test_todos_los_grupos_del_formulario_se_envian(subtipo):
     assert perfiles.se_envia_al_operador(subtipo) is True
-
-
-def test_el_20_no_se_envia():
-    assert perfiles.se_envia_al_operador("20") is False
 
 
 def test_un_subtipo_desconocido_se_envia():
@@ -239,8 +234,7 @@ def test_un_subtipo_desconocido_se_envia():
     assert perfiles.se_envia_al_operador("99") is True
 
 
-def test_el_20_se_sigue_liquidando_y_lo_avisa():
-    """Se puede ver el numero y bajar el archivo: lo que se corta es el envio."""
+def test_el_20_se_sigue_liquidando():
     from services.pila.liquidacion import liquidar
     from tests.test_pila_subtipo import _Afiliado, _Aportante
     af = _Afiliado()
@@ -248,4 +242,4 @@ def test_el_20_se_sigue_liquidando_y_lo_avisa():
     af.servicios = '["EPS","CCF","ARL 1"]'
     r = liquidar([af], _Aportante(), 2026, 9)
     assert int(r.total_general) > 0
-    assert any("se tramita por fuera" in a for a in r.avisos)
+    assert not any("se tramita por fuera" in a for a in r.avisos)

@@ -22,7 +22,7 @@ norma.
 import json
 
 from fastapi import APIRouter, Depends, HTTPException
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -746,6 +746,30 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
     cuerpo, nombre, _ = _armar_plano(db, l, tipo_doc)
     return PlainTextResponse(
         cuerpo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@router.get("/{liquidacion_id}/comprobante")
+def descargar_comprobante(liquidacion_id: int,
+                          db: Session = Depends(get_db),
+                          token=Depends(require_admin_or_empleado)):
+    """El recibo que emite el operador después de pagar, no el plano tipo 1/2."""
+    l = db.query(models.PlanillaLiquidacion).filter_by(id=liquidacion_id).first()
+    if not l:
+        raise HTTPException(404, "Liquidación no encontrada")
+    if not l.numero_planilla:
+        raise HTTPException(409, "Esta planilla todavía no tiene número del "
+                                 "operador: hay que enviarla y pagarla antes")
+    ap = db.query(models.AportantePila).filter_by(id=l.aportante_id).first()
+    if not ap:
+        raise HTTPException(409, "No hay aportante para pedir el comprobante")
+    try:
+        cuerpo, tipo, nombre = operador.traer_comprobante(
+            l.numero_planilla, ap.tipo_doc or "NI", ap.num_doc)
+    except operador.ErrorOperador as e:
+        raise HTTPException(502, str(e))
+    return Response(
+        content=cuerpo, media_type=tipo,
+        headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
 
 
 @router.post("/{liquidacion_id}/enviar")

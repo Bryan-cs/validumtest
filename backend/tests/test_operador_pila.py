@@ -17,6 +17,10 @@ def _h(token):
 
 @pytest.fixture
 def con_credenciales(monkeypatch):
+    monkeypatch.delenv("PAGOSIMPLE_USUARIO", raising=False)
+    monkeypatch.delenv("PAGOSIMPLE_CONTRASENA", raising=False)
+    monkeypatch.delenv("PAGOSIMPLE_API_KEY", raising=False)
+    monkeypatch.setenv("PILA_OPERADOR", "suaporte")
     monkeypatch.setenv("SUAPORTE_USUARIO", "CC8487324")
     monkeypatch.setenv("SUAPORTE_CONTRASENA", "0000")
     monkeypatch.setenv("SUAPORTE_CLAVE_SECRETA", "clave-de-prueba")
@@ -455,4 +459,98 @@ def test_pagosimple_usa_simple_co_y_la_clave_de_api(modo_real, monkeypatch):
     assert any("simple.co/auth/login" in u for u, _ in llamadas)
     assert operador.operador_nombre() == "pagosimple"
     assert operador.credenciales()[2] == "clave-pagosimple"
+
+
+def test_comprobante_en_simulacion_no_sale(monkeypatch, con_credenciales):
+    monkeypatch.delenv("SUAPORTE_MODO", raising=False)
+    sesion = operador.Sesion(sesion={"token": "T1"}, autorizacion={"profiles": "P"},
+                             simulada=True)
+
+    def explota(*a, **k):
+        raise AssertionError("no debería abrirse ninguna conexión en simulación")
+
+    monkeypatch.setattr(httpx.Client, "get", explota)
+    with pytest.raises(operador.ErrorOperador, match="simulación"):
+        operador.descargar_comprobante(sesion, "88320590")
+
+
+def test_comprobante_pdf(modo_real):
+    def responder(request):
+        assert str(request.url).endswith("/planillas/88320590/comprobante")
+        return httpx.Response(200, content=b"%PDF-1.4 x",
+                              headers={"content-type": "application/pdf"})
+
+    sesion = operador.Sesion(sesion={"token": "T1"}, autorizacion={"profiles": "P"})
+    with _cliente_falso(responder) as c:
+        cuerpo, tipo, nombre = operador.descargar_comprobante(sesion, "88320590", c)
+    assert cuerpo.startswith(b"%PDF")
+    assert tipo == "application/pdf"
+    assert "88320590" in nombre
+
+
+def test_comprobante_cae_a_soporte_si_falta_la_primera_ruta(modo_real):
+    def responder(request):
+        url = str(request.url)
+        if url.endswith("/comprobante"):
+            return httpx.Response(404, text="no")
+        if url.endswith("/soporte"):
+            return httpx.Response(200, content=b"%PDF-1.4 y",
+                                  headers={"content-type": "application/pdf"})
+        return httpx.Response(404)
+
+    sesion = operador.Sesion(sesion={"token": "T1"}, autorizacion={"profiles": "P"})
+    with _cliente_falso(responder) as c:
+        cuerpo, tipo, _ = operador.descargar_comprobante(sesion, "11", c)
+    assert cuerpo.startswith(b"%PDF")
+    assert tipo == "application/pdf"
+
+
+def test_comprobante_en_base64(modo_real):
+    pdf = b"%PDF-1.4 z"
+    def responder(request):
+        return httpx.Response(200, json={"archivo": __import__("base64").b64encode(pdf).decode()})
+
+    sesion = operador.Sesion(sesion={"token": "T1"}, autorizacion={"profiles": "P"})
+    with _cliente_falso(responder) as c:
+        cuerpo, tipo, _ = operador.descargar_comprobante(sesion, "22", c)
+    assert cuerpo == pdf
+    assert tipo == "application/pdf"
+
+
+def test_comprobante_sin_numero_es_409(client, admin_token, db, monkeypatch):
+    import itertools
+    import models
+    from decimal import Decimal
+
+    monkeypatch.delenv("SUAPORTE_MODO", raising=False)
+    n = next(itertools.count(9100))
+    cliente_ref = f"COMP-{n}"
+    ap_id = client.post("/aportantes", json={
+        "cliente_ref": cliente_ref, "razon_social": "COMP SAS",
+        "tipo_doc": "NI", "num_doc": "900111222", "tipo_aportante": "01",
+        "cod_arl": "14-11", "clase_riesgo": "1",
+    }, headers=_h(admin_token)).json()["id"]
+    org = db.query(models.AportantePila).filter_by(id=ap_id).first().organizacion_id
+    af = models.Afiliado(
+        organizacion_id=org, nombre="COMP PRUEBA", tipo_doc="CC", doc=f"77{n}",
+        cliente_txt=cliente_ref, empresa=cliente_ref, activo=True, estado="ACTIVO",
+        primer_apellido="PRUEBA", primer_nombre="COMP", tipo_cotizante="01",
+        cod_eps="EPS037", cod_afp="230301", clase_riesgo="1",
+        salario_basico=Decimal("1750905"), fecha_ingreso="2024-01-15")
+    db.add(af); db.commit(); db.refresh(af)
+    liq_id = client.post("/liquidacion", headers=_h(admin_token), json={
+        "afiliado_id": af.id, "anio": 2026, "mes": 9}).json()["id"]
+
+    r = client.get(f"/liquidacion/{liq_id}/comprobante", headers=_h(admin_token))
+    assert r.status_code == 409
+
+    fila = db.query(models.PlanillaLiquidacion).filter_by(id=liq_id).first()
+    fila.numero_planilla = "88320590"
+    db.commit()
+    monkeypatch.setattr(operador, "traer_comprobante",
+                        lambda *a, **k: (b"%PDF-1.4 ok", "application/pdf",
+                                         "comprobante_88320590.pdf"))
+    r = client.get(f"/liquidacion/{liq_id}/comprobante", headers=_h(admin_token))
+    assert r.status_code == 200
+    assert r.content.startswith(b"%PDF")
 

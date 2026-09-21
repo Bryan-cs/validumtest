@@ -288,6 +288,33 @@ export default function Liquidacion() {
     }
   };
 
+  const detalleDeBlob = async (err) => {
+    const data = err?.response?.data;
+    if (data instanceof Blob) {
+      try {
+        const j = JSON.parse(await data.text());
+        return j.detail || '';
+      } catch { return ''; }
+    }
+    return err?.response?.data?.detail || '';
+  };
+
+  const descargarComprobante = async (persona) => {
+    try {
+      const r = await api.get(`/liquidacion/${persona.planilla_id}/comprobante`,
+                              { responseType: 'blob' });
+      const tipo = r.headers['content-type'] || 'application/pdf';
+      const url = URL.createObjectURL(new Blob([r.data], { type: tipo }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `comprobante_${persona.numero_planilla}.pdf`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(await detalleDeBlob(e) || 'No se pudo bajar el comprobante');
+    }
+  };
+
   if (isError) return <ErrorMsg message="Error al cargar los afiliados" onRetry={refetch} />;
 
   return (
@@ -500,6 +527,12 @@ export default function Liquidacion() {
                       <Btn size="sm" variant="success"
                            onClick={() => window.open(p.link_pago, '_blank', 'noopener')}>
                         Pagar en PSE
+                      </Btn>
+                    )}
+                    {p.numero_planilla && (
+                      <Btn size="sm" variant="secondary"
+                           onClick={() => descargarComprobante(p)}>
+                        Comprobante
                       </Btn>
                     )}
                     {p.estado !== 'pagada' && (

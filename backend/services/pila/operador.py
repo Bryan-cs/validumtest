@@ -14,6 +14,8 @@ El recorrido, en este orden:
    `appId`, `refrescar`). Sin esto, el resto responde 401.
 3. `POST /api/generadorPlanillas/v1/planillas/validacion` con el archivo plano.
 4. `GET .../inconsistencias`, `GET .../totales` y `GET .../pago/url`.
+5. Tras el pago, `GET .../planillas/{numero}/comprobante` (u otras rutas
+   equivalentes) para el recibo que emite el operador.
 
 **Modo simulación.** Por defecto el cliente no sale a la red: arma la petición,
 la registra y devuelve una respuesta marcada como simulada. Enviar una planilla
@@ -25,9 +27,11 @@ de API (`PAGOSIMPLE_API_KEY` o `SUAPORTE_CLAVE_SECRETA`). Nunca en el código.
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import os
+import re
 import ssl
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -452,6 +456,128 @@ def url_pago(sesion: Sesion, numero_planilla: str,
     return ""
 
 
+# El operador no publica OpenAPI de comprobantes. Estas rutas existen detrás
+# del mismo gateway que validación/pago; se prueban en ese orden.
+_RUTAS_COMPROBANTE = (
+    "comprobante",
+    "soporte",
+    "pdf",
+    "soportePago",
+    "comprobantePago",
+)
+
+
+def _nombre_adjunto(headers: dict, numero: str) -> str:
+    raw = headers.get("content-disposition") or headers.get("Content-Disposition") or ""
+    m = re.search(r'filename\*?=(?:UTF-8\'\')?"?([^";]+)', raw, re.I)
+    if m:
+        return m.group(1).strip()
+    tipo = (headers.get("content-type") or "").lower()
+    ext = ".zip" if "zip" in tipo else ".pdf"
+    return f"comprobante_{numero}{ext}"
+
+
+def _bytes_de_respuesta(r: httpx.Response) -> tuple[bytes, str]:
+    """PDF/ZIP crudo, o JSON con el archivo en base64 / una URL."""
+    ctype = (r.headers.get("content-type") or "").split(";")[0].strip().lower()
+    raw = r.content or b""
+    if raw.startswith(b"%PDF") or "pdf" in ctype:
+        return raw, "application/pdf"
+    if raw.startswith(b"PK") or "zip" in ctype:
+        return raw, "application/zip"
+    if not raw:
+        raise ErrorOperador("El operador devolvió el comprobante vacío")
+    if "json" in ctype or raw[:1] in (b"{", b"["):
+        try:
+            datos = r.json()
+        except ValueError:
+            return raw, ctype or "application/octet-stream"
+        if isinstance(datos, str):
+            datos = {"archivo": datos}
+        if not isinstance(datos, dict):
+            raise ErrorOperador("El operador no devolvió un comprobante reconocible")
+        for clave in ("archivo", "file", "contenido", "comprobante", "pdf",
+                      "base64", "data"):
+            valor = datos.get(clave)
+            if isinstance(valor, str) and valor.strip():
+                try:
+                    cuerpo = base64.b64decode(valor, validate=False)
+                except Exception:
+                    continue
+                if cuerpo.startswith(b"%PDF"):
+                    return cuerpo, "application/pdf"
+                if cuerpo.startswith(b"PK"):
+                    return cuerpo, "application/zip"
+                if len(cuerpo) > 32:
+                    return cuerpo, "application/octet-stream"
+        url = datos.get("url") or datos.get("urlComprobante") or datos.get("link")
+        if url:
+            return b"", f"url:{url}"
+        raise ErrorOperador(
+            f"El operador no trajo el archivo del comprobante: {str(datos)[:240]}")
+    return raw, ctype or "application/octet-stream"
+
+
+def descargar_comprobante(sesion: Sesion, numero_planilla: str,
+                          cliente: Optional[httpx.Client] = None
+                          ) -> tuple[bytes, str, str]:
+    """El recibo de pago de esa planilla numerada: PDF o ZIP.
+
+    PagoSimple y SuAporte lo entregan después de pagar, no el plano tipo 1/2.
+    """
+    if not sesion.autorizada:
+        raise ErrorOperador("Hay que autorizar la sesión sobre el aportante "
+                            "antes de pedir el comprobante")
+    if sesion.simulada or not modo_real():
+        raise ErrorOperador("En simulación no hay comprobante del operador")
+    _registrar("comprobante", planilla=numero_planilla)
+    propio = cliente is None
+    cliente = cliente or _cliente_nuevo()
+    ultimo = ""
+    try:
+        for sufijo in _RUTAS_COMPROBANTE:
+            url = f"{_base_planillas()}/v1/planillas/{numero_planilla}/{sufijo}"
+            try:
+                r = cliente.get(url, headers=sesion.headers)
+            except httpx.HTTPError as e:
+                ultimo = f"{url}: {e}"
+                continue
+            if r.status_code in (404, 405):
+                ultimo = f"{url} respondió {r.status_code}"
+                continue
+            if r.status_code != 200:
+                ultimo = f"{url} respondió {r.status_code}: {r.text[:300]}"
+                if r.status_code in (401, 403):
+                    raise ErrorOperador(ultimo)
+                continue
+            try:
+                cuerpo, tipo = _bytes_de_respuesta(r)
+            except ErrorOperador as e:
+                ultimo = str(e)
+                continue
+            if tipo.startswith("url:"):
+                destino = tipo[4:]
+                try:
+                    r2 = cliente.get(destino, headers=sesion.headers)
+                except httpx.HTTPError as e:
+                    ultimo = f"{destino}: {e}"
+                    continue
+                if r2.status_code != 200:
+                    ultimo = f"{destino} respondió {r2.status_code}"
+                    continue
+                cuerpo, tipo = _bytes_de_respuesta(r2)
+                r = r2
+            if not cuerpo or tipo.startswith("url:"):
+                ultimo = f"{url} no trajo un archivo"
+                continue
+            return cuerpo, tipo, _nombre_adjunto(r.headers, numero_planilla)
+        raise ErrorOperador(
+            f"No se pudo bajar el comprobante de {numero_planilla}. {ultimo}")
+    finally:
+        if propio:
+            cliente.close()
+
+
 def administradoras_de(sesion: Sesion, tipo_doc: str, num_doc: str,
                        cliente: Optional[httpx.Client] = None):
     """EPS y AFP reales de una persona según BDUA y RUAF.
@@ -539,6 +665,18 @@ def pedir_correccion(codigo_planilla: str, tipo_doc_aportante: str,
             except ErrorOperador:
                 pass
         return resultado
+
+
+def traer_comprobante(numero_planilla: str, tipo_doc_aportante: str,
+                      num_doc_aportante: str) -> tuple[bytes, str, str]:
+    """Login, autoriza sobre el aportante y baja el comprobante pagado."""
+    with _cliente_nuevo() as cliente:
+        sesion = autenticar(cliente)
+        aportante = consultar_aportante(
+            sesion, tipo_doc_aportante, num_doc_aportante, cliente)
+        autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente,
+                  aportante_id=aportante.get("id"))
+        return descargar_comprobante(sesion, numero_planilla, cliente)
 
 
 def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str,
