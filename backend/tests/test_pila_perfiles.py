@@ -63,11 +63,29 @@ def test_el_22_no_cotiza_pension_ni_teniendola_contratada():
 
 @pytest.mark.parametrize("subtipo", ["20", "22"])
 def test_los_dos_grupos_de_extranjeria_no_cotizan_pension(subtipo):
-    """Los dos usan la marca del campo 7 y salen con documento de extranjeria."""
+    """Ninguno cotiza pension, pero por mecanismos distintos."""
     d = _liquidar(subtipo, servicios='["EPS","AFP","CCF","ARL 1"]')
-    assert d.extranjero_no_pension is True
     assert int(d.cot_pension) == 0
     assert d.cod_afp == ""
+
+
+def test_el_20_usa_el_subtipo_de_cotizante_04():
+    """Medido contra el validador del operador, una variable a la vez.
+
+    Con el campo 7 y subtipo 00, los mismos datos sin caja devuelven "dias
+    cotizados a riesgos y parafiscales deben ser iguales". Con subtipo 04 y el
+    campo 7 en blanco, pasan sin un error. El campo 7 exime solo de pension;
+    el 04 es el que permite liquidar sin caja.
+    """
+    d = _liquidar("20", servicios='["EPS","ARL 1"]')
+    assert d.subtipo_cotizante == "04"
+    assert d.extranjero_no_pension is False
+
+
+def test_el_22_conserva_la_marca_del_campo_7():
+    """Es gente con documento de extranjeria de verdad: la marca los describe."""
+    d = _liquidar("22", servicios='["EPS","ARL 1"]')
+    assert d.extranjero_no_pension is True
 
 
 @pytest.mark.parametrize("subtipo", ["20", "22"])

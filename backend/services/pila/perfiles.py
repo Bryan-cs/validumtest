@@ -9,20 +9,26 @@ deducir solo con el tipo de cotizante.
     0    cotiza a pensión, y la tiene contratada
     3    exonerada de pensión — no obligada por edad
     4    exonerada de pensión — requisitos cumplidos
-    20   extranjera que se liquida con cédula de extranjería
+    20   se liquida con cédula de extranjería y sin pensión ni caja
     22   extranjera no obligada a cotizar a pensión
 
 Los números 3 y 4 coinciden con los subtipos de cotizante del anexo que
 significan lo mismo (campo 6), así que se mapean directo.
 
-El 20 y el 22 usan la marca del campo 7, "extranjero no obligado a cotizar a
-pensiones". Los dos grupos son de extranjeros y ninguno liquida pensión; la
-diferencia entre ellos es de negocio, no de archivo.
+El 20 usa el subtipo de cotizante 04 y sale con cédula de extranjería, que es
+la forma que el operador acepta y la que usa el sistema con el que se
+contrastó. Se probó contra su validador cambiando una variable a la vez: con
+el campo 7 y subtipo 00 devuelve "días cotizados a riesgos y parafiscales
+deben ser iguales"; con subtipo 04 y el campo 7 en blanco, los mismos datos
+pasan sin un error.
 
-Esa marca no se puede fingir: el operador la valida contra su propio registro,
-no contra el documento del archivo. A quien tenga cédula de ciudadanía allá,
-la rechaza por mucho que el plano diga CE. Es la comprobación que decide si
-una persona de estos grupos pasa o no, y está fuera de este sistema.
+Eso es lo contrario de lo que parecía. El campo 7 exime solo de pensión —lo
+dice su propia sección del anexo— y deja intactas las obligaciones de salud,
+riesgos y caja. El 04 es el que permite liquidar sin caja.
+
+El 22 conserva el campo 7, que es lo suyo: gente con documento de extranjería
+de verdad, donde la marca describe su situación y el operador la valida
+contra su propio registro.
 """
 from typing import NamedTuple, Optional
 
@@ -43,8 +49,8 @@ PERFILES = {
                  descripcion="Exonerada de pensión: no obligada por edad"),
     "4":  Perfil(subtipo_cotizante="04",
                  descripcion="Exonerada de pensión: requisitos cumplidos"),
-    "20": Perfil(extranjero_no_pension=True, tipo_doc="CE",
-                 descripcion="Extranjera que se liquida con cédula de extranjería"),
+    "20": Perfil(subtipo_cotizante="04", tipo_doc="CE",
+                 descripcion="Se liquida con cédula de extranjería, sin pensión ni caja"),
     "22": Perfil(extranjero_no_pension=True, tipo_doc="CE",
                  descripcion="Extranjera no obligada a cotizar a pensión"),
 }
