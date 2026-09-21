@@ -281,6 +281,9 @@ def valores_desde_detalle(detalle, secuencia: int) -> dict:
         "doc": detalle.doc,
         "tipo_cotizante": detalle.tipo_cotizante,
         "subtipo_cotizante": detalle.subtipo_cotizante or 0,
+        # Campos 7 y 8: marcas, se escriben con X o se dejan en blanco.
+        "extranjero_no_pension": "X" if detalle.extranjero_no_pension else "",
+        "colombiano_exterior": "X" if detalle.colombiano_exterior else "",
         "cod_depto_labor": detalle.cod_depto_labor,
         "cod_municipio_labor": detalle.cod_municipio_labor,
         "primer_apellido": detalle.primer_apellido,

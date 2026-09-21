@@ -98,18 +98,36 @@ def nombre_tipo(tipo_cotizante: str) -> str:
     return NOMBRES_TIPO.get(tipo, f"tipo {tipo}")
 
 
-def revisar(tipo_cotizante: str, servicios) -> list:
+# Documentos que el anexo acepta para un extranjero no obligado a pensión
+# (sección 2.1.2.3.3). Con cédula de ciudadanía la marca no tiene sentido.
+DOCS_EXTRANJERO = ("CE", "PA", "CD", "SC", "PE")
+
+
+def revisar(tipo_cotizante: str, servicios, extranjero_no_pension: bool = False,
+            colombiano_exterior: bool = False, tipo_doc: str = "") -> list:
     """Choques entre el tipo de cotizante y lo contratado.
 
     Devuelve una lista de frases, vacía si todo cuadra. Cada frase dice qué
     falta o qué sobra y las dos salidas posibles, porque cualquiera de los dos
     datos puede ser el equivocado: puede faltar el servicio en el formulario, o
     puede estar mal el tipo de cotizante.
+
+    Las marcas de los campos 7 y 8 levantan la obligación que corresponda: un
+    extranjero no obligado a cotizar a pensiones sigue siendo un dependiente,
+    pero reclamarle pensión sería reclamar algo que la ley no le exige. Igual
+    con la salud del colombiano en el exterior.
     """
     tipo = (tipo_cotizante or "").strip().zfill(2)
     reglas = OBLIGACIONES.get(tipo)
     if not reglas:
         return []
+
+    if extranjero_no_pension or colombiano_exterior:
+        reglas = list(reglas)
+        if colombiano_exterior:
+            reglas[0] = NO_APLICA     # salud
+        if extranjero_no_pension:
+            reglas[1] = NO_APLICA     # pensión
 
     servicios = list(servicios or [])
     etiqueta = f"tipo de cotizante {tipo} ({nombre_tipo(tipo)})"
@@ -130,6 +148,16 @@ def revisar(tipo_cotizante: str, servicios) -> list:
             f"el {etiqueta} no cotiza a {_y(sobran)}, y está contratado. "
             f"El operador lo va a rechazar: quita el servicio o corrige el tipo "
             f"de cotizante.")
+
+    # La marca del campo 7 solo vale con documento de extranjero; el operador
+    # rechaza la combinación con CC. Como el tipo de documento del plano se
+    # puede cambiar al descargar, se revisa el que se vaya a usar.
+    doc = (tipo_doc or "").strip().upper()
+    if extranjero_no_pension and doc and doc not in DOCS_EXTRANJERO:
+        problemas.append(
+            f"está marcado como extranjero no obligado a cotizar a pensiones, "
+            f"pero el documento es {doc}. El anexo solo acepta esa marca con "
+            f"{_y(list(DOCS_EXTRANJERO))}.")
 
     return problemas
 

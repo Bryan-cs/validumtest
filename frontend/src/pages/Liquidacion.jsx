@@ -130,8 +130,13 @@ export default function Liquidacion() {
   });
 
   const enviar = useMutation({
-    mutationFn: async (persona) =>
-      (await api.post(`/liquidacion/${persona.planilla_id}/enviar`)).data,
+    // El envio sale con el mismo documento que se eligio para descargar: si la
+    // persona esta en las bases del operador como CE, mandar CC la deja fuera.
+    mutationFn: async (persona) => {
+      const tipo = docDescarga[persona.planilla_id] || persona.tipo_doc || 'CC';
+      const qs = tipo && tipo !== persona.tipo_doc ? `?tipo_doc=${tipo}` : '';
+      return (await api.post(`/liquidacion/${persona.planilla_id}/enviar${qs}`)).data;
+    },
     onSuccess: (d) => {
       setRespuesta(d);
       if (d.simulado) {

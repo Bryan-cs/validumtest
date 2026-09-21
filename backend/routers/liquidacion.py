@@ -357,12 +357,18 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
 
 @router.post("/{liquidacion_id}/enviar")
 def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
+                       tipo_doc: str = "",
                        db: Session = Depends(get_db),
                        token=Depends(require_admin_or_empleado)):
     """Manda la planilla al operador y guarda lo que responda.
 
     Sustituye el recorrido manual: descargar, entrar al portal, subir, revisar
     inconsistencias y volver por el enlace de pago.
+
+    `tipo_doc` es el mismo del plano y por la misma razón: si la persona está
+    en las bases del operador con otro documento, el envío tiene que salir con
+    ese. Sin esto se podía descargar el archivo con CE y mandar CC, que es lo
+    contrario de lo que se eligió.
 
     El cliente arranca en modo simulación y no sale a la red mientras
     `SUAPORTE_MODO` no sea "real": enviar crea un registro en el operador y el
@@ -377,7 +383,7 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
         raise HTTPException(409, f"Esta planilla ya fue enviada y quedó numerada "
                                  f"como {l.numero_planilla}")
 
-    cuerpo, nombre, ap = _armar_plano(db, l)
+    cuerpo, nombre, ap = _armar_plano(db, l, tipo_doc)
 
     try:
         resultado = operador.enviar_planilla(

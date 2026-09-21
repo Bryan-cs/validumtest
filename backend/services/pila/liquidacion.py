@@ -40,6 +40,10 @@ class DetalleLiquidado:
     segundo_nombre: str = ""
     tipo_cotizante: str = "01"
     subtipo_cotizante: str = ""
+    # Campos 7 y 8 del registro tipo 2. Son marcas, no valores: cuando estan
+    # puestas el subsistema correspondiente no se liquida.
+    extranjero_no_pension: bool = False
+    colombiano_exterior: bool = False
     cod_depto_labor: str = ""
     cod_municipio_labor: str = ""
 
@@ -223,6 +227,8 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         primer_nombre=nom_pri, segundo_nombre=nom_seg,
         tipo_cotizante=afiliado.tipo_cotizante or "01",
         subtipo_cotizante=afiliado.subtipo_cotizante or "",
+        extranjero_no_pension=bool(getattr(afiliado, "extranjero_no_pension", False)),
+        colombiano_exterior=bool(getattr(afiliado, "colombiano_exterior", False)),
         cod_depto_labor=afiliado.cod_depto_labor or aportante.cod_depto or "",
         cod_municipio_labor=afiliado.cod_municipio_labor or aportante.cod_municipio or "",
         cod_afp=afiliado.cod_afp or "", cod_eps=afiliado.cod_eps or "",
@@ -245,6 +251,18 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
     contrata_salud = "EPS" in servicios
     contrata_pension = "AFP" in servicios
     contrata_caja = "CCF" in servicios
+
+    # Las marcas de los campos 7 y 8 pesan mas que el servicio contratado. Un
+    # extranjero no obligado a cotizar a pensiones cotiza a todo lo demas segun
+    # su tipo de cotizante, pero de pension no se liquida nada: el anexo exige
+    # dejar vacios los campos 19, 20, 28, 31, 32, 36, 42 y 46 al 53, que son
+    # justo los que llena este bloque. Lo mismo con salud para el colombiano en
+    # el exterior.
+    if d.extranjero_no_pension:
+        contrata_pension = False
+        d.cod_afp = ""      # campo 31, tambien va vacio
+    if d.colombiano_exterior:
+        contrata_salud = False
     clase_contratada = next((s.split()[-1] for s in servicios if s.startswith("ARL")), None)
 
     # Pensión
@@ -327,7 +345,11 @@ def liquidar(afiliados, aportante, anio: int, mes: int) -> ResumenLiquidacion:
         # Lo contratado manda para liquidar, pero el operador valida contra el
         # tipo de cotizante. Cuando los dos no coinciden el rechazo es seguro,
         # así que conviene decirlo aquí y no después de subir el archivo.
-        for choque in obligaciones.revisar(d.tipo_cotizante, d.servicios):
+        for choque in obligaciones.revisar(
+                d.tipo_cotizante, d.servicios,
+                extranjero_no_pension=d.extranjero_no_pension,
+                colombiano_exterior=d.colombiano_exterior,
+                tipo_doc=d.tipo_doc):
             resumen.avisos.append(f"{quien}: {choque}")
 
         resumen.detalles.append(d)

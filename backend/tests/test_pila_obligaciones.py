@@ -90,6 +90,7 @@ class _Afiliado:
     arl = "14-11"; novedades = None; fecha_ingreso = None; fecha_afiliacion = None
     estado = "ACTIVO"; extranjero_no_pension = False; colombiano_exterior = False
     ibc = None; salario_basico = None; tarifa_arl = None
+    extranjero_no_pension = False; colombiano_exterior = False
     horas_laboradas = None; cotizante_principal_tipo_doc = None
     cotizante_principal_doc = None; fecha_nacimiento = None; sexo = "F"
 
@@ -125,3 +126,70 @@ def test_sin_ibc_individual_el_salario_manda():
     d = _liquidar(ibc=None, salario=3000000)
     assert int(d.salario_basico) == 3000000
     assert int(d.ibc_salud) == 3000000
+
+
+# ─── Marcas de los campos 7 y 8 ───────────────────────────────────────────────
+
+def test_extranjero_no_obligado_a_pension_no_reclama_pension():
+    """Sigue siendo dependiente, pero la ley no le exige pension."""
+    avisos = ob.revisar("01", ["EPS", "ARL 2", "CCF"],
+                        extranjero_no_pension=True, tipo_doc="CE")
+    assert avisos == []
+
+
+def test_sin_la_marca_el_mismo_caso_si_reclama_pension():
+    avisos = ob.revisar("01", ["EPS", "ARL 2", "CCF"], tipo_doc="CE")
+    assert len(avisos) == 1 and "pensión" in avisos[0]
+
+
+def test_la_marca_de_extranjero_exige_documento_de_extranjero():
+    avisos = ob.revisar("01", ["EPS", "ARL 2", "CCF"],
+                        extranjero_no_pension=True, tipo_doc="CC")
+    assert len(avisos) == 1
+    assert "el documento es CC" in avisos[0]
+    for doc in ("CE", "PA", "CD", "SC", "PE"):
+        assert doc in avisos[0]
+
+
+@pytest.mark.parametrize("doc", ["CE", "PA", "CD", "SC", "PE"])
+def test_los_cinco_documentos_del_anexo_pasan(doc):
+    assert ob.revisar("01", ["EPS", "ARL 2", "CCF"],
+                      extranjero_no_pension=True, tipo_doc=doc) == []
+
+
+def test_colombiano_en_el_exterior_no_reclama_salud():
+    assert ob.revisar("01", ["AFP", "ARL 2", "CCF"], colombiano_exterior=True) == []
+
+
+def test_el_motor_apaga_la_pension_y_vacia_el_codigo_de_afp():
+    """Campos 31, 36, 42 y 46 al 53 tienen que salir vacios."""
+    from services.pila import plano
+    af = _Afiliado()
+    af.ibc, af.salario_basico = 3000000, 3000000
+    af.extranjero_no_pension = True
+    af.tipo_doc = "CE"
+    d = _liquidar_af(af)
+    assert int(d.cot_pension) == 0
+    assert int(d.ibc_pension) == 0
+    assert d.cod_afp == ""
+    assert int(d.fsp_solidaridad) == 0 and int(d.fsp_subsistencia) == 0
+    # Y la salud sigue liquidandose: solo se cae la pension.
+    assert int(d.cot_salud) > 0
+
+    linea = plano.registro_tipo_2(plano.valores_desde_detalle(d, 1))
+    c7 = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == "extranjero_no_pension")
+    assert linea[c7.inicio - 1] == "X"
+
+
+def test_colombiano_en_el_exterior_apaga_la_salud():
+    af = _Afiliado()
+    af.ibc, af.salario_basico = 3000000, 3000000
+    af.colombiano_exterior = True
+    d = _liquidar_af(af)
+    assert int(d.cot_salud) == 0
+    assert int(d.cot_pension) > 0
+
+
+def _liquidar_af(af):
+    from services.pila.liquidacion import liquidar_afiliado
+    return liquidar_afiliado(af, _Aportante(), 2026, 8)
