@@ -269,6 +269,14 @@ export default function Liquidacion() {
                   {p.tipo_doc} {p.doc}
                   {p.cliente && <span style={{ fontFamily: 'inherit' }}> · {p.cliente}</span>}
                 </div>
+                {/* El plano se congela al liquidar. Si los datos cambiaron
+                    despues, descargar trae el archivo viejo sin avisar. */}
+                {p.desactualizada && (
+                  <div style={{ fontSize: 12, color: '#92400E', marginTop: 4 }}>
+                    Los datos de la persona cambiaron despues de liquidar. El plano
+                    saldra con los valores anteriores: anula y vuelve a liquidar.
+                  </div>
+                )}
               </div>
 
               {p.planilla_id ? (
@@ -290,7 +298,10 @@ export default function Liquidacion() {
                       Descargar plano
                     </Btn>
                     {p.estado !== 'numerada' && p.estado !== 'pagada' && (
-                      <Btn size="sm" disabled={enviar.isPending}
+                      <Btn size="sm" disabled={enviar.isPending || p.desactualizada}
+                           title={p.desactualizada
+                             ? 'Los datos cambiaron despues de liquidar: anula y vuelve a liquidar'
+                             : undefined}
                            onClick={() => enviar.mutate(p)}>
                         {p.codigo_planilla ? 'Reenviar' : 'Enviar al operador'}
                       </Btn>

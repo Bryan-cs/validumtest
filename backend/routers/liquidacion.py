@@ -139,10 +139,16 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
                            models.PlanillaLiquidacion.estado != "anulada").all()
     }
 
+    def _vieja(a):
+        """Si el afiliado cambió después de liquidar, el plano va desfasado."""
+        l = liquidadas.get(a.doc)
+        return bool(l and l.creado and a.actualizado and a.actualizado > l.creado)
+
     return [{
         "id": a.id, "doc": a.doc, "tipo_doc": a.tipo_doc,
         "nombre": _nombre(a), "cliente": a.cliente_txt,
         "tipo_cotizante": a.tipo_cotizante,
+        "desactualizada": _vieja(a),
         "planilla_id": liquidadas[a.doc].id if a.doc in liquidadas else None,
         "estado": liquidadas[a.doc].estado if a.doc in liquidadas else None,
         "total": int(liquidadas[a.doc].total_general or 0) if a.doc in liquidadas else None,
@@ -231,6 +237,26 @@ def liquidar(data: schemas.LiquidacionRequest, db: Session = Depends(get_db),
             **_resumen_a_dict(resumen, af, ap, data.anio, data.mes)}
 
 
+def _desactualizadas(db: Session, liquidaciones) -> set:
+    """Las liquidaciones cuyo afiliado cambió después de liquidar.
+
+    La línea del plano se congela al liquidar, que es lo correcto: el archivo
+    que se manda tiene que ser el que se revisó. El problema es el silencio.
+    Si alguien corrige el IBC o agrega un servicio y vuelve a descargar, baja
+    el archivo viejo sin enterarse, lo sube al operador y recibe los mismos
+    errores que creía haber corregido. Esto no cambia la congelación: solo la
+    hace visible para que la pantalla pueda decir "vuelve a liquidar".
+    """
+    ids = {l.afiliado_id for l in liquidaciones if l.afiliado_id}
+    if not ids:
+        return set()
+    cambios = dict(db.query(models.Afiliado.id, models.Afiliado.actualizado)
+                     .filter(models.Afiliado.id.in_(ids)).all())
+    return {l.id for l in liquidaciones
+            if l.afiliado_id and l.creado and cambios.get(l.afiliado_id)
+            and cambios[l.afiliado_id] > l.creado}
+
+
 @router.get("")
 def listar(cliente: str = "", periodo: str = "", doc: str = "", estado: str = "",
            db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
@@ -244,7 +270,9 @@ def listar(cliente: str = "", periodo: str = "", doc: str = "", estado: str = ""
     if estado:
         q = q.filter(models.PlanillaLiquidacion.estado == estado)
     filas = q.order_by(models.PlanillaLiquidacion.id.desc()).limit(300).all()
+    desfasadas = _desactualizadas(db, filas)
     return [{
+        "desactualizada": l.id in desfasadas,
         "id": l.id, "afiliado_doc": l.afiliado_doc, "afiliado_nombre": l.afiliado_nombre,
         "cliente_ref": l.cliente_ref, "tipo_planilla": l.tipo_planilla,
         "periodo_cotizacion": l.periodo_cotizacion, "periodo_pago": l.periodo_pago,
