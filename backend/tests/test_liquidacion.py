@@ -238,7 +238,13 @@ def test_posiciones_de_los_campos_calculados():
     assert int(linea[244:253]) == int(d.cot_pension)   # campo 47
 
 
-def test_tarifa_lleva_punto_decimal():
+def test_el_nombre_de_la_ficha_pisa_el_codigo_viejo_de_eps():
+    """ADRES deja 'Famisanar' en la ficha y el código puede seguir en Nueva EPS."""
+    af = _Afiliado()
+    af.eps = "Famisanar"
+    af.cod_eps = "EPS037"
+    d = motor.liquidar_afiliado(af, _Aportante(), 2026, 9)
+    assert d.cod_eps == "EPS017"
     """Formato verificado contra un plano real aceptado por el operador.
 
     Tres codificaciones sin punto —4, 5 y 6 decimales— fueron rechazadas con

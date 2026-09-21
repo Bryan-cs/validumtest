@@ -215,6 +215,20 @@ def _ibc(base: Decimal, dias: int, smlmv: Decimal) -> Decimal:
     return P.redondear_peso(min(max(proporcional, piso), techo))
 
 
+def _codigo_administradora(afiliado, tipo: str, nombre: str, codigo: str) -> str:
+    """El código que va al plano sale del nombre de la ficha.
+
+    ADRES y el formulario escriben "Famisanar". El archivo necesita EPS017.
+    `cod_eps` puede seguir en EPS037 de un guardado anterior: si el nombre
+    resuelve, ese código viejo no se manda.
+    """
+    from services.pila.catalogos import buscar_codigo
+    hallado = buscar_codigo(tipo, getattr(afiliado, nombre, "") or "")
+    if hallado:
+        return hallado
+    return getattr(afiliado, codigo, "") or ""
+
+
 def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
                      dias_facturados=None) -> DetalleLiquidado:
     """Calcula el registro de un cotizante. No toca la base de datos."""
@@ -258,8 +272,9 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
         colombiano_exterior=bool(getattr(afiliado, "colombiano_exterior", False)),
         cod_depto_labor=afiliado.cod_depto_labor or aportante.cod_depto or "",
         cod_municipio_labor=afiliado.cod_municipio_labor or aportante.cod_municipio or "",
-        cod_afp=afiliado.cod_afp or "", cod_eps=afiliado.cod_eps or "",
-        cod_ccf=afiliado.cod_ccf or "",
+        cod_afp=_codigo_administradora(afiliado, "AFP", "afp", "cod_afp"),
+        cod_eps=_codigo_administradora(afiliado, "EPS", "eps", "cod_eps"),
+        cod_ccf=_codigo_administradora(afiliado, "CCF", "ccf", "cod_ccf"),
         salario_basico=P.redondear_peso(salario),
         tipo_salario=(afiliado.tipo_salario or "F")[:1],
         centro_trabajo=afiliado.centro_trabajo or "",
