@@ -114,7 +114,7 @@ def test_sin_riesgos_contratados_se_reporta_la_afiliacion():
     assert int(d.tarifa_arl) == 0
     assert int(d.cot_arl) == 0
     assert d.cod_arl == "14-11"
-    assert d.clase_riesgo == "4"
+    assert d.clase_riesgo == "1"
 
 
 def test_con_riesgos_contratados_se_cobra_normal():
@@ -332,18 +332,43 @@ def test_eps_pension_arl_1_a_5_cotiza_su_clase_y_caja_en_100(clase):
     assert int(d.ibc_ccf) == 100
 
 
-def test_solo_eps_sin_caja_en_la_ficha_declara_ccf68():
-    """Error 256: el de prueba pasaba porque Andrés ya traía CCF03."""
-    d = _liquidar(["EPS"], cod_ccf="")
+def test_solo_eps_declara_ccf68_en_el_99_como_arus():
+    """El ejemplo que cobra $0 de ARL y $100 de COMCAJA usa 99/773."""
+    d = _liquidar(["EPS"], cod_ccf="CCF03", cod_depto_labor="76")
+    assert d.cod_ccf == "CCF68"
+    assert d.cod_depto_labor == "99"
+    assert d.cod_municipio_labor == "773"
     assert int(d.ibc_ccf) == 100
     assert int(d.valor_ccf) == 100
+    assert d.clase_riesgo == "1"
+    assert int(d.tarifa_arl) == 0
+    assert int(d.cot_arl) == 0
+    assert d.novedades.get("VAC") == "L"
+
+
+def test_con_arl_contratada_no_se_inventa_la_licencia():
+    d = _liquidar(["EPS", "ARL 4"])
+    assert int(d.cot_arl) > 0
+    assert d.novedades.get("VAC") != "L"
+
+
+def test_solo_eps_sin_caja_en_la_ficha_tambien_usa_ccf68():
+    d = _liquidar(["EPS"], cod_ccf="", cod_depto_labor="11")
     assert d.cod_ccf == "CCF68"
+    assert d.cod_depto_labor == "99"
 
 
-def test_solo_eps_conserva_la_caja_de_la_ficha():
-    d = _liquidar(["EPS"], cod_ccf="CCF03")
-    assert d.cod_ccf == "CCF03"
-    assert int(d.ibc_ccf) == 100
+def test_compensar_fuera_de_bogota_pasa_a_comcaja():
+    """CCF24 no cubre otro departamento: el operador pide COMCAJA."""
+    d = _liquidar(["EPS", "CCF"], cod_ccf="CCF24", cod_depto_labor="76")
+    assert d.cod_ccf == "CCF68"
+    assert d.cod_depto_labor == "99"
+
+
+def test_compensar_en_bogota_se_queda():
+    d = _liquidar(["EPS", "CCF"], cod_ccf="CCF24", cod_depto_labor="11")
+    assert d.cod_ccf == "CCF24"
+    assert d.cod_depto_labor == "11"
 
 
 def test_un_tipo_que_no_cotiza_a_caja_no_se_la_inventa():

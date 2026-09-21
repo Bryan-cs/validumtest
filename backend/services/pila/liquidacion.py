@@ -393,12 +393,17 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
         clase_afiliacion = str(afiliado.clase_riesgo or
                                getattr(aportante, "clase_riesgo", "") or "")
         if cod_arl and clase_afiliacion in P.TARIFA_ARL_POR_CLASE and dias:
+            # Tarifa 0 en tipo 01 solo la acepta el operador si el campo 27
+            # trae L (licencia remunerada), igual que el plano de ARUS que
+            # cobra ARL en $0. Sin esa marca rechaza los campos 381-389.
             d.dias_arl = dias
             d.ibc_arl = ibc
             d.tarifa_arl = Decimal("0")
             d.cot_arl = Decimal("0")
-            d.clase_riesgo = clase_afiliacion
+            d.clase_riesgo = "1"
             d.cod_arl = cod_arl
+            if not d.novedades.get("VAC"):
+                d.novedades["VAC"] = "L"
 
     # Parafiscales. Si CCF está contratada se cotiza sobre el IBC real
     # (mínimo 1 SMLMV). Si no, se declara caja con IBC 100 como los planos
@@ -426,16 +431,18 @@ def _llenar_ccf(d: DetalleLiquidado, dias: int, ibc: Decimal, token: bool,
     d.ibc_ccf = base
     d.tarifa_ccf = P.TARIFA_CCF
     d.valor_ccf = P.aproximar_aporte(base * P.TARIFA_CCF)
-    # El 256 pide código si hay aporte. Con caja contratada se usa la de la
-    # ficha (o el nombre resuelto). Sin contrato no hay ficha: CCF68, igual
-    # que los planos de ARUS que el operador acepta en solo EPS.
+    from services.pila.catalogos import buscar_codigo, caja_cubre_depto
     if not (d.cod_ccf or "").strip():
-        from services.pila.catalogos import buscar_codigo
         hallado = buscar_codigo("CCF", getattr(afiliado, "ccf", "") or "")
         if hallado:
             d.cod_ccf = hallado
-        elif token:
-            d.cod_ccf = P.COD_CCF_SIN_CONTRATO
+    # COMCAJA (CCF68) en 99/773: es la que el operador acepta cuando no hay
+    # caja contratada o cuando la de la ficha (Compensar CCF24, Comfenalco
+    # Antioquia CCF03) no cubre el departamento del campo 9.
+    if token or not caja_cubre_depto(d.cod_ccf, d.cod_depto_labor):
+        d.cod_ccf = P.COD_CCF_SIN_CONTRATO
+        d.cod_depto_labor = P.DEPTO_CCF_SIN_CONTRATO
+        d.cod_municipio_labor = P.MUN_CCF_SIN_CONTRATO
 
 
 def _debe_declarar_caja_sin_contrato(d: DetalleLiquidado) -> bool:

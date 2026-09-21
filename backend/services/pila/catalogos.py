@@ -218,6 +218,74 @@ def _normalizar(nombre: str) -> str:
     return " ".join(palabras)
 
 
+# Territorialidad (Ley 21 de 1982): cada caja opera en un departamento.
+# El operador rechaza si el código no cubre el DANE del campo 9 (error de
+# cubrimiento). COMCAJA es la excepción: Vichada, Vaupés, Guainía, Guaviare
+# y el 99 que el plano de ARUS usa para el exterior.
+CCF_DEPTOS = {
+    "CCF03": {"05"}, "CCF04": {"05"},
+    "CCF05": {"08"}, "CCF06": {"08"}, "CCF07": {"08"},
+    "CCF08": {"13"}, "CCF09": {"13"},
+    "CCF10": {"15"},
+    "CCF11": {"17"},
+    "CCF13": {"18"},
+    "CCF14": {"19"},
+    "CCF15": {"20"},
+    "CCF16": {"23"},
+    "CCF21": {"11"}, "CCF22": {"11"}, "CCF24": {"11"},
+    "CCF26": {"25"},
+    "CCF29": {"27"},
+    "CCF30": {"44"},
+    "CCF32": {"41"},
+    "CCF33": {"47"},
+    "CCF34": {"50"},
+    "CCF35": {"52"},
+    "CCF36": {"54"}, "CCF37": {"54"},
+    "CCF38": {"68"}, "CCF39": {"68"}, "CCF40": {"68"},
+    "CCF41": {"70"},
+    "CCF43": {"63"},
+    "CCF44": {"66"},
+    "CCF46": {"73"}, "CCF48": {"73"}, "CCF50": {"73"},
+    "CCF56": {"76"}, "CCF57": {"76"},
+    "CCF63": {"86"},
+    "CCF64": {"88"},
+    "CCF65": {"91"},
+    "CCF67": {"81"},
+    "CCF68": {"94", "95", "97", "99"},
+    "CCF69": {"85"},
+}
+
+# Una caja vigente por departamento, para declarar parafiscales sin contrato.
+CCF_DEL_DEPTO = {
+    "05": "CCF03", "08": "CCF07", "11": "CCF22", "13": "CCF08",
+    "15": "CCF10", "17": "CCF11", "18": "CCF13", "19": "CCF14",
+    "20": "CCF15", "23": "CCF16", "25": "CCF26", "27": "CCF29",
+    "41": "CCF32", "44": "CCF30", "47": "CCF33", "50": "CCF34",
+    "52": "CCF35", "54": "CCF37", "63": "CCF43", "66": "CCF44",
+    "68": "CCF40", "70": "CCF41", "73": "CCF50", "76": "CCF56",
+    "81": "CCF67", "85": "CCF69", "86": "CCF63", "88": "CCF64",
+    "91": "CCF65", "94": "CCF68", "95": "CCF68", "97": "CCF68",
+    "99": "CCF68",
+}
+
+
+def caja_cubre_depto(codigo: str, depto: str) -> bool:
+    return (depto or "").strip() in CCF_DEPTOS.get((codigo or "").strip(), set())
+
+
+def caja_del_departamento(depto: str, preferida: str = "") -> str:
+    """Caja que el operador acepta en ese departamento.
+
+    Si la de la ficha cubre el DANE, se deja. Si no —o si no hay—, la del
+    departamento. Sin DANE conocido, COMCAJA, que es la del 99 en ARUS.
+    """
+    depto = (depto or "").strip()
+    preferida = (preferida or "").strip()
+    if preferida and caja_cubre_depto(preferida, depto):
+        return preferida
+    return CCF_DEL_DEPTO.get(depto, "CCF68")
+
+
 def buscar_codigo(tipo: str, nombre: str) -> str:
     """El código PILA de una administradora a partir de su nombre.
 

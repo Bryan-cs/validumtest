@@ -9,7 +9,9 @@ obligatorio cuando hay aporte a salud".
 """
 import pytest
 
-from services.pila.catalogos import buscar_codigo, _normalizar
+from services.pila.catalogos import (
+    buscar_codigo, caja_cubre_depto, caja_del_departamento, _normalizar,
+)
 
 
 def _h(token):
@@ -188,3 +190,11 @@ def test_sincronizar_dos_veces_no_cambia_nada(client, admin_token):
     for lista in ("eps", "afp", "ccf"):
         assert segunda[lista]["agregadas"] == []
         assert segunda[lista]["retiradas"] == []
+
+
+def test_comfenalco_antioquia_no_cubre_valle():
+    assert caja_cubre_depto("CCF03", "05")
+    assert not caja_cubre_depto("CCF03", "76")
+    assert caja_del_departamento("76", "CCF03") == "CCF56"
+    assert caja_del_departamento("05", "CCF03") == "CCF03"
+    assert caja_del_departamento("99") == "CCF68"
