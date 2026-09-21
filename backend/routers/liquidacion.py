@@ -29,7 +29,7 @@ from database import get_db
 from routers.deps import require_admin, require_admin_or_empleado
 import const
 import models, schemas
-from crud_helpers import _log
+from crud_helpers import _log, _servicios_afiliado
 from services.pila import (liquidacion as motor, obligaciones, operador,
                            perfiles, plano)
 
@@ -264,6 +264,7 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
             "cliente": getattr(a, "cliente_txt", None) or f.cliente,
             "tipo_cotizante": getattr(a, "tipo_cotizante", None),
             "subtipo": getattr(a, "subtipo", None),
+            "servicios": _servicios_afiliado(a) if a is not None else [],
             "sin_afiliado": a is None,
             "factura_codigo": f.codigo,
             "factura_estado": f.estado,

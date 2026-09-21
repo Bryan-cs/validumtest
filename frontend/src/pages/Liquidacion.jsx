@@ -45,6 +45,7 @@ const COLUMNAS = [
   ['Documento', '#0369A1'],
   ['Empresa', '#6D28D9'],
   ['Subtipo', '#C2410C'],
+  ['Servicios', '#0F766E'],
   ['Factura', '#047857'],
   ['Total', '#1D4ED8'],
   ['Estado', C.text],
@@ -55,6 +56,29 @@ const lbl = {
   fontSize: 11, fontWeight: 800, letterSpacing: '0.06em',
   textTransform: 'uppercase', marginBottom: 4, display: 'block',
 };
+
+function Servicios({ lista }) {
+  const tono = {
+    EPS: { background: '#DBEAFE', color: '#1D4ED8' },
+    AFP: { background: '#EDE9FE', color: '#6D28D9' },
+    CCF: { background: '#D1FAE5', color: '#047857' },
+    ARL: { background: '#FEF3C7', color: '#B45309' },
+  };
+  if (!lista?.length) return <span style={{ color: C.text2 }}>—</span>;
+  return (
+    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+      {lista.map(s => {
+        const t = tono[s.startsWith('ARL') ? 'ARL' : s] || { background: C.surface2, color: C.text2 };
+        return (
+          <span key={s} style={{
+            fontSize: 11, fontWeight: 800, padding: '2px 6px', borderRadius: 4,
+            letterSpacing: '0.02em', ...t,
+          }}>{s}</span>
+        );
+      })}
+    </div>
+  );
+}
 
 function Etiqueta({ children, color }) {
   return <label style={{ ...lbl, color }}>{children}</label>;
@@ -569,6 +593,9 @@ export default function Liquidacion() {
                           {p.subtipo != null && p.subtipo !== ''
                             ? `${p.subtipo}${sub ? ` · ${sub}` : ''}` : '—'}
                         </td>
+                        <td style={{ ...td, whiteSpace: 'normal' }}>
+                          <Servicios lista={p.servicios} />
+                        </td>
                         <td style={{
                           ...td, fontWeight: 700,
                           color: p.factura_estado === 'pendiente' ? '#B45309' : '#047857',
@@ -648,7 +675,7 @@ export default function Liquidacion() {
                       </tr>
                       {(p.sin_afiliado || p.desactualizada) && (
                         <tr>
-                          <td colSpan={9} style={{
+                          <td colSpan={10} style={{
                             ...td, fontSize: 12,
                             color: p.sin_afiliado ? '#B91C1C' : '#92400E',
                             background: p.sin_afiliado ? '#FEF2F2' : '#FFFBEB',
