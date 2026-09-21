@@ -417,6 +417,21 @@ def test_descargar_plano_de_una_persona(client, admin_token, afiliado_listo):
     assert lineas[1][9:25].strip() == afiliado_listo["doc"]
 
 
+def test_descargar_plano_nomina_es_la_suma_de_ibc_ccf(client, admin_token, afiliado_listo):
+    """Error 183: el encabezado debe coincidir con el IBC de parafiscales."""
+    liq_id = client.post("/liquidacion", headers=_h(admin_token), json={
+        "afiliado_id": afiliado_listo["afiliado_id"],
+        "anio": 2026, "mes": 9}).json()["id"]
+    r = client.get(f"/liquidacion/{liq_id}/plano", headers=_h(admin_token))
+    lineas = r.text.rstrip("\r\n").split("\r\n")
+    c_nom = next(x for x in plano.CAMPOS_TIPO_1 if x.nombre == "valor_total_nomina")
+    c_ccf = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == "ibc_ccf")
+    nomina = int(lineas[0][c_nom.inicio - 1:c_nom.inicio - 1 + c_nom.longitud])
+    ibc_ccf = int(lineas[1][c_ccf.inicio - 1:c_ccf.inicio - 1 + c_ccf.longitud])
+    assert ibc_ccf == 100
+    assert nomina == ibc_ccf
+
+
 def test_afiliado_sin_aportante_no_se_liquida(client, admin_token, db):
     """Sin la empresa cargada no hay NIT para el encabezado."""
     n = next(_contador)

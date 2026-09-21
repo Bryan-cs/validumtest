@@ -712,8 +712,7 @@ def _armar_plano(db: Session, liquidaciones, tipo_doc: str = "",
         "numero_planilla": (primera.numero_planilla or 0) if len(liquidaciones) == 1 else 0,
         "fecha_pago": primera.fecha_limite_pago or "",
         "total_cotizantes": len(lineas),
-        "valor_total_nomina": int(sum((d.ibc_salud or d.ibc_pension or 0)
-                                      for d in detalles_todos)),
+        "valor_total_nomina": plano.suma_ibc_parafiscales(detalles_todos),
         "tipo_aportante": ap.tipo_aportante or 1, "cod_operador": 0,
     })
 

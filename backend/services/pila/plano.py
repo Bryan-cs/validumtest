@@ -343,6 +343,17 @@ def valores_desde_detalle(detalle, secuencia: int) -> dict:
     }
 
 
+def suma_ibc_parafiscales(detalles) -> int:
+    """Nómina del encabezado: suma del IBC de caja de los tipo 2.
+
+    El validador (error 183) compara el valor total de nómina del registro
+    tipo 1 con la sumatoria de IBC de aportes parafiscales, no con el IBC de
+    tipo 2. En un solo-EPS el IBC de caja es 100 (como ARUS) y el de salud
+    el salario: usar salud aquí era el descuadre.
+    """
+    return int(sum((getattr(d, "ibc_ccf", None) or 0) for d in detalles))
+
+
 def generar(aportante, liquidacion, resumen, modalidad: int = 1) -> str:
     """Arma el archivo completo: encabezado y un registro por cotizante.
 
@@ -369,8 +380,7 @@ def generar(aportante, liquidacion, resumen, modalidad: int = 1) -> str:
         "numero_planilla": liquidacion.numero_planilla or 0,
         "fecha_pago": liquidacion.fecha_limite_pago or "",
         "total_cotizantes": resumen.total_cotizantes,
-        "valor_total_nomina": int(sum((d.ibc_salud or d.ibc_pension)
-                                      for d in resumen.detalles)),
+        "valor_total_nomina": suma_ibc_parafiscales(resumen.detalles),
         "tipo_aportante": aportante.tipo_aportante or 1,
         "cod_operador": 0,
     })

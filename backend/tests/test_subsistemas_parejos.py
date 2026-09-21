@@ -159,40 +159,105 @@ def test_el_ibc_de_riesgos_sigue_al_de_salud_en_periodos_parciales():
     assert int(d.ibc_arl) == int(d.ibc_salud)
 
 
-# ─── IBC de caja 2400 ─────────────────────────────────────────────────────────
+# ─── IBC de caja según los planos ARUS que el operador acepta ──────────────────
 #
-# Con CE y sin pensión, las cuatro combinaciones declaran caja con IBC 2400.
-# Quien solo liquida EPS y ARL (aunque sea con CC) también: el operador
-# rechaza parafiscales en cero (285 y 820).
+# Sin CCF contratada: IBC caja 100 y aporte 100 (tarifa 4%).
+# Con CCF contratada: IBC caja = 1 SMLMV y aporte 70.100.
+# ARL contratada cotiza su clase; si no, tarifa 0 y cotización 0.
+# Salud, riesgos y caja siempre con los mismos días.
 
 
-@pytest.mark.parametrize("servicios", [
-    ["EPS"],
-    ["EPS", "CCF"],
-    ["EPS", "ARL 4"],
-    ["EPS", "CCF", "ARL 4"],
+@pytest.mark.parametrize("servicios,ibc_caja,arl_cero", [
+    (["EPS"], 100, True),
+    (["EPS", "ARL 4"], 100, False),
+    (["EPS", "CCF"], 1750905, True),
+    (["EPS", "CCF", "ARL 4"], 1750905, False),
 ])
-def test_ce_todas_las_combinaciones_ibc_ccf_2400(servicios):
+def test_ce_sigue_los_planos_arus(servicios, ibc_caja, arl_cero):
     from services.pila import obligaciones as ob
     from services.pila import parametros as P
     from services.pila import plano
     d = _liquidar(servicios)
     assert d.tipo_doc == "CE"
     assert d.dias_ccf == d.dias_salud == d.dias_arl == 30
-    assert int(d.ibc_ccf) == 2400
-    assert int(d.valor_ccf) == int(P.aproximar_aporte(P.IBC_CCF_SIN_CONTRATO * P.TARIFA_CCF))
+    assert int(d.ibc_ccf) == ibc_caja
+    assert int(d.valor_ccf) == int(P.aproximar_aporte(d.ibc_ccf * P.TARIFA_CCF))
     assert int(d.valor_sena) == 0
     assert int(d.valor_icbf) == 0
+    if arl_cero:
+        assert int(d.tarifa_arl) == 0
+        assert int(d.cot_arl) == 0
+    else:
+        assert float(d.tarifa_arl) == 0.0435
+        assert int(d.cot_arl) > 0
     assert ob.revisar_subsistemas_parejos(d) == []
     c = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == "ibc_ccf")
     linea = plano.registro_tipo_2(plano.valores_desde_detalle(d, 1))
-    assert linea[c.inicio - 1:c.inicio - 1 + c.longitud] == "000002400"
+    assert linea[c.inicio - 1:c.inicio - 1 + c.longitud] == f"{ibc_caja:09d}"
+
+
+def test_suma_ibc_parafiscales_ignora_ibc_salud():
+    """Error 183: la nómina del tipo 1 no es el IBC de salud."""
+    from services.pila import plano
+
+    class D:
+        def __init__(self, ibc_ccf, ibc_salud=1750905):
+            self.ibc_ccf = ibc_ccf
+            self.ibc_salud = ibc_salud
+            self.ibc_pension = ibc_salud
+
+    assert plano.suma_ibc_parafiscales([D(100)]) == 100
+    assert plano.suma_ibc_parafiscales([D(100), D(1750905)]) == 100 + 1750905
+    assert plano.suma_ibc_parafiscales([D(0)]) == 0
+
+
+class _Liq:
+    periodo_cotizacion = "2026-09"
+    tipo_planilla = "E"
+    numero_planilla = 0
+    fecha_limite_pago = ""
+
+
+def _nomina_del_encabezado(texto):
+    from services.pila import plano
+    c = next(x for x in plano.CAMPOS_TIPO_1 if x.nombre == "valor_total_nomina")
+    return int(texto.splitlines()[0][c.inicio - 1:c.inicio - 1 + c.longitud])
+
+
+def test_encabezado_nomina_del_solo_eps_es_ibc_ccf_no_salud():
+    """Solo EPS: IBC caja 100, IBC salud 1.750.905. El 183 pide la suma de caja."""
+    from services.pila.liquidacion import liquidar
+    from services.pila import plano
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.subtipo = "20"; af.subtipo_cotizante = ""
+    af.arl = ""; af.clase_riesgo = "4"; af.cod_arl = "14-11"; af.cod_ccf = "CCF24"
+    af.servicios = json.dumps(["EPS"])
+    af.ibc = af.salario_basico = 1750905
+    ap = _Aportante(); ap.tipo_doc = "NI"
+    resumen = liquidar([af], ap, 2026, 9)
+    d = resumen.detalles[0]
+    assert int(d.ibc_ccf) == 100
+    assert int(d.ibc_salud) == 1750905
+    assert _nomina_del_encabezado(plano.generar(ap, _Liq(), resumen)) == 100
+
+
+def test_encabezado_nomina_con_paquete_completo_sigue_siendo_el_ibc_real():
+    """Con CCF y pensión el IBC de caja ya es el salario: la nómina no cambia."""
+    from services.pila.liquidacion import liquidar
+    from services.pila import plano
+    from tests.test_liquidacion import _Afiliado, _Aportante
+    af = _Afiliado(servicios=["EPS", "AFP", "CCF", "ARL 1"], clase_riesgo="1")
+    ap = _Aportante()
+    resumen = liquidar([af], ap, 2026, 9)
+    assert int(resumen.detalles[0].ibc_ccf) == 1750905
+    assert _nomina_del_encabezado(plano.generar(ap, _Liq(), resumen)) == 1750905
 
 
 @pytest.mark.parametrize("clase", ["1", "2", "3", "4", "5"])
 @pytest.mark.parametrize("con_caja", [False, True])
-def test_ce_arl_1_a_5_cotiza_su_clase_y_caja_sigue_en_2400(clase, con_caja):
-    """El 2400 es de caja. Riesgos usa el IBC real y la tarifa de su clase."""
+def test_ce_arl_1_a_5_cotiza_su_clase(clase, con_caja):
+    """Riesgos usa el IBC real y su tarifa. Caja: 100 si no se paga, SMLMV si sí."""
     from services.pila import parametros as P
     servicios = ["EPS", f"ARL {clase}"]
     if con_caja:
@@ -203,10 +268,10 @@ def test_ce_arl_1_a_5_cotiza_su_clase_y_caja_sigue_en_2400(clase, con_caja):
     assert d.tarifa_arl == tarifa
     assert int(d.ibc_arl) == 1750905
     assert int(d.cot_arl) == int(P.aproximar_aporte(d.ibc_arl * tarifa))
-    assert int(d.ibc_ccf) == 2400
+    assert int(d.ibc_ccf) == (1750905 if con_caja else 100)
 
 
-def test_con_cc_y_caja_contratada_el_ibc_sigue_siendo_el_real():
+def test_con_cc_y_caja_contratada_sin_pension_el_ibc_sigue_siendo_el_real():
     from services.pila.liquidacion import liquidar
     from tests.test_liquidacion import _Afiliado, _Aportante
     af = _Afiliado(servicios=["EPS", "CCF", "ARL 1"], clase_riesgo="1")
@@ -214,6 +279,57 @@ def test_con_cc_y_caja_contratada_el_ibc_sigue_siendo_el_real():
     assert d.tipo_doc == "CC"
     assert int(d.ibc_ccf) == 1750905
     assert int(d.valor_ccf) > 100
+
+
+def _con_pension(servicios, **kw):
+    from services.pila.liquidacion import liquidar
+    from tests.test_liquidacion import _Afiliado, _Aportante
+    af = _Afiliado(servicios=servicios, clase_riesgo=kw.get("clase_riesgo", "1"))
+    return liquidar([af], _Aportante(), 2026, 9).detalles[0]
+
+
+def test_eps_y_pension_declara_caja_con_ibc_100():
+    d = _con_pension(["EPS", "AFP"])
+    assert int(d.cot_pension) > 0
+    assert d.dias_ccf == d.dias_salud == d.dias_arl == 30
+    assert int(d.ibc_ccf) == 100
+    assert int(d.tarifa_arl) == 0
+
+
+def test_eps_pension_y_caja_usa_el_ibc_minimo():
+    """Se paga CCF: la base es 1 SMLMV, no 2400."""
+    d = _con_pension(["EPS", "AFP", "CCF"])
+    assert int(d.cot_pension) > 0
+    assert d.dias_ccf == d.dias_salud == d.dias_arl == 30
+    assert int(d.ibc_ccf) == 1750905
+    assert int(d.valor_ccf) > 100
+    assert int(d.tarifa_arl) == 0
+    assert int(d.cot_arl) == 0
+
+
+def test_eps_pension_y_arl_declara_caja_con_ibc_100():
+    from services.pila import parametros as P
+    d = _con_pension(["EPS", "AFP", "ARL 1"])
+    assert int(d.cot_pension) > 0
+    assert int(d.cot_arl) == int(P.aproximar_aporte(d.ibc_arl * P.TARIFA_ARL_POR_CLASE["1"]))
+    assert int(d.ibc_ccf) == 100
+
+
+def test_paquete_completo_con_pension_usa_el_ibc_real_de_caja():
+    d = _con_pension(["EPS", "AFP", "CCF", "ARL 1"])
+    assert int(d.cot_pension) > 0
+    assert int(d.ibc_ccf) == 1750905
+    assert int(d.valor_ccf) > 100
+
+
+@pytest.mark.parametrize("clase", ["1", "2", "3", "4", "5"])
+def test_eps_pension_arl_1_a_5_cotiza_su_clase_y_caja_en_100(clase):
+    from services.pila import parametros as P
+    d = _con_pension(["EPS", "AFP", f"ARL {clase}"], clase_riesgo=clase)
+    tarifa = P.TARIFA_ARL_POR_CLASE[clase]
+    assert d.clase_riesgo == clase
+    assert int(d.cot_arl) == int(P.aproximar_aporte(d.ibc_arl * tarifa))
+    assert int(d.ibc_ccf) == 100
 
 
 def test_un_tipo_que_no_cotiza_a_caja_no_se_la_inventa():

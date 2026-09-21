@@ -42,10 +42,10 @@ def test_los_demas_no_reportan_horas(tipo):
 
 
 def test_sin_caja_contratada_igual_hay_horas_si_se_declara_parafiscales():
-    """EPS + ARL en un dependiente declara caja con IBC 2400; las horas van."""
+    """EPS + ARL en un dependiente declara caja con IBC 100; las horas van."""
     d = _liquidar("01", servicios='["EPS","AFP","ARL 1"]')
     assert int(d.dias_ccf) == 30
-    assert int(d.ibc_ccf) == 2400
+    assert int(d.ibc_ccf) == 100
     assert d.horas_laboradas == 30 * 8
 
 
