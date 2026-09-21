@@ -41,6 +41,10 @@ TARIFA_ICBF = Decimal("0.03")
 # se usa el IBC real (piso de 1 SMLMV).
 IBC_CCF_SIN_CONTRATO = Decimal("100")
 
+# Error 256: si hay aporte a caja el código no puede ir vacío. Quien no
+# contrata CCF no tiene caja en la ficha; ARUS declara CCF68 en esos planos.
+COD_CCF_SIN_CONTRATO = "CCF68"
+
 # La parte patronal de salud es la que exonera el artículo 114-1 del Estatuto
 # Tributario; el 4% del trabajador se sigue pagando siempre.
 TARIFA_SALUD_PATRONAL = Decimal("0.085")

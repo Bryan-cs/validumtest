@@ -332,6 +332,20 @@ def test_eps_pension_arl_1_a_5_cotiza_su_clase_y_caja_en_100(clase):
     assert int(d.ibc_ccf) == 100
 
 
+def test_solo_eps_sin_caja_en_la_ficha_declara_ccf68():
+    """Error 256: el de prueba pasaba porque Andrés ya traía CCF03."""
+    d = _liquidar(["EPS"], cod_ccf="")
+    assert int(d.ibc_ccf) == 100
+    assert int(d.valor_ccf) == 100
+    assert d.cod_ccf == "CCF68"
+
+
+def test_solo_eps_conserva_la_caja_de_la_ficha():
+    d = _liquidar(["EPS"], cod_ccf="CCF03")
+    assert d.cod_ccf == "CCF03"
+    assert int(d.ibc_ccf) == 100
+
+
 def test_un_tipo_que_no_cotiza_a_caja_no_se_la_inventa():
     """El 20 (estudiante) tiene caja en N: mandarla seria otro rechazo."""
     from services.pila.liquidacion import liquidar

@@ -404,9 +404,9 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
     # (mínimo 1 SMLMV). Si no, se declara caja con IBC 100 como los planos
     # de ARUS que el operador acepta: días y tarifa llenos, aporte mínimo.
     if contrata_caja:
-        _llenar_ccf(d, dias, ibc, token=False)
+        _llenar_ccf(d, dias, ibc, token=False, afiliado=afiliado)
     elif _debe_declarar_caja_sin_contrato(d):
-        _llenar_ccf(d, dias, ibc, token=True)
+        _llenar_ccf(d, dias, ibc, token=True, afiliado=afiliado)
 
     if contrata_caja and not d.exonerado:
         d.tarifa_sena = P.TARIFA_SENA
@@ -419,12 +419,23 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
     return d
 
 
-def _llenar_ccf(d: DetalleLiquidado, dias: int, ibc: Decimal, token: bool) -> None:
+def _llenar_ccf(d: DetalleLiquidado, dias: int, ibc: Decimal, token: bool,
+                afiliado=None) -> None:
     base = P.IBC_CCF_SIN_CONTRATO if token else ibc
     d.dias_ccf = dias
     d.ibc_ccf = base
     d.tarifa_ccf = P.TARIFA_CCF
     d.valor_ccf = P.aproximar_aporte(base * P.TARIFA_CCF)
+    # El 256 pide código si hay aporte. Con caja contratada se usa la de la
+    # ficha (o el nombre resuelto). Sin contrato no hay ficha: CCF68, igual
+    # que los planos de ARUS que el operador acepta en solo EPS.
+    if not (d.cod_ccf or "").strip():
+        from services.pila.catalogos import buscar_codigo
+        hallado = buscar_codigo("CCF", getattr(afiliado, "ccf", "") or "")
+        if hallado:
+            d.cod_ccf = hallado
+        elif token:
+            d.cod_ccf = P.COD_CCF_SIN_CONTRATO
 
 
 def _debe_declarar_caja_sin_contrato(d: DetalleLiquidado) -> bool:
