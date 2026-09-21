@@ -230,3 +230,53 @@ def test_el_subtipo_se_puede_cambiar_por_la_api(client, admin_token):
     })
     assert r.status_code == 200, r.text
     assert client.get(f"/afiliados/{id_}", headers=_h(admin_token)).json()["subtipo_cotizante"] == "03"
+
+
+# ─── Un PUT a medias no debe vaciar el resto ──────────────────────────────────
+#
+# Paso de verdad: un script mando un PUT con cuatro campos para corregir uno
+# solo, y dejo en blanco la EPS, el cargo y el IBC de trece personas. Los
+# campos PILA se salvaron porque ya tenian esta proteccion; los demas no.
+
+def test_un_put_parcial_conserva_lo_que_no_manda(client, admin_token):
+    creado = client.post("/afiliados", headers=_h(admin_token), json={
+        "nombre": "PARCIAL UNO", "doc": "98000111", "tipo_doc": "CC",
+        "servicios": ["EPS", "ARL 4"], "fecha_afiliacion": "2026-01-01",
+        "eps": "Sanitas", "cargo": "CONDUCTOR", "ibc": 1750905,
+        "cod_eps": "EPS005", "clase_riesgo": "4",
+    })
+    assert creado.status_code in (200, 201), creado.text
+    id_ = creado.json()["id"]
+
+    # Lo que hacia el script: cambiar un campo mandando solo lo imprescindible.
+    r = client.put(f"/afiliados/{id_}", headers=_h(admin_token), json={
+        "nombre": "PARCIAL UNO", "doc": "98000111", "tipo_doc": "CC",
+        "fecha_afiliacion": "2026-01-01", "actividad_economica": "",
+    })
+    assert r.status_code == 200, r.text
+
+    quedo = client.get(f"/afiliados/{id_}", headers=_h(admin_token)).json()
+    assert quedo["eps"] == "Sanitas"
+    assert quedo["cargo"] == "CONDUCTOR"
+    assert float(quedo["ibc"]) == 1750905
+    assert quedo["servicios"] == ["EPS", "ARL 4"]
+    assert quedo["cod_eps"] == "EPS005"
+
+
+def test_vaciar_un_campo_a_proposito_sigue_funcionando(client, admin_token):
+    """El formulario manda todos los campos: mandar "" es mandarlo."""
+    creado = client.post("/afiliados", headers=_h(admin_token), json={
+        "nombre": "PARCIAL DOS", "doc": "98000222", "tipo_doc": "CC",
+        "servicios": ["EPS"], "fecha_afiliacion": "2026-01-01",
+        "eps": "Sanitas", "cargo": "CONDUCTOR",
+    })
+    id_ = creado.json()["id"]
+    r = client.put(f"/afiliados/{id_}", headers=_h(admin_token), json={
+        "nombre": "PARCIAL DOS", "doc": "98000222", "tipo_doc": "CC",
+        "fecha_afiliacion": "2026-01-01", "servicios": ["EPS"],
+        "eps": "", "cargo": "",
+    })
+    assert r.status_code == 200, r.text
+    quedo = client.get(f"/afiliados/{id_}", headers=_h(admin_token)).json()
+    assert quedo["eps"] == ""
+    assert quedo["cargo"] == ""

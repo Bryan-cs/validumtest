@@ -151,6 +151,13 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         db.query(models.SolicitudRetiro).filter_by(afiliado_doc=a.doc).delete()
     nombre_anterior  = a.nombre
     cliente_anterior = a.cliente_txt
+
+    # Solo se escribe lo que el cliente haya mandado de verdad. El formulario
+    # los manda todos, asi que vaciar un campo desde la pantalla sigue
+    # funcionando: mandar "" es mandarlo. Lo que ya no pasa es que un cliente
+    # que envie medio recurso deje en blanco el resto, que es como se borraron
+    # la EPS, el cargo y el IBC de trece personas de una sentada.
+    enviados = data.model_dump(exclude_unset=True)
     for field, val in [
         ("nombre",data.nombre),("tipo_doc",data.tipo_doc),("doc",data.doc),("empresa",data.empresa),
         ("cargo",data.cargo),("cliente_txt",data.cliente_txt),
@@ -161,7 +168,8 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         ("ibc",data.ibc),("fecha_ingreso",data.fecha_ingreso),
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
-        setattr(a, field, val)
+        if field in enviados:
+            setattr(a, field, val)
     _aplicar_pila(a, data)
     nombre_cambio  = data.nombre      != nombre_anterior
     cliente_cambio = data.cliente_txt != cliente_anterior
