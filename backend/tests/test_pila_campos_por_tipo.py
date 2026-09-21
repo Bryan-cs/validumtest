@@ -116,3 +116,12 @@ def test_el_aviso_llega_al_resumen():
     af.servicios = '["ARL 1"]'
     resumen = liquidar([af], _Aportante(), 2026, 9)
     assert any("planilla tipo E" in a for a in resumen.avisos)
+
+
+# ─── Advertencia de primera planilla ──────────────────────────────────────────
+
+def test_el_mes_anterior_cruza_bien_el_ano():
+    from routers.liquidacion import _mes_anterior
+    assert _mes_anterior(2026, 1) == "2025-12"
+    assert _mes_anterior(2026, 9) == "2026-08"
+    assert _mes_anterior(2026, 12) == "2026-11"

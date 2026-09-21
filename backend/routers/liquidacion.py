@@ -48,6 +48,36 @@ def _mes_siguiente(anio: int, mes: int) -> str:
     return f"{anio + 1:04d}-01" if mes == 12 else f"{anio:04d}-{mes + 1:02d}"
 
 
+def _mes_anterior(anio: int, mes: int) -> str:
+    return f"{anio - 1:04d}-12" if mes == 1 else f"{anio:04d}-{mes - 1:02d}"
+
+
+def _aviso_primera_planilla(db: Session, af, anio: int, mes: int) -> list:
+    """Si esta persona no aparece en la planilla del mes anterior.
+
+    El operador lo devuelve como advertencia: "no fue reportado en planillas
+    pagadas del periodo anterior y no tiene marcada una novedad ingreso en
+    esta planilla, por lo tanto, le sugerimos marcar esta novedad".
+
+    No se marca sola. La novedad de ingreso lleva fecha y esa fecha entra a un
+    documento con efectos legales; ponerle una inventada es peor que la
+    advertencia. Se avisa para que alguien decida.
+    """
+    anterior = _mes_anterior(anio, mes)
+    ya_estaba = (db.query(models.PlanillaLiquidacion)
+                   .filter_by(afiliado_doc=af.doc, periodo_cotizacion=anterior)
+                   .filter(models.PlanillaLiquidacion.estado != "anulada")
+                   .first())
+    if ya_estaba:
+        return []
+    ingreso = (getattr(af, "fecha_ingreso", "") or "")[:7]
+    if ingreso == _periodo(anio, mes):
+        return []      # ya entra con la novedad puesta por su fecha de ingreso
+    return [f"{_nombre(af)}: no tiene planilla en {anterior}. El operador va a "
+            f"sugerir que se marque la novedad de ingreso; si de verdad entró "
+            f"antes, la advertencia se puede ignorar."]
+
+
 def _afiliado_y_aportante(db: Session, afiliado_id: int):
     """El afiliado a liquidar y la empresa que va en su encabezado."""
     af = db.query(models.Afiliado).filter_by(id=afiliado_id).first()
@@ -169,6 +199,7 @@ def previsualizar(data: schemas.LiquidacionRequest, db: Session = Depends(get_db
     """Calcula sin guardar nada."""
     af, ap = _afiliado_y_aportante(db, data.afiliado_id)
     resumen = motor.liquidar([af], ap, data.anio, data.mes)
+    resumen.avisos.extend(_aviso_primera_planilla(db, af, data.anio, data.mes))
     return _resumen_a_dict(resumen, af, ap, data.anio, data.mes)
 
 
@@ -187,6 +218,7 @@ def liquidar(data: schemas.LiquidacionRequest, db: Session = Depends(get_db),
                                  f"en {periodo}. Anúlala antes de volver a liquidar.")
 
     resumen = motor.liquidar([af], ap, data.anio, data.mes)
+    resumen.avisos.extend(_aviso_primera_planilla(db, af, data.anio, data.mes))
     d = resumen.detalles[0]
 
     liq = models.PlanillaLiquidacion(
