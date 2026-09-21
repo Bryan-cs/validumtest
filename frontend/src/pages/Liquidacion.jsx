@@ -523,6 +523,12 @@ export default function Liquidacion() {
                         {p.codigo_planilla ? 'Reenviar' : 'Enviar al operador'}
                       </Btn>
                     )}
+                    {p.codigo_planilla && !p.numero_planilla && p.estado !== 'pagada' && p.estado !== 'anulada' && (
+                      <Btn size="sm" disabled={corregir.isPending}
+                           onClick={() => corregir.mutate(p.planilla_id)}>
+                        {corregir.isPending ? 'Corrigiendo…' : 'Que el operador corrija'}
+                      </Btn>
+                    )}
                     {p.link_pago && (
                       <Btn size="sm" variant="success"
                            onClick={() => window.open(p.link_pago, '_blank', 'noopener')}>

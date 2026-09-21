@@ -546,6 +546,7 @@ def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
 
     return {"simulado": resultado.get("simulado", False),
             "cotizantes": len(filas),
+            "planilla_id": filas[0].id,
             "estado": filas[0].estado,
             "codigo_planilla": resultado.get("codigo_planilla"),
             "numero_planilla": filas[0].numero_planilla,
@@ -888,6 +889,24 @@ def corregir_en_el_operador(liquidacion_id: int, tipo_archivo: str = "I",
         raise HTTPException(502, str(e))
 
     l.respuesta_operador = json.dumps(resultado, ensure_ascii=False, default=str)[:20000]
+    leido = {}
+    if isinstance(resultado.get("respuesta"), dict):
+        leido = operador.interpretar_validacion(resultado["respuesta"])
+    numero = (leido.get("numero_planilla") or "")[:20]
+    url = resultado.get("url_pago") or ""
+    if isinstance(url, dict):
+        url = url.get("url") or url.get("urlPago") or ""
+    # Un envío de varias comparte el mismo código: la corrección es de esa
+    # planilla, así que el número y el enlace quedan en todas.
+    grupo = (db.query(models.PlanillaLiquidacion)
+               .filter_by(planilla_corregida=l.planilla_corregida).all())
+    for fila in grupo or [l]:
+        fila.respuesta_operador = l.respuesta_operador
+        if numero:
+            fila.numero_planilla = numero
+            fila.estado = "numerada"
+        if isinstance(url, str) and url:
+            fila.link_pago = url
     db.commit()
 
     _log(db, token.get("sub", ""), "pidió corrección al operador", "Liquidación",
