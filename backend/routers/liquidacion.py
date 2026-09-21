@@ -29,7 +29,8 @@ from database import get_db
 from routers.deps import require_admin, require_admin_or_empleado
 import models, schemas
 from crud_helpers import _log
-from services.pila import liquidacion as motor, operador, perfiles, plano
+from services.pila import (liquidacion as motor, obligaciones, operador,
+                           perfiles, plano)
 
 router = APIRouter(prefix="/liquidacion", tags=["liquidacion"])
 
@@ -457,6 +458,19 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
     if l.numero_planilla:
         raise HTTPException(409, f"Esta planilla ya fue enviada y quedó numerada "
                                  f"como {l.numero_planilla}")
+
+    # Un codigo de administradora vacio es error duro para el operador, y
+    # mandarlo igual deja un registro alla que despues toca anular. Se corta
+    # aqui, que es donde todavia se puede arreglar.
+    detalles = (db.query(models.PlanillaDetalle)
+                  .filter_by(liquidacion_id=l.id).all())
+    for d in detalles:
+        faltan = obligaciones.codigos_faltantes(d)
+        if faltan:
+            raise HTTPException(
+                409, f"{l.afiliado_nombre} liquida {', '.join(faltan)} sin el "
+                     f"código de la administradora. Complétalo en su ficha, "
+                     f"vuelve a liquidar y envía.")
 
     cuerpo, nombre, ap = _armar_plano(db, l, tipo_doc)
 

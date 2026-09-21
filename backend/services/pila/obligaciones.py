@@ -107,6 +107,50 @@ def liquidados(detalle) -> list:
     return presentes
 
 
+def codigos_faltantes(detalle) -> list:
+    """Subsistemas que la planilla declara sin decir a que administradora.
+
+    El operador no lo perdona: "El codigo de la administradora de Salud no
+    puede estar vacio para el tipo de cotizante 01". Es un error duro, no una
+    advertencia, asi que conviene tratarlo como tal y no dejar que el archivo
+    salga.
+
+    Se mira contra lo que la planilla liquida, no contra lo contratado: a un
+    cotizante exento de pension se le vacia el codigo de AFP a proposito.
+    """
+    declara = liquidados(detalle)
+    faltan = []
+    for sigla, campo, nombre in (("EPS", "cod_eps", "salud"),
+                                 ("AFP", "cod_afp", "pensiones"),
+                                 ("CCF", "cod_ccf", "caja de compensacion familiar")):
+        if _contrata(declara, sigla) and not (getattr(detalle, campo, "") or "").strip():
+            faltan.append(nombre)
+    return faltan
+
+
+def revisar_actividad(detalle) -> list:
+    """Si el codigo de actividad economica cuadra con la clase de riesgo.
+
+    El codigo del Decreto 1607 de 2002 lleva la clase de riesgo en su primer
+    digito: 1661401 es clase 1 y 5960901 es clase 5. Cuando el cotizante tiene
+    una clase distinta a la de la actividad principal del aportante, el campo
+    98 queda diciendo otra cosa que el campo 78.
+
+    No se corrige solo. Cambiarle el primer digito produciria un codigo que no
+    corresponde a ninguna actividad: hay que elegir la actividad real de esa
+    persona, y eso no lo puede adivinar el sistema.
+    """
+    codigo = str(getattr(detalle, "subactividad_economica", "") or "").strip()
+    clase = str(getattr(detalle, "clase_riesgo", "") or "").strip()
+    if not codigo or not clase or not codigo[0].isdigit():
+        return []
+    if codigo[0] == clase:
+        return []
+    return [f"la actividad economica {codigo} es de clase de riesgo {codigo[0]}, "
+            f"y el cotizante esta en clase {clase}. El operador lo avisa y "
+            f"sugiere la actividad que corresponda a su clase."]
+
+
 def _contrata(servicios, sigla: str) -> bool:
     """Si el afiliado tiene contratado ese subsistema.
 

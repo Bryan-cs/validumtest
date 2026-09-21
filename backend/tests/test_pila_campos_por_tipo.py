@@ -125,3 +125,86 @@ def test_el_mes_anterior_cruza_bien_el_ano():
     assert _mes_anterior(2026, 1) == "2025-12"
     assert _mes_anterior(2026, 9) == "2026-08"
     assert _mes_anterior(2026, 12) == "2026-11"
+
+
+# ─── Codigos de administradora vacios ─────────────────────────────────────────
+#
+# "El codigo de la administradora de Salud no puede estar vacio para el tipo de
+# cotizante 01". El operador lo devuelve como error, no como advertencia.
+
+class _Det:
+    """Lo que `codigos_faltantes` mira, sea un detalle vivo o uno guardado."""
+    def __init__(self, **kw):
+        self.dias_salud = self.dias_pension = self.dias_arl = self.dias_ccf = 0
+        self.cot_salud = self.cot_pension = self.cot_arl = self.valor_ccf = 0
+        self.cod_eps = self.cod_afp = self.cod_ccf = ""
+        self.clase_riesgo = "1"
+        self.__dict__.update(kw)
+
+
+def test_falta_el_codigo_de_salud():
+    d = _Det(dias_salud=30, cot_salud=70100)
+    assert ob.codigos_faltantes(d) == ["salud"]
+
+
+def test_faltan_varios():
+    d = _Det(dias_salud=30, dias_ccf=30)
+    assert ob.codigos_faltantes(d) == ["salud", "caja de compensacion familiar"]
+
+
+def test_con_los_codigos_puestos_no_falta_nada():
+    d = _Det(dias_salud=30, dias_ccf=30, cod_eps="EPS008", cod_ccf="CCF24")
+    assert ob.codigos_faltantes(d) == []
+
+
+def test_un_subsistema_que_no_se_liquida_no_pide_codigo():
+    """A un cotizante exento de pension se le vacia el codigo a proposito."""
+    d = _Det(dias_salud=30, cod_eps="EPS008")
+    assert "pensiones" not in ob.codigos_faltantes(d)
+
+
+def test_un_codigo_de_solo_espacios_cuenta_como_vacio():
+    d = _Det(dias_salud=30, cod_eps="   ")
+    assert ob.codigos_faltantes(d) == ["salud"]
+
+
+def test_el_aviso_dice_que_es_error_y_no_advertencia():
+    from services.pila.liquidacion import liquidar
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.subtipo = "0"; af.subtipo_cotizante = ""
+    af.servicios = '["EPS"]'; af.cod_eps = ""
+    avisos = liquidar([af], _Aportante(), 2026, 9).avisos
+    assert any("lo rechaza como error" in a for a in avisos)
+
+
+# ─── Actividad economica vs clase de riesgo ───────────────────────────────────
+#
+# "El codigo registrado en el campo de actividad economica para ARL no coincide
+# con la clase de riesgo del cotizante. Le sugerimos el codigo 5960901 teniendo
+# en cuenta el Decreto 768 de 2022". El primer digito del codigo es la clase.
+
+class _Act:
+    def __init__(self, codigo, clase):
+        self.subactividad_economica = codigo
+        self.clase_riesgo = clase
+
+
+def test_la_actividad_de_otra_clase_avisa():
+    avisos = ob.revisar_actividad(_Act("1661401", "5"))
+    assert len(avisos) == 1
+    assert "clase de riesgo 1" in avisos[0] and "clase 5" in avisos[0]
+
+
+def test_cuando_coinciden_no_avisa():
+    assert ob.revisar_actividad(_Act("5960901", "5")) == []
+    assert ob.revisar_actividad(_Act("1661401", "1")) == []
+
+
+@pytest.mark.parametrize("codigo,clase", [("", "5"), ("1661401", ""), ("", "")])
+def test_sin_datos_no_inventa_avisos(codigo, clase):
+    assert ob.revisar_actividad(_Act(codigo, clase)) == []
+
+
+def test_un_codigo_que_no_empieza_por_digito_se_ignora():
+    assert ob.revisar_actividad(_Act("X661401", "5")) == []

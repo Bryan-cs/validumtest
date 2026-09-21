@@ -383,15 +383,12 @@ def liquidar(afiliados, aportante, anio: int, mes: int,
 
         # Un servicio contratado sin su código se liquida igual, pero el archivo
         # sale con ese campo en blanco y el operador lo va a rechazar.
-        faltantes = [nombre for contrata, codigo, nombre in (
-            ("EPS" in d.servicios, d.cod_eps, "EPS"),
-            ("AFP" in d.servicios, d.cod_afp, "AFP"),
-            ("CCF" in d.servicios, d.cod_ccf, "caja de compensación"),
-        ) if contrata and not codigo]
+        faltantes = obligaciones.codigos_faltantes(d)
         if faltantes:
             resumen.avisos.append(
-                f"{quien}: tiene contratado {', '.join(faltantes)} pero le falta el "
-                f"código. El archivo saldrá con ese campo vacío.")
+                f"{quien}: la planilla liquida {', '.join(faltantes)} pero no tiene "
+                f"el código de la administradora. El operador lo rechaza como error, "
+                f"no como advertencia: complétalo antes de enviar.")
 
         # Lo contratado manda para liquidar, pero el operador valida contra el
         # tipo de cotizante. Cuando los dos no coinciden el rechazo es seguro,
@@ -409,6 +406,9 @@ def liquidar(afiliados, aportante, anio: int, mes: int,
         # Y si ese tipo de cotizante cabe en este tipo de planilla, que es un
         # rechazo que el operador no autocorrige.
         for choque in obligaciones.revisar_planilla(d.tipo_cotizante, tipo_planilla):
+            resumen.avisos.append(f"{quien}: {choque}")
+
+        for choque in obligaciones.revisar_actividad(d):
             resumen.avisos.append(f"{quien}: {choque}")
 
         resumen.detalles.append(d)
