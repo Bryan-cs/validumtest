@@ -197,6 +197,58 @@ PADRES = {"MUNICIPIO": MUNICIPIO_DEPTO}
 HISTORICOS = _REFERENCIA["administradoras_historicas"]
 
 
+# Palabras que solo dicen de qué subsistema es la administradora y estorban al
+# comparar: "EPS COMPENSAR" y "Compensar" son la misma, y "NUEVA EPS SA." y
+# "Nueva EPS" también.
+_RUIDO = ("EPS", "CCF", "AFP", "ARL", "SA", "S.A", "S.A.", "SAS", "EOC", "CCF.")
+
+
+def _normalizar(nombre: str) -> str:
+    """Deja el nombre en lo que de verdad lo identifica.
+
+    Sin tildes, sin puntuación, sin las siglas del subsistema y sin espacios
+    de más. El formulario guarda "Nueva EPS" y el catálogo dice "NUEVA EPS
+    SA.": las dos tienen que llegar a "NUEVA".
+    """
+    import unicodedata
+    texto = unicodedata.normalize("NFKD", str(nombre or ""))
+    texto = "".join(c for c in texto if not unicodedata.combining(c)).upper()
+    texto = "".join(c if c.isalnum() else " " for c in texto)
+    palabras = [p for p in texto.split() if p and p not in _RUIDO]
+    return " ".join(palabras)
+
+
+def buscar_codigo(tipo: str, nombre: str) -> str:
+    """El código PILA de una administradora a partir de su nombre.
+
+    Existe porque el formulario guarda el nombre —"Compensar"— y el archivo
+    plano necesita el código —"EPS008"—. Antes había que escribir los dos, y
+    quien llenaba el formulario correctamente se encontraba con que el campo
+    del archivo salía vacío.
+
+    Devuelve "" cuando no hay una única coincidencia clara. Es a propósito:
+    un código equivocado manda los aportes a otra administradora, así que es
+    mejor dejarlo en blanco y que la liquidación avise.
+    """
+    catalogo = CATALOGOS.get((tipo or "").strip().upper())
+    if not catalogo or not str(nombre or "").strip():
+        return ""
+
+    buscado = _normalizar(nombre)
+    if not buscado:
+        return ""
+
+    exactos = [cod for cod, nom in catalogo.items() if _normalizar(nom) == buscado]
+    if len(exactos) == 1:
+        return exactos[0]
+
+    # Sin coincidencia exacta se acepta que uno contenga al otro, pero solo si
+    # hay una sola candidata: con varias no se puede saber cuál es.
+    parciales = [cod for cod, nom in catalogo.items()
+                 if buscado in _normalizar(nom) or _normalizar(nom) in buscado]
+    return parciales[0] if len(parciales) == 1 else ""
+
+
 def sembrar(db) -> dict:
     """Siembra o actualiza `pila_codigos`. Idempotente: se puede correr siempre.
 

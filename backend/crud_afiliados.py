@@ -104,6 +104,28 @@ CAMPOS_PILA = (
 )
 
 
+def _deducir_codigos_pila(afiliado):
+    """Completa el código PILA de cada administradora desde su nombre.
+
+    El formulario guarda el nombre —"Compensar"— y el archivo plano necesita
+    el código —"EPS008"—. Son campos distintos y el formulario solo llena el
+    primero, asi que quien lo llenaba bien se encontraba con que el campo del
+    archivo salía vacío y el operador rechazaba la planilla.
+
+    Solo rellena lo que está vacío: un código puesto a mano manda, porque
+    alguien pudo tener una razón para elegir otro.
+    """
+    from services.pila.catalogos import buscar_codigo
+    for tipo, nombre, codigo in (("EPS", "eps", "cod_eps"),
+                                 ("AFP", "afp", "cod_afp"),
+                                 ("CCF", "ccf", "cod_ccf")):
+        if (getattr(afiliado, codigo, "") or "").strip():
+            continue
+        hallado = buscar_codigo(tipo, getattr(afiliado, nombre, "") or "")
+        if hallado:
+            setattr(afiliado, codigo, hallado)
+
+
 def _aplicar_pila(afiliado, data):
     """Escribe solo los campos PILA que el cliente haya mandado.
 
@@ -131,6 +153,7 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
         "fecha_afiliacion":data.fecha_afiliacion,"registrado_por":data.registrado_por,
     })
     _aplicar_pila(a, data)
+    _deducir_codigos_pila(a)
     db.add(a); _log(db, data.registrado_por, "agregó un afiliado nuevo", "Afiliados", data.nombre)
     try:
         db.commit()
@@ -171,6 +194,7 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         if field in enviados:
             setattr(a, field, val)
     _aplicar_pila(a, data)
+    _deducir_codigos_pila(a)
     nombre_cambio  = data.nombre      != nombre_anterior
     cliente_cambio = data.cliente_txt != cliente_anterior
     if nombre_cambio or cliente_cambio:
