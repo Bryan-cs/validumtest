@@ -947,6 +947,8 @@ def refrescar_pago(liquidacion_id: int, db: Session = Depends(get_db),
         raise HTTPException(409, "Esta planilla todavía no se ha enviado al operador")
 
     ap = db.query(models.AportantePila).filter_by(id=l.aportante_id).first()
+    enlace = ""
+    resumen = None
     try:
         with operador._cliente_nuevo() as cliente:
             sesion = operador.autenticar(cliente)
@@ -954,15 +956,23 @@ def refrescar_pago(liquidacion_id: int, db: Session = Depends(get_db),
                                                  ap.num_doc, cliente)
             operador.autorizar(sesion, ap.tipo_doc or "NI", ap.num_doc, cliente,
                                aportante_id=datos.get("id"))
-            enlace = operador.url_pago(sesion, referencia, cliente)
-            resumen = operador.totales(sesion, referencia, cliente)
+            enlace = operador.enlace_de_pago(
+                sesion, l.planilla_corregida or "", l.numero_planilla or "", cliente)
+            try:
+                resumen = operador.totales(
+                    sesion, l.planilla_corregida or l.numero_planilla, cliente)
+            except operador.ErrorOperador:
+                resumen = None
     except operador.ErrorOperador as e:
         raise HTTPException(502, str(e))
 
-    if enlace:
-        l.link_pago = enlace
-        db.commit()
-    return {"link_pago": l.link_pago, "totales": resumen, "referencia": referencia}
+    if not enlace:
+        raise HTTPException(502, "El operador no entregó el enlace de pago. "
+                                 "Si la planilla sigue con errores, corrígela primero.")
+    l.link_pago = enlace
+    db.commit()
+    return {"link_pago": l.link_pago, "totales": resumen,
+            "referencia": l.planilla_corregida or l.numero_planilla}
 
 
 @router.post("/{liquidacion_id}/anular")

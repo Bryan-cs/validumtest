@@ -443,16 +443,42 @@ def url_pago(sesion: Sesion, numero_planilla: str,
     """La URL con el botón de PSE. Abrirla inicia el pago real.
 
     El operador la devuelve como texto pelado aunque anuncie JSON, y la
-    entrega incluso para planillas todavía sin numerar.
+    entrega incluso para planillas todavía sin numerar. Con el número a veces
+    responde vacío: el código de la planilla es el que sí trae el enlace.
     """
     _registrar("url_pago", planilla=numero_planilla)
     datos = _get_json(sesion, f"{_base_planillas()}/v1/planillas/{numero_planilla}/pago/url",
                       None, cliente, vacio={"url": ""})
+    return _url_http(datos)
+
+
+def enlace_de_pago(sesion: Sesion, codigo_planilla: str = "",
+                   numero_planilla: str = "",
+                   cliente: Optional[httpx.Client] = None) -> str:
+    """Prueba el código y, si ese no trae URL, el número."""
+    for ref in (codigo_planilla, numero_planilla):
+        ref = str(ref or "").strip()
+        if not ref or ref == "0":
+            continue
+        try:
+            enlace = url_pago(sesion, ref, cliente)
+        except ErrorOperador:
+            continue
+        if enlace:
+            return enlace
+    return ""
+
+
+def _url_http(datos) -> str:
     if isinstance(datos, str):
-        return datos
-    for clave in ("url", "urlPago", "link"):
-        if datos.get(clave):
-            return datos[clave]
+        candidato = datos.strip().strip('"').strip("'")
+        return candidato if candidato.startswith(("http://", "https://")) else ""
+    if not isinstance(datos, dict):
+        return ""
+    for clave in ("url", "urlPago", "link", "url_pago", "enlace"):
+        hallado = _url_http(datos.get(clave))
+        if hallado:
+            return hallado
     return ""
 
 
@@ -703,12 +729,13 @@ def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str
         # apenas recibe la planilla. El número tarda: no lo asigna mientras
         # queden errores. Pedirlos con el número dejaba el enlace vacío aunque
         # el operador ya lo tuviera listo.
-        referencia = resultado.get("numero_planilla") or resultado.get("codigo_planilla")
+        referencia = resultado.get("codigo_planilla") or resultado.get("numero_planilla")
         if referencia:
             try:
                 resultado["totales"] = totales(sesion, referencia, cliente=cliente)
-                resultado["url_pago"] = url_pago(sesion, referencia, cliente=cliente)
             except ErrorOperador as e:
-                # Que falle el enlace no invalida el envío, que ya ocurrió.
-                log.warning(f"PILA: no se pudo obtener el pago de {referencia}: {e}")
+                log.warning(f"PILA: no se pudieron leer los totales de {referencia}: {e}")
+            resultado["url_pago"] = enlace_de_pago(
+                sesion, resultado.get("codigo_planilla") or "",
+                resultado.get("numero_planilla") or "", cliente)
         return resultado

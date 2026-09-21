@@ -27,10 +27,38 @@ const inp = {
   background: C.surface, fontSize: 13, color: C.text, outline: 'none',
   fontFamily: 'inherit', boxSizing: 'border-box',
 };
-const lbl = {
-  fontSize: 11, fontWeight: 700, color: C.text2, textTransform: 'uppercase',
-  letterSpacing: '0.05em', marginBottom: 4, display: 'block',
+const POR_PAGINA = 25;
+
+const td = {
+  padding: '8px 10px', fontSize: 13, color: C.text, verticalAlign: 'middle',
+  borderBottom: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`,
+  whiteSpace: 'nowrap',
 };
+const thBase = {
+  ...td, fontSize: 11, fontWeight: 800, letterSpacing: '0.05em',
+  textTransform: 'uppercase', background: '#F8FAFC', textAlign: 'left',
+  position: 'sticky', top: 0,
+};
+
+const COLUMNAS = [
+  ['Afiliado', C.text],
+  ['Documento', '#0369A1'],
+  ['Empresa', '#6D28D9'],
+  ['Subtipo', '#C2410C'],
+  ['Factura', '#047857'],
+  ['Total', '#1D4ED8'],
+  ['Estado', C.text],
+  ['Acciones', C.text],
+];
+
+const lbl = {
+  fontSize: 11, fontWeight: 800, letterSpacing: '0.06em',
+  textTransform: 'uppercase', marginBottom: 4, display: 'block',
+};
+
+function Etiqueta({ children, color }) {
+  return <label style={{ ...lbl, color }}>{children}</label>;
+}
 
 function EstadoBadge({ estado }) {
   const s = ESTADO_STYLE[estado] || { bg: '#F3F4F6', color: '#6B7280' };
@@ -41,22 +69,6 @@ function EstadoBadge({ estado }) {
     }}>
       {estado}
     </span>
-  );
-}
-
-function Chip({ children, tone = 'neutral' }) {
-  const tones = {
-    neutral: { background: C.surface2, color: C.text2 },
-    blue:    { background: C.blueBg, color: C.blue },
-    amber:   { background: C.amberBg, color: C.amber },
-    green:   { background: C.greenBg, color: C.green },
-  };
-  const t = tones[tone] || tones.neutral;
-  return (
-    <span style={{
-      fontSize: 11, fontWeight: 600, lineHeight: '16px', padding: '2px 8px',
-      borderRadius: 999, whiteSpace: 'nowrap', ...t,
-    }}>{children}</span>
   );
 }
 
@@ -111,6 +123,7 @@ export default function Liquidacion() {
   const [porAnular, setPorAnular] = useState(null);
   const [docDescarga, setDocDescarga] = useState({});   // planilla_id → tipo de documento
   const [respuesta, setRespuesta] = useState(null);     // lo que contestó el operador
+  const [pagina, setPagina] = useState(1);
 
   const periodo = `${anio}-${String(mes).padStart(2, '0')}`;
 
@@ -137,6 +150,12 @@ export default function Liquidacion() {
       return [p.nombre, p.doc, p.cliente].some(v => (v || '').toLowerCase().includes(q));
     });
   }, [personas, busqueda, soloPendientes, subtipo, tipoDocFiltro, empresa]);
+
+  const totalPaginas = Math.max(1, Math.ceil(visibles.length / POR_PAGINA));
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const enPagina = visibles.slice(
+    (paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA);
+  const irAPagina = (n) => setPagina(Math.min(Math.max(1, n), totalPaginas));
 
   // Las empresas que hay en pantalla, para el selector.
   const EMPRESAS = useMemo(
@@ -329,6 +348,28 @@ export default function Liquidacion() {
     return err?.response?.data?.detail || '';
   };
 
+  const pagar = async (persona) => {
+    try {
+      const r = await api.post(`/liquidacion/${persona.planilla_id}/pago`);
+      const url = r.data?.link_pago;
+      if (!url) {
+        toast.error('El operador no entregó el enlace de pago');
+        return;
+      }
+      const a = document.createElement('a');
+      a.href = url;
+      a.target = '_blank';
+      a.rel = 'noopener';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      qc.invalidateQueries({ queryKey: ['liquidacion-pendientes'] });
+    } catch (e) {
+      toast.error(await detalleDeBlob(e) || e?.response?.data?.detail
+                  || 'No se pudo abrir el pago');
+    }
+  };
+
   const descargarComprobante = async (persona) => {
     try {
       const r = await api.get(`/liquidacion/${persona.planilla_id}/comprobante`,
@@ -371,45 +412,45 @@ export default function Liquidacion() {
       }}>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div>
-            <label style={lbl}>Mes</label>
-            <select style={inp} value={mes} onChange={e => { setMes(e.target.value); setPrevia(null); }}>
+            <Etiqueta color="#1D4ED8">Mes</Etiqueta>
+            <select style={inp} value={mes} onChange={e => { setMes(e.target.value); setPrevia(null); setPagina(1); }}>
               {MESES.map((m, i) => <option key={m} value={i + 1}>{m}</option>)}
             </select>
           </div>
           <div>
-            <label style={lbl}>Año</label>
+            <Etiqueta color="#1D4ED8">Año</Etiqueta>
             <input style={{ ...inp, width: 90 }} value={anio} inputMode="numeric"
-                   onChange={e => { setAnio(e.target.value); setPrevia(null); }} />
+                   onChange={e => { setAnio(e.target.value); setPrevia(null); setPagina(1); }} />
           </div>
           <div style={{ flex: 1, minWidth: 220 }}>
-            <label style={lbl}>Buscar persona</label>
+            <Etiqueta color="#0F766E">Buscar persona</Etiqueta>
             <input style={{ ...inp, width: '100%' }} value={busqueda}
                    placeholder="Nombre, documento o empresa…"
-                   onChange={e => setBusqueda(e.target.value)} />
+                   onChange={e => { setBusqueda(e.target.value); setPagina(1); }} />
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
           <div style={{ minWidth: 160, flex: 1 }}>
-            <label style={lbl}>Empresa</label>
+            <Etiqueta color="#6D28D9">Empresa</Etiqueta>
             <select style={{ ...inp, width: '100%' }} value={empresa}
-                    onChange={e => { setEmpresa(e.target.value); setElegidas(new Set()); }}>
+                    onChange={e => { setEmpresa(e.target.value); setElegidas(new Set()); setPagina(1); }}>
               <option value="">Todas</option>
               {EMPRESAS.map(x => <option key={x} value={x}>{x}</option>)}
             </select>
           </div>
           <div style={{ minWidth: 180, flex: 1 }}>
-            <label style={lbl}>Subtipo</label>
+            <Etiqueta color="#C2410C">Subtipo</Etiqueta>
             <select style={{ ...inp, width: '100%' }} value={subtipo}
-                    onChange={e => setSubtipo(e.target.value)}>
+                    onChange={e => { setSubtipo(e.target.value); setPagina(1); }}>
               <option value="">Todos</option>
               {Object.entries(SUBTIPOS).map(([k, v]) =>
                 <option key={k} value={k}>{k} · {v}</option>)}
             </select>
           </div>
           <div style={{ minWidth: 110 }}>
-            <label style={lbl}>Documento</label>
+            <Etiqueta color="#0369A1">Documento</Etiqueta>
             <select style={{ ...inp, width: '100%' }} value={tipoDocFiltro}
-                    onChange={e => setTipoDocFiltro(e.target.value)}>
+                    onChange={e => { setTipoDocFiltro(e.target.value); setPagina(1); }}>
               <option value="">Todos</option>
               {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
@@ -421,7 +462,7 @@ export default function Liquidacion() {
             background: soloPendientes ? C.amberBg : C.surface, marginBottom: 0,
           }}>
             <input type="checkbox" checked={soloPendientes}
-                   onChange={e => setSoloPendientes(e.target.checked)} />
+                   onChange={e => { setSoloPendientes(e.target.checked); setPagina(1); }} />
             Solo sin liquidar
           </label>
         </div>
@@ -463,7 +504,7 @@ export default function Liquidacion() {
             }}>
               <strong style={{ fontSize: 13 }}>
                 {seleccionadas.length} {seleccionadas.length === 1 ? 'persona' : 'personas'}
-                {' '}de {empresaDeLaSeleccion} en un mismo archivo
+                {' '}de <span style={{ color: '#6D28D9' }}>{empresaDeLaSeleccion}</span> en un mismo archivo
               </strong>
               <span style={{ fontSize: 12, color: C.text2 }}>
                 {pesos(seleccionadas.reduce((t, x) => t + (x.total || 0), 0))}
@@ -485,136 +526,179 @@ export default function Liquidacion() {
               </Btn>
             </div>
           )}
-          {visibles.map(p => {
-            const elegida = elegidas.has(p.planilla_id);
-            const riel = !p.planilla_id ? '#D97706'
-              : p.estado === 'pagada' ? '#059669'
-              : p.estado === 'anulada' ? '#DC2626'
-              : p.desactualizada ? '#D97706'
-              : '#2563EB';
-            return (
-            <div key={p.id} style={{
-              border: `1px solid ${elegida ? '#93C5FD' : C.border}`,
-              borderLeft: `4px solid ${riel}`,
-              borderRadius: 12, padding: '14px 16px',
-              background: elegida ? '#F8FBFF' : C.surface,
-              display: 'flex', alignItems: 'flex-start', gap: 14, flexWrap: 'wrap',
+          <div style={{ overflowX: 'auto', borderRadius: 10, border: `1px solid ${C.border}` }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', background: C.surface }}>
+              <thead>
+                <tr>
+                  <th style={{ ...thBase, width: 36 }} />
+                  {COLUMNAS.map(([nombre, color]) => (
+                    <th key={nombre} style={{
+                      ...thBase, color,
+                      textAlign: nombre === 'Total' ? 'right' : 'left',
+                    }}>{nombre}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {enPagina.map((p, i) => {
+                  const elegida = elegidas.has(p.planilla_id);
+                  const fondo = elegida ? '#EFF6FF' : (i % 2 ? '#F8FAFC' : C.surface);
+                  const sub = SUBTIPOS[String(p.subtipo)] ;
+                  return (
+                    <React.Fragment key={p.id}>
+                      <tr style={{ background: fondo }}
+                          onMouseEnter={e => { if (!elegida) e.currentTarget.style.background = '#EEF2F7'; }}
+                          onMouseLeave={e => { e.currentTarget.style.background = fondo; }}>
+                        <td style={td}>
+                          {p.planilla_id && p.se_envia !== false && (
+                            <input type="checkbox" style={{ width: 15, height: 15 }}
+                                   checked={elegida}
+                                   onChange={() => alternar(p)}
+                                   disabled={!!empresaDeLaSeleccion && empresaDeLaSeleccion !== p.cliente}
+                                   title={empresaDeLaSeleccion && empresaDeLaSeleccion !== p.cliente
+                                     ? `Un archivo plano lleva una sola empresa: ya hay ${empresaDeLaSeleccion} en la selección`
+                                     : 'Incluir en un archivo con varias personas'} />
+                          )}
+                        </td>
+                        <td style={{ ...td, fontWeight: 700 }}>{p.nombre}</td>
+                        <td style={{ ...td, color: '#0369A1', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
+                          {p.tipo_doc} {p.doc}
+                        </td>
+                        <td style={{ ...td, color: '#6D28D9', fontWeight: 700 }}>{p.cliente || '—'}</td>
+                        <td style={{ ...td, color: '#C2410C', fontWeight: 600 }}>
+                          {p.subtipo != null && p.subtipo !== ''
+                            ? `${p.subtipo}${sub ? ` · ${sub}` : ''}` : '—'}
+                        </td>
+                        <td style={{
+                          ...td, fontWeight: 700,
+                          color: p.factura_estado === 'pendiente' ? '#B45309' : '#047857',
+                        }}>
+                          {p.factura_codigo || '—'}
+                          {p.factura_estado ? ` · ${p.factura_estado}` : ''}
+                        </td>
+                        <td style={{
+                          ...td, textAlign: 'right', fontWeight: 700,
+                          fontVariantNumeric: 'tabular-nums', color: '#1D4ED8',
+                        }}>
+                          {p.planilla_id ? pesos(p.total) : '—'}
+                        </td>
+                        <td style={td}>
+                          {p.planilla_id
+                            ? <EstadoBadge estado={p.estado} />
+                            : <span style={{ fontSize: 11, fontWeight: 800, color: '#B45309',
+                                            letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                                Por liquidar
+                              </span>}
+                        </td>
+                        <td style={{ ...td, whiteSpace: 'normal' }}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                            {p.planilla_id ? (
+                              <>
+                                <select
+                                  style={{ ...inp, padding: '6px 8px', fontSize: 12, width: 72 }}
+                                  title="Documento con el que se identifica a la persona en el archivo"
+                                  value={docDescarga[p.planilla_id] || p.tipo_doc_sugerido || p.tipo_doc || 'CC'}
+                                  onChange={e => setDocDescarga(d => ({ ...d, [p.planilla_id]: e.target.value }))}
+                                >
+                                  {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
+                                </select>
+                                <Btn size="sm" variant="secondary" onClick={() => descargar(p)} title="Descargar el archivo plano">Plano</Btn>
+                                {p.se_envia === false && (
+                                  <span style={{ fontSize: 12, color: '#92400E' }}>Se tramita por fuera</span>
+                                )}
+                                {p.se_envia !== false && p.estado !== 'numerada' && p.estado !== 'pagada' && (
+                                  <Btn size="sm" disabled={enviar.isPending || p.desactualizada}
+                                       title={p.desactualizada
+                                         ? 'Los datos cambiaron despues de liquidar: anula y vuelve a liquidar'
+                                         : 'Enviar esta planilla al operador'}
+                                       onClick={() => enviar.mutate(p)}>
+                                    {p.codigo_planilla ? 'Reenviar' : 'Enviar'}
+                                  </Btn>
+                                )}
+                                {p.codigo_planilla && !p.numero_planilla && p.estado !== 'pagada' && p.estado !== 'anulada' && (
+                                  <Btn size="sm" disabled={corregir.isPending}
+                                       title="Pedirle al operador que corrija los errores que él mismo marcó"
+                                       onClick={() => corregir.mutate(p.planilla_id)}>
+                                    {corregir.isPending ? 'Corrigiendo…' : 'Corregir'}
+                                  </Btn>
+                                )}
+                                {(p.codigo_planilla || p.numero_planilla) && p.estado !== 'anulada' && p.estado !== 'pagada' && (
+                                  <Btn size="sm" variant="success"
+                                       title="Pedir el enlace al operador y abrir el pago"
+                                       onClick={() => pagar(p)}>Pagar</Btn>
+                                )}
+                                {p.numero_planilla && (
+                                  <Btn size="sm" variant="secondary" onClick={() => descargarComprobante(p)}>Comprobante</Btn>
+                                )}
+                                {p.estado !== 'pagada' && (
+                                  <Btn size="sm" variant="danger" onClick={() => setPorAnular(p)}>Anular</Btn>
+                                )}
+                              </>
+                            ) : (
+                              <>
+                                <Btn size="sm" variant="secondary"
+                                     disabled={previsualizar.isPending}
+                                     onClick={() => previsualizar.mutate(p)}>Previsualizar</Btn>
+                                <Btn size="sm" disabled={liquidar.isPending || p.sin_afiliado}
+                                     onClick={() => liquidar.mutate(p)}>Liquidar</Btn>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {(p.sin_afiliado || p.desactualizada) && (
+                        <tr>
+                          <td colSpan={9} style={{
+                            ...td, fontSize: 12,
+                            color: p.sin_afiliado ? '#B91C1C' : '#92400E',
+                            background: p.sin_afiliado ? '#FEF2F2' : '#FFFBEB',
+                          }}>
+                            {p.sin_afiliado
+                              ? `Hay factura de ${p.factura_codigo} pero el afiliado ya no está en el sistema. No se puede liquidar.`
+                              : 'Los datos cambiaron después de liquidar. Anula y vuelve a liquidar antes de enviar.'}
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {totalPaginas > 1 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              gap: 12, flexWrap: 'wrap', marginTop: 6, padding: '10px 4px',
             }}>
-              {p.planilla_id && p.se_envia !== false && (
-                <input type="checkbox" style={{ width: 16, height: 16, marginTop: 4 }}
-                       checked={elegida}
-                       onChange={() => alternar(p)}
-                       disabled={!!empresaDeLaSeleccion
-                                 && empresaDeLaSeleccion !== p.cliente}
-                       title={empresaDeLaSeleccion && empresaDeLaSeleccion !== p.cliente
-                         ? `Un archivo plano lleva una sola empresa: ya hay ${empresaDeLaSeleccion} en la selección`
-                         : 'Incluir en un archivo con varias personas'} />
-              )}
-              <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                <div style={{ fontWeight: 700, fontSize: 15, letterSpacing: '-0.01em' }}>{p.nombre}</div>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
-                  <Chip>{p.tipo_doc} {p.doc}</Chip>
-                  {p.cliente && <Chip tone="blue">{p.cliente}</Chip>}
-                  {p.subtipo != null && p.subtipo !== '' && (
-                    <Chip>Subtipo {p.subtipo}{SUBTIPOS[String(p.subtipo)] ? ` · ${SUBTIPOS[String(p.subtipo)]}` : ''}</Chip>
-                  )}
-                  {p.factura_codigo && (
-                    <Chip tone={p.factura_estado === 'pendiente' ? 'amber' : 'green'}>
-                      {p.factura_codigo}{p.factura_estado ? ` · ${p.factura_estado}` : ''}
-                    </Chip>
-                  )}
-                </div>
-                {p.sin_afiliado && (
-                  <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 8 }}>
-                    Hay factura de {p.factura_codigo} pero el afiliado ya no está
-                    en el sistema. No se puede liquidar.
-                  </div>
-                )}
-                {p.desactualizada && (
-                  <div style={{ fontSize: 12, color: '#92400E', marginTop: 8 }}>
-                    Los datos cambiaron después de liquidar. Anula y vuelve a liquidar
-                    antes de enviar: el plano guardado es el anterior.
-                  </div>
-                )}
+              <span style={{ fontSize: 13, color: C.text2 }}>
+                <strong style={{ color: '#1D4ED8' }}>{POR_PAGINA}</strong> por página
+                {' · '}
+                {(paginaActual - 1) * POR_PAGINA + 1}
+                –
+                {Math.min(paginaActual * POR_PAGINA, visibles.length)}
+                {' de '}
+                <strong style={{ color: C.text }}>{visibles.length}</strong>
+              </span>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                <Btn size="sm" variant="secondary" disabled={paginaActual <= 1}
+                     onClick={() => irAPagina(paginaActual - 1)}>Anterior</Btn>
+                {Array.from({ length: totalPaginas }, (_, i) => i + 1)
+                  .filter(n => n === 1 || n === totalPaginas || Math.abs(n - paginaActual) <= 1)
+                  .map(n => (
+                    <button key={n} type="button" onClick={() => irAPagina(n)}
+                            style={{
+                              minWidth: 32, height: 32, borderRadius: 8, cursor: 'pointer',
+                              fontWeight: 700, fontSize: 13,
+                              border: `1px solid ${n === paginaActual ? '#1D4ED8' : C.border}`,
+                              background: n === paginaActual ? '#1D4ED8' : C.surface,
+                              color: n === paginaActual ? '#fff' : C.text,
+                            }}>{n}</button>
+                  ))}
+                <Btn size="sm" variant="secondary" disabled={paginaActual >= totalPaginas}
+                     onClick={() => irAPagina(paginaActual + 1)}>Siguiente</Btn>
               </div>
-
-              {p.planilla_id ? (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8, marginLeft: 'auto' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontWeight: 700, fontSize: 16, fontVariantNumeric: 'tabular-nums' }}>
-                      {pesos(p.total)}
-                    </span>
-                    <EstadoBadge estado={p.estado} />
-                  </div>
-                  <div style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', justifyContent: 'flex-end' }}>
-                    <select
-                      style={{ ...inp, padding: '6px 8px', fontSize: 12, width: 72 }}
-                      title="Documento con el que se identifica a la persona en el archivo"
-                      value={docDescarga[p.planilla_id] || p.tipo_doc_sugerido || p.tipo_doc || 'CC'}
-                      onChange={e => setDocDescarga(d => ({ ...d, [p.planilla_id]: e.target.value }))}
-                    >
-                      {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    <Btn size="sm" variant="secondary" onClick={() => descargar(p)} title="Descargar el archivo plano">
-                      Plano
-                    </Btn>
-                    {p.se_envia === false && (
-                      <span style={{ fontSize: 12, color: '#92400E' }}>
-                        Se tramita por fuera
-                      </span>
-                    )}
-                    {p.se_envia !== false && p.estado !== 'numerada' && p.estado !== 'pagada' && (
-                      <Btn size="sm" disabled={enviar.isPending || p.desactualizada}
-                           title={p.desactualizada
-                             ? 'Los datos cambiaron despues de liquidar: anula y vuelve a liquidar'
-                             : 'Enviar esta planilla al operador'}
-                           onClick={() => enviar.mutate(p)}>
-                        {p.codigo_planilla ? 'Reenviar' : 'Enviar'}
-                      </Btn>
-                    )}
-                    {p.codigo_planilla && !p.numero_planilla && p.estado !== 'pagada' && p.estado !== 'anulada' && (
-                      <Btn size="sm" disabled={corregir.isPending}
-                           title="Pedirle al operador que corrija los errores que él mismo marcó"
-                           onClick={() => corregir.mutate(p.planilla_id)}>
-                        {corregir.isPending ? 'Corrigiendo…' : 'Corregir'}
-                      </Btn>
-                    )}
-                    {p.link_pago && (
-                      <Btn size="sm" variant="success"
-                           title="Abrir el pago en PSE"
-                           onClick={() => window.open(p.link_pago, '_blank', 'noopener')}>
-                        Pagar
-                      </Btn>
-                    )}
-                    {p.numero_planilla && (
-                      <Btn size="sm" variant="secondary"
-                           onClick={() => descargarComprobante(p)}>
-                        Comprobante
-                      </Btn>
-                    )}
-                    {p.estado !== 'pagada' && (
-                      <Btn size="sm" variant="danger" onClick={() => setPorAnular(p)}>
-                        Anular
-                      </Btn>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div style={{ display: 'flex', gap: 6, marginLeft: 'auto', alignSelf: 'center' }}>
-                  <Btn size="sm" variant="secondary"
-                       disabled={previsualizar.isPending}
-                       onClick={() => previsualizar.mutate(p)}>
-                    Previsualizar
-                  </Btn>
-                  <Btn size="sm" disabled={liquidar.isPending || p.sin_afiliado}
-                       onClick={() => liquidar.mutate(p)}>
-                    Liquidar
-                  </Btn>
-                </div>
-              )}
             </div>
-            );
-          })}
+          )}
         </div>
       )}
 
