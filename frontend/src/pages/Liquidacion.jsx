@@ -20,7 +20,7 @@ const pesos = (n) => '$' + (Number(n) || 0).toLocaleString('es-CO');
 // Tipos de documento que acepta el campo 3 del registro tipo 2. Se puede bajar
 // el mismo plano con otro documento cuando el operador tiene a la persona
 // registrada con uno distinto al que está en el sistema.
-const TIPOS_DOC = ['CC', 'CE', 'TI', 'PA', 'CD', 'SC', 'PE', 'PT'];
+const TIPOS_DOC = ['CC', 'CE', 'TI', 'PA', 'CD', 'SC', 'PE', 'PT', 'PC'];
 
 const inp = {
   padding: '9px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
@@ -73,6 +73,7 @@ export default function Liquidacion() {
   const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [busqueda, setBusqueda] = useState('');
   const [subtipo, setSubtipo] = useState('');   // el del formulario: 0, 3, 4, 20, 22
+  const [tipoDocFiltro, setTipoDocFiltro] = useState('');
   const [soloPendientes, setSoloPendientes] = useState(false);
   const [previa, setPrevia] = useState(null);      // { afiliado, resumen }
   const [porAnular, setPorAnular] = useState(null);
@@ -98,10 +99,11 @@ export default function Liquidacion() {
     return personas.filter(p => {
       if (soloPendientes && p.planilla_id) return false;
       if (subtipo && String(p.subtipo ?? '') !== subtipo) return false;
+      if (tipoDocFiltro && (p.tipo_doc || '') !== tipoDocFiltro) return false;
       if (!q) return true;
       return [p.nombre, p.doc, p.cliente].some(v => (v || '').toLowerCase().includes(q));
     });
-  }, [personas, busqueda, soloPendientes, subtipo]);
+  }, [personas, busqueda, soloPendientes, subtipo, tipoDocFiltro]);
 
   // Los subtipos que de verdad hay en pantalla, con su significado.
   const SUBTIPOS = {
@@ -241,6 +243,14 @@ export default function Liquidacion() {
               <option key={k} value={k}>{k} · {v}</option>)}
           </select>
         </div>
+        <div style={{ minWidth: 110 }}>
+          <label style={lbl}>Documento</label>
+          <select style={{ ...inp, width: '100%' }} value={tipoDocFiltro}
+                  onChange={e => setTipoDocFiltro(e.target.value)}>
+            <option value="">Todos</option>
+            {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}
+          </select>
+        </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6,
                         fontSize: 13, color: C.text2, paddingBottom: 9 }}>
           <input type="checkbox" checked={soloPendientes}
@@ -248,7 +258,7 @@ export default function Liquidacion() {
           Solo sin liquidar
         </label>
         <div style={{ fontSize: 12, color: C.text2, paddingBottom: 10 }}>
-          {pendientes} de {personas.length} sin planilla en {periodo}
+          {pendientes} de {personas.length} facturados sin planilla en {periodo}
         </div>
       </div>
 
@@ -274,8 +284,9 @@ export default function Liquidacion() {
           border: `1px dashed ${C.border}`, borderRadius: 10,
         }}>
           {personas.length === 0
-            ? 'No hay afiliados activos. Carga afiliados para poder liquidar.'
-            : 'Ningún afiliado coincide con el filtro.'}
+            ? `No hay facturas de ${periodo}. La liquidación sale de lo facturado:
+               genera las facturas del mes y aquí aparecerá a quién liquidarle.`
+            : 'Ninguna persona coincide con el filtro.'}
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 8 }}>
@@ -306,6 +317,12 @@ export default function Liquidacion() {
                 </div>
                 {/* El plano se congela al liquidar. Si los datos cambiaron
                     despues, descargar trae el archivo viejo sin avisar. */}
+                {p.sin_afiliado && (
+                  <div style={{ fontSize: 12, color: '#B91C1C', marginTop: 4 }}>
+                    Hay factura de {p.factura_codigo} pero el afiliado ya no está
+                    en el sistema. No se puede liquidar.
+                  </div>
+                )}
                 {p.desactualizada && (
                   <div style={{ fontSize: 12, color: '#92400E', marginTop: 4 }}>
                     Los datos de la persona cambiaron despues de liquidar. El plano

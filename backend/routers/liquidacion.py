@@ -144,37 +144,45 @@ def _resumen_a_dict(resumen, af, ap, anio, mes) -> dict:
     }
 
 
+def _en_lotes(valores, tamano=400):
+    """Parte una lista para no pasarse del limite de parametros de SQLite."""
+    valores = list(valores)
+    for i in range(0, len(valores), tamano):
+        yield valores[i:i + tamano]
+
+
 @router.get("/pendientes")
 def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
-               subtipo: str = "", tipo_cotizante: str = "",
+               subtipo: str = "", tipo_cotizante: str = "", tipo_doc: str = "",
                db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
-    """Afiliados activos y si ya tienen planilla en el período.
+    """A quien hay que liquidarle el periodo, segun las facturas de ese mes.
 
-    Es lo que alimenta el buscador de la pantalla: liquidar es de a uno, pero
-    hay que poder ver de un vistazo a quién le falta el mes.
+    El orden del trabajo es: primero se factura, despues se liquida. Por eso
+    la lista sale de las facturas del periodo y no de los afiliados activos:
+    si el mes no se ha facturado, aqui no hay nada que hacer todavia y la
+    pantalla debe decirlo en vez de ofrecer a todo el mundo.
+
+    Cada fila es una factura. Cuando su afiliado ya no esta —se elimino, o la
+    factura quedo de alguien que se fue— la fila igual aparece, sin `id`, para
+    que se vea que hay una factura sin con que liquidarla.
     """
     periodo = _periodo(anio, mes)
 
-    consulta = db.query(models.Afiliado).filter(models.Afiliado.activo == True)  # noqa: E712
+    q_fact = db.query(models.Factura).filter(models.Factura.anio == anio,
+                                             models.Factura.mes == mes)
     if cliente:
-        consulta = consulta.filter(models.Afiliado.cliente_txt == cliente)
-    if q:
-        # La cédula se busca completa o por el pedazo que uno recuerde, igual
-        # que el nombre: quien llega de una factura tiene el número, no el
-        # nombre como está escrito en el sistema.
-        patron = f"%{q.strip()}%"
-        consulta = consulta.filter(models.Afiliado.nombre.ilike(patron) |
-                                   models.Afiliado.doc.ilike(patron))
-    if subtipo:
-        # Varios separados por coma, para ver de un golpe todo un grupo.
-        valores = [v.strip() for v in subtipo.split(",") if v.strip()]
-        if valores:
-            consulta = consulta.filter(models.Afiliado.subtipo.in_(valores))
-    if tipo_cotizante:
-        valores = [v.strip().zfill(2) for v in tipo_cotizante.split(",") if v.strip()]
-        if valores:
-            consulta = consulta.filter(models.Afiliado.tipo_cotizante.in_(valores))
-    afiliados = consulta.order_by(models.Afiliado.nombre).limit(500).all()
+        q_fact = q_fact.filter(models.Factura.cliente == cliente)
+    facturas = q_fact.order_by(models.Factura.nombre_afiliado).limit(500).all()
+    if not facturas:
+        return []
+
+    docs = {f.doc for f in facturas if f.doc}
+    afiliados = {}
+    for lote in _en_lotes(docs):
+        for a in (db.query(models.Afiliado)
+                    .filter(models.Afiliado.activo == True,            # noqa: E712
+                            models.Afiliado.doc.in_(lote)).all()):
+            afiliados[a.doc] = a
 
     liquidadas = {
         l.afiliado_doc: l
@@ -183,40 +191,64 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
                            models.PlanillaLiquidacion.estado != "anulada").all()
     }
 
-    def _vieja(a):
-        """Si el afiliado cambió después de liquidar, el plano va desfasado."""
-        l = liquidadas.get(a.doc)
-        return bool(l and l.creado and a.actualizado and a.actualizado > l.creado)
+    def _pasa_filtros(f, a):
+        """Los filtros miran al afiliado; sin afiliado solo queda el texto."""
+        if q:
+            patron = q.strip().lower()
+            campos = [f.nombre_afiliado, f.doc, f.cliente]
+            if a is not None:
+                campos += [_nombre(a), a.doc, a.cliente_txt]
+            if not any(patron in (v or "").lower() for v in campos):
+                return False
+        for valor, atributo, normalizar in (
+            (subtipo, "subtipo", lambda v: v),
+            (tipo_cotizante, "tipo_cotizante", lambda v: v.zfill(2)),
+            (tipo_doc, "tipo_doc", lambda v: v.upper()),
+        ):
+            if not valor:
+                continue
+            if a is None:
+                return False
+            buscados = {normalizar(v.strip()) for v in valor.split(",") if v.strip()}
+            if str(getattr(a, atributo, "") or "") not in buscados:
+                return False
+        return True
 
-    # La factura del mismo periodo, para cerrar el circulo con Facturacion:
-    # quien llega con una factura en la mano busca por cedula y quiere ver si
-    # esa persona ya tiene la planilla hecha, y al reves.
-    facturas = {
-        f.doc: f
-        for f in db.query(models.Factura)
-                   .filter(models.Factura.anio == anio, models.Factura.mes == mes)
-                   .all()
-    }
-
-    return [{
-        "id": a.id, "doc": a.doc, "tipo_doc": a.tipo_doc,
-        "nombre": _nombre(a), "cliente": a.cliente_txt,
-        "tipo_cotizante": a.tipo_cotizante,
-        "factura_codigo": getattr(facturas.get(a.doc), "codigo", None),
-        "factura_estado": getattr(facturas.get(a.doc), "estado", None),
-        "desactualizada": _vieja(a),
-        # Los subtipos 20 y 22 se identifican ante el operador con cedula de
-        # extranjeria. Se sugiere aqui para que el selector venga puesto y no
-        # dependa de que alguien se acuerde.
-        "tipo_doc_sugerido": perfiles.documento_sugerido(a.subtipo, a.tipo_doc),
-        "subtipo": a.subtipo,
-        "planilla_id": liquidadas[a.doc].id if a.doc in liquidadas else None,
-        "estado": liquidadas[a.doc].estado if a.doc in liquidadas else None,
-        "total": int(liquidadas[a.doc].total_general or 0) if a.doc in liquidadas else None,
-        "codigo_planilla": liquidadas[a.doc].planilla_corregida if a.doc in liquidadas else None,
-        "numero_planilla": liquidadas[a.doc].numero_planilla if a.doc in liquidadas else None,
-        "link_pago": liquidadas[a.doc].link_pago if a.doc in liquidadas else None,
-    } for a in afiliados]
+    filas = []
+    for f in facturas:
+        a = afiliados.get(f.doc)
+        if not _pasa_filtros(f, a):
+            continue
+        l = liquidadas.get(f.doc)
+        # El plano se congela al liquidar: si el afiliado cambio despues, el
+        # archivo que se descargue lleva los datos viejos.
+        desfasada = bool(l and l.creado and a is not None and a.actualizado
+                         and a.actualizado > l.creado)
+        filas.append({
+            "id": getattr(a, "id", None),
+            "doc": f.doc,
+            "tipo_doc": getattr(a, "tipo_doc", None),
+            "nombre": _nombre(a) if a is not None else f.nombre_afiliado,
+            "cliente": getattr(a, "cliente_txt", None) or f.cliente,
+            "tipo_cotizante": getattr(a, "tipo_cotizante", None),
+            "subtipo": getattr(a, "subtipo", None),
+            "sin_afiliado": a is None,
+            "factura_codigo": f.codigo,
+            "factura_estado": f.estado,
+            "desactualizada": desfasada,
+            # Los subtipos 20 y 22 se identifican ante el operador con cedula
+            # de extranjeria. Se sugiere aqui para que el selector venga
+            # puesto y no dependa de que alguien se acuerde.
+            "tipo_doc_sugerido": (perfiles.documento_sugerido(a.subtipo, a.tipo_doc)
+                                  if a is not None else ""),
+            "planilla_id": getattr(l, "id", None),
+            "estado": getattr(l, "estado", None),
+            "total": int(l.total_general or 0) if l else None,
+            "codigo_planilla": getattr(l, "planilla_corregida", None),
+            "numero_planilla": getattr(l, "numero_planilla", None),
+            "link_pago": getattr(l, "link_pago", None),
+        })
+    return filas
 
 
 @router.post("/previsualizar")

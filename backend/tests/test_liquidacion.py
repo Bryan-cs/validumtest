@@ -448,6 +448,13 @@ def test_afiliado_retirado_no_se_liquida(client, admin_token, afiliado_listo, db
 
 
 def test_pendientes_marca_quien_ya_tiene_planilla(client, admin_token, afiliado_listo):
+    # La lista sale de las facturas del periodo: sin factura no hay fila que
+    # marcar, porque primero se factura y despues se liquida.
+    client.post("/facturas", headers=_h(admin_token), json={
+        "doc": afiliado_listo["doc"], "anio": "2026", "mes": "9",
+        "codigo": f"F{afiliado_listo['doc']}",
+    })
+
     r = client.get("/liquidacion/pendientes?anio=2026&mes=9", headers=_h(admin_token))
     assert r.status_code == 200
     fila = next(x for x in r.json() if x["doc"] == afiliado_listo["doc"])
