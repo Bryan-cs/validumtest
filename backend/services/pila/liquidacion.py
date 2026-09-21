@@ -307,8 +307,11 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
     if contrata_salud:
         d.dias_salud = dias
         d.ibc_salud = ibc
-        exonera = bool(getattr(aportante, "exonerado_parafiscales", False)) and \
-            ibc < smlmv * P.TOPE_EXONERACION_SMLMV
+        # La exoneración del 114-1 no aplica a cualquier tipo de cotizante: el
+        # operador rechaza la marca en los que no están en su lista.
+        exonera = (bool(getattr(aportante, "exonerado_parafiscales", False))
+                   and ibc < smlmv * P.TOPE_EXONERACION_SMLMV
+                   and obligaciones.admite_exoneracion(d.tipo_cotizante))
         d.exonerado = exonera
         d.tarifa_salud = P.TARIFA_SALUD_TRABAJADOR if exonera else P.TARIFA_SALUD
         d.cot_salud = P.aproximar_aporte(ibc * d.tarifa_salud)
@@ -342,10 +345,29 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.tarifa_icbf = P.TARIFA_ICBF
         d.valor_icbf = P.aproximar_aporte(ibc * P.TARIFA_ICBF)
 
+    _depurar_campos_del_tipo(d)
     return d
 
 
-def liquidar(afiliados, aportante, anio: int, mes: int) -> ResumenLiquidacion:
+def _depurar_campos_del_tipo(d: DetalleLiquidado) -> None:
+    """Vacía los campos que el tipo de cotizante no admite.
+
+    Son campos que se llenan sin pensar —el tipo de salario, las horas— y que
+    para ciertos tipos de cotizante el operador devuelve como error. Se limpian
+    al final, cuando ya está decidido todo lo demás, en vez de repartir la
+    condición por cada bloque.
+    """
+    if not obligaciones.admite_tipo_salario(d.tipo_cotizante):
+        d.tipo_salario = ""
+
+    # Las horas laboradas van con el aporte a caja: el operador avisa cuando
+    # hay horas reportadas y no hay aportes a CCF.
+    if not obligaciones.admite_horas(d.tipo_cotizante) or not d.dias_ccf:
+        d.horas_laboradas = 0
+
+
+def liquidar(afiliados, aportante, anio: int, mes: int,
+             tipo_planilla: str = "E") -> ResumenLiquidacion:
     """Liquida una lista de afiliados y suma los totales por subsistema."""
     resumen = ResumenLiquidacion(detalles=[])
 
@@ -382,6 +404,11 @@ def liquidar(afiliados, aportante, anio: int, mes: int) -> ResumenLiquidacion:
                 colombiano_exterior=d.colombiano_exterior,
                 tipo_doc=d.tipo_doc,
                 subtipo_cotizante=d.subtipo_cotizante):
+            resumen.avisos.append(f"{quien}: {choque}")
+
+        # Y si ese tipo de cotizante cabe en este tipo de planilla, que es un
+        # rechazo que el operador no autocorrige.
+        for choque in obligaciones.revisar_planilla(d.tipo_cotizante, tipo_planilla):
             resumen.avisos.append(f"{quien}: {choque}")
 
         resumen.detalles.append(d)

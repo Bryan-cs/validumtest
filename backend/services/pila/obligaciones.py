@@ -122,6 +122,67 @@ def nombre_tipo(tipo_cotizante: str) -> str:
     return NOMBRES_TIPO.get(tipo, f"tipo {tipo}")
 
 
+# ── Campos que solo valen para ciertos tipos de cotizante ────────────────────
+#
+# El anexo no los junta en una tabla: cada regla vive en la fila de su campo o
+# en el parrafo de su tipo. Estas cuatro salieron de un rechazo real, donde el
+# operador devolvio la lista completa en el texto del error.
+
+# Campo 96. "Es un campo obligatorio para los tipos de cotizante 1, 2, 18, 22,
+# 30, 51 y 55" — y para los demas sobra: el operador avisa que hay horas
+# reportadas sin aportes a caja.
+TIPOS_CON_HORAS = {"01", "02", "18", "22", "30", "51", "55"}
+
+# Campo 76. La lista es del propio operador: "El tipo cotizante 23 no permite
+# exoneracion de pago parafiscales, los permitidos son 1, 2, 18, 20, 22, 30,
+# 32, 55, 31, 68, 71".
+TIPOS_CON_EXONERACION = {"01", "02", "18", "20", "22", "30", "31", "32",
+                         "55", "68", "71"}
+
+# Campo 41. El anexo no da la lista, pero si dice, tipo por tipo, cual tiene
+# como base "el salario mensual". Son esos: los demas cotizan sobre un IBC
+# fijado por norma y el campo no aplica.
+TIPOS_CON_TIPO_SALARIO = {"01", "02", "18", "20", "22", "30", "31", "32",
+                          "47", "51", "55"}
+
+# Que tipos de cotizante acepta cada tipo de planilla. Tambien del operador:
+# "El tipo de cotizante 23 no es valido en el tipo de planilla E. Los tipos de
+# cotizante validos son 01, 12, 15, 18, 19, 20, 21, 22, 30, 31, 32, 40, 51, 54,
+# 55, 62, 68, 71". Solo esta la E porque es la unica que genera el sistema; sin
+# entrada no se valida.
+TIPOS_POR_PLANILLA = {
+    "E": {"01", "12", "15", "18", "19", "20", "21", "22", "30", "31", "32",
+          "40", "51", "54", "55", "62", "68", "71"},
+}
+
+
+def admite_horas(tipo_cotizante) -> bool:
+    return _tipo(tipo_cotizante) in TIPOS_CON_HORAS
+
+
+def admite_exoneracion(tipo_cotizante) -> bool:
+    return _tipo(tipo_cotizante) in TIPOS_CON_EXONERACION
+
+
+def admite_tipo_salario(tipo_cotizante) -> bool:
+    return _tipo(tipo_cotizante) in TIPOS_CON_TIPO_SALARIO
+
+
+def _tipo(tipo_cotizante) -> str:
+    return str(tipo_cotizante or "").strip().zfill(2)
+
+
+def revisar_planilla(tipo_cotizante, tipo_planilla: str) -> list:
+    """Si ese tipo de cotizante cabe en ese tipo de planilla."""
+    validos = TIPOS_POR_PLANILLA.get((tipo_planilla or "").strip().upper())
+    tipo = _tipo(tipo_cotizante)
+    if not validos or tipo in validos:
+        return []
+    return [f"el tipo de cotizante {tipo} ({nombre_tipo(tipo)}) no se puede "
+            f"reportar en una planilla tipo {tipo_planilla}. El operador la va "
+            f"a rechazar: corrige el tipo de cotizante."]
+
+
 # ── Subtipos de cotizante (campo 6) ───────────────────────────────────────────
 #
 # El subtipo no reemplaza al tipo: lo matiza. Alguien sigue siendo tipo 01
