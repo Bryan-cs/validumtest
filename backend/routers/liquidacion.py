@@ -273,6 +273,10 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
             # puesto y no dependa de que alguien se acuerde.
             "tipo_doc_sugerido": (perfiles.documento_sugerido(a.subtipo, a.tipo_doc)
                                   if a is not None else ""),
+            # Los grupos que se tramitan por fuera se ven, se liquidan y se
+            # descargan, pero no se envian desde aqui.
+            "se_envia": (perfiles.se_envia_al_operador(a.subtipo)
+                         if a is not None else False),
             "planilla_id": getattr(l, "id", None),
             "estado": getattr(l, "estado", None),
             "total": int(l.total_general or 0) if l else None,
@@ -414,6 +418,25 @@ def listar(cliente: str = "", periodo: str = "", doc: str = "", estado: str = ""
     } for l in filas]
 
 
+def _corta_si_no_se_envia(db: Session, liquidaciones):
+    """Detiene el envio de los grupos que se tramitan por fuera.
+
+    Se comprueba aqui y no solo en la pantalla: el boton se puede esconder,
+    pero el endpoint sigue existiendo y un envio equivocado deja un registro
+    en el operador que despues toca anular.
+    """
+    fuera = []
+    for l in liquidaciones:
+        af = (db.query(models.Afiliado).filter_by(id=l.afiliado_id).first()
+              if l.afiliado_id else None)
+        if af and not perfiles.se_envia_al_operador(af.subtipo):
+            fuera.append(f"{l.afiliado_nombre} (subtipo {af.subtipo})")
+    if fuera:
+        raise HTTPException(
+            409, f"Estas planillas no se envían desde aquí, se tramitan por "
+                 f"fuera: {', '.join(fuera)}. El archivo se puede descargar.")
+
+
 def _liquidaciones_del_grupo(db: Session, ids: str):
     """Las liquidaciones de una lista de ids, validadas como conjunto.
 
@@ -488,6 +511,7 @@ def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
                          f"código de la administradora. Complétalo en su ficha, "
                          f"vuelve a liquidar y envía.")
 
+    _corta_si_no_se_envia(db, filas)
     cuerpo, nombre, ap = _armar_plano(db, filas, tipo_doc, _documentos_pedidos(docs))
     try:
         resultado = operador.enviar_planilla(
@@ -766,6 +790,7 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
                      f"código de la administradora. Complétalo en su ficha, "
                      f"vuelve a liquidar y envía.")
 
+    _corta_si_no_se_envia(db, [l])
     cuerpo, nombre, ap = _armar_plano(db, l, tipo_doc)
 
     try:

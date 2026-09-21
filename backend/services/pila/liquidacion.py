@@ -480,6 +480,13 @@ def liquidar(afiliados, aportante, anio: int, mes: int,
 
         quien = f"{d.doc} {d.primer_nombre} {d.primer_apellido}".strip()
 
+        # Los grupos que se tramitan por fuera se liquidan igual, para poder
+        # ver los numeros y bajar el archivo, pero conviene decirlo aqui.
+        if not perfiles.se_envia_al_operador(getattr(af, "subtipo", None)):
+            resumen.avisos.append(
+                f"{quien}: este grupo se tramita por fuera. La planilla se puede "
+                f"descargar, pero el envío al operador está cortado.")
+
         # Aqui toda persona lleva salud. Sin EPS la ficha esta a medio llenar.
         for choque in perfiles.revisar_salud_contratada(d.servicios):
             resumen.avisos.append(f"{quien}: {choque}")

@@ -40,6 +40,10 @@ class Perfil(NamedTuple):
     extranjero_no_pension: bool = False
     # Documento con el que sale al operador, si el grupo exige uno distinto.
     tipo_doc: Optional[str] = None
+    # Si este grupo se envia al operador desde aqui. El subtipo 20 no: su
+    # planilla se tramita por fuera, asi que el sistema la liquida y deja
+    # descargar el archivo, pero no la manda.
+    se_envia: bool = True
     descripcion: str = ""
 
 
@@ -49,8 +53,8 @@ PERFILES = {
                  descripcion="Exonerada de pensión: no obligada por edad"),
     "4":  Perfil(subtipo_cotizante="04",
                  descripcion="Exonerada de pensión: requisitos cumplidos"),
-    "20": Perfil(subtipo_cotizante="04", tipo_doc="CE",
-                 descripcion="Se liquida con cédula de extranjería, sin pensión ni caja"),
+    "20": Perfil(subtipo_cotizante="04", tipo_doc="CE", se_envia=False,
+                 descripcion="Se tramita por fuera: no se envía al operador desde aquí"),
     "22": Perfil(extranjero_no_pension=True, tipo_doc="CE",
                  descripcion="Extranjera no obligada a cotizar a pensión"),
 }
@@ -73,6 +77,17 @@ def perfil(subtipo) -> Perfil:
 # ficha sin EPS no es un caso valido: es un dato a medio llenar, y el operador
 # la rechaza mas adelante por otro camino.
 SALUD_SIEMPRE_OBLIGATORIA = True
+
+
+def se_envia_al_operador(subtipo) -> bool:
+    """Si este grupo se manda al operador desde el sistema.
+
+    El subtipo 20 no. Su planilla se arma por fuera, asi que aqui se liquida y
+    se puede descargar el archivo para revisarlo, pero el envio se corta: que
+    el boton este disponible y el operador la rechace despues es peor que
+    decirlo antes.
+    """
+    return perfil(subtipo).se_envia
 
 
 def revisar_salud_contratada(servicios) -> list:

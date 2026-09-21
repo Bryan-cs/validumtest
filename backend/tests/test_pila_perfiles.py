@@ -217,3 +217,35 @@ def test_el_aviso_llega_al_resumen():
     af.servicios = '["ARL 4"]'; af.clase_riesgo = "4"
     avisos = liquidar([af], _Aportante(), 2026, 9).avisos
     assert any("toda persona lleva EPS" in a for a in avisos)
+
+
+# ─── Grupos que se tramitan por fuera ─────────────────────────────────────────
+#
+# El subtipo 20 no se envia al operador desde aqui. Se liquida y se puede
+# bajar el archivo para revisarlo, pero el envio se corta: que el boton este
+# disponible y el operador la rechace despues es peor que decirlo antes.
+
+@pytest.mark.parametrize("subtipo", ["0", "3", "4", "22"])
+def test_los_demas_grupos_si_se_envian(subtipo):
+    assert perfiles.se_envia_al_operador(subtipo) is True
+
+
+def test_el_20_no_se_envia():
+    assert perfiles.se_envia_al_operador("20") is False
+
+
+def test_un_subtipo_desconocido_se_envia():
+    """Sin regla, se comporta como los normales."""
+    assert perfiles.se_envia_al_operador("99") is True
+
+
+def test_el_20_se_sigue_liquidando_y_lo_avisa():
+    """Se puede ver el numero y bajar el archivo: lo que se corta es el envio."""
+    from services.pila.liquidacion import liquidar
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.subtipo = "20"; af.subtipo_cotizante = ""
+    af.servicios = '["EPS","CCF","ARL 1"]'
+    r = liquidar([af], _Aportante(), 2026, 9)
+    assert int(r.total_general) > 0
+    assert any("se tramita por fuera" in a for a in r.avisos)

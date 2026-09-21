@@ -419,7 +419,7 @@ export default function Liquidacion() {
               background: C.surface, display: 'flex', alignItems: 'center',
               gap: 12, flexWrap: 'wrap',
             }}>
-              {p.planilla_id && (
+              {p.planilla_id && p.se_envia !== false && (
                 <input type="checkbox" style={{ width: 16, height: 16 }}
                        checked={elegidas.has(p.planilla_id)}
                        onChange={() => alternar(p)}
@@ -482,7 +482,12 @@ export default function Liquidacion() {
                     <Btn size="sm" variant="secondary" onClick={() => descargar(p)}>
                       Descargar plano
                     </Btn>
-                    {p.estado !== 'numerada' && p.estado !== 'pagada' && (
+                    {p.se_envia === false && (
+                      <span style={{ fontSize: 12, color: '#92400E' }}>
+                        Se tramita por fuera
+                      </span>
+                    )}
+                    {p.se_envia !== false && p.estado !== 'numerada' && p.estado !== 'pagada' && (
                       <Btn size="sm" disabled={enviar.isPending || p.desactualizada}
                            title={p.desactualizada
                              ? 'Los datos cambiaron despues de liquidar: anula y vuelve a liquidar'
