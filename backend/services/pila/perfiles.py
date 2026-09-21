@@ -9,23 +9,20 @@ deducir solo con el tipo de cotizante.
     0    cotiza a pensión, y la tiene contratada
     3    exonerada de pensión — no obligada por edad
     4    exonerada de pensión — requisitos cumplidos
-    20   obligada a pensión, sin liquidez para pagarla
+    20   extranjera que se liquida con cédula de extranjería
     22   extranjera no obligada a cotizar a pensión
 
 Los números 3 y 4 coinciden con los subtipos de cotizante del anexo que
 significan lo mismo (campo 6), así que se mapean directo.
 
-El 22 usa la marca del campo 7, que es para quien de verdad tiene documento
-de extranjería: el operador la valida contra su propio registro, no contra el
-documento del archivo.
+El 20 y el 22 usan la marca del campo 7, "extranjero no obligado a cotizar a
+pensiones". Los dos grupos son de extranjeros y ninguno liquida pensión; la
+diferencia entre ellos es de negocio, no de archivo.
 
-El 20 no tiene regla. Son personas obligadas a cotizar a pensión, y la falta
-de liquidez del aportante no las exime: marcarlas como extranjeras declara
-algo falso y el que se queda sin semanas es el trabajador. Además el operador
-ya no lo permite —rechaza la marca cuando su registro dice cédula de
-ciudadanía—, así que tampoco funcionaría. Para la falta de liquidez está la
-mora: se presenta la planilla completa y se paga después, con los intereses
-que el mismo operador calcula.
+Esa marca no se puede fingir: el operador la valida contra su propio registro,
+no contra el documento del archivo. A quien tenga cédula de ciudadanía allá,
+la rechaza por mucho que el plano diga CE. Es la comprobación que decide si
+una persona de estos grupos pasa o no, y está fuera de este sistema.
 """
 from typing import NamedTuple, Optional
 
@@ -46,7 +43,8 @@ PERFILES = {
                  descripcion="Exonerada de pensión: no obligada por edad"),
     "4":  Perfil(subtipo_cotizante="04",
                  descripcion="Exonerada de pensión: requisitos cumplidos"),
-    "20": Perfil(descripcion="Obligada a pensión: se liquida como cualquiera"),
+    "20": Perfil(extranjero_no_pension=True, tipo_doc="CE",
+                 descripcion="Extranjera que se liquida con cédula de extranjería"),
     "22": Perfil(extranjero_no_pension=True, tipo_doc="CE",
                  descripcion="Extranjera no obligada a cotizar a pensión"),
 }

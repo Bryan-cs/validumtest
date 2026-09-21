@@ -61,27 +61,25 @@ def test_el_22_no_cotiza_pension_ni_teniendola_contratada():
     assert int(d.cot_pension) == 0
 
 
-def test_el_20_cotiza_pension_como_cualquiera():
-    """Esta obligada, y la falta de liquidez del aportante no la exime.
-
-    Marcarla como extranjera declararia algo falso y le costaria las semanas
-    al trabajador. El operador ademas lo rechaza: valida la marca contra su
-    propio registro, no contra el documento del archivo.
-    """
-    d = _liquidar("20", servicios='["EPS","AFP","CCF","ARL 1"]')
-    assert d.extranjero_no_pension is False
-    assert int(d.cot_pension) > 0
+@pytest.mark.parametrize("subtipo", ["20", "22"])
+def test_los_dos_grupos_de_extranjeria_no_cotizan_pension(subtipo):
+    """Los dos usan la marca del campo 7 y salen con documento de extranjeria."""
+    d = _liquidar(subtipo, servicios='["EPS","AFP","CCF","ARL 1"]')
+    assert d.extranjero_no_pension is True
+    assert int(d.cot_pension) == 0
+    assert d.cod_afp == ""
 
 
-def test_el_20_conserva_su_documento():
-    assert perfiles.documento_sugerido("20", "CC") == ""
+@pytest.mark.parametrize("subtipo", ["20", "22"])
+def test_los_dos_salen_con_cedula_de_extranjeria(subtipo):
+    assert perfiles.documento_sugerido(subtipo, "CC") == "CE"
 
 
 def test_solo_el_22_sale_con_cedula_de_extranjeria():
     assert perfiles.documento_sugerido("22", "CC") == "CE"
 
 
-@pytest.mark.parametrize("subtipo", ["0", "3", "4", "20"])
+@pytest.mark.parametrize("subtipo", ["0", "3", "4"])
 def test_los_demas_conservan_su_documento(subtipo):
     assert perfiles.documento_sugerido(subtipo, "CC") == ""
 
