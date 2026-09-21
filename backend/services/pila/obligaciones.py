@@ -208,6 +208,33 @@ TIPOS_POR_PLANILLA = {
 }
 
 
+# Lo que cambia dentro de una planilla concreta. La planilla Y la define el
+# anexo asi: "es obligatorio el aporte al Sistema General de Riesgos Laborales
+# y opcional efectuar en nombre de su contratista, los aportes a los Sistemas
+# Generales de Seguridad Social en Salud y Pension, asi como tambien los
+# aportes a cajas de compensacion familiar... caso en el cual el aportante
+# debera reportar el tipo de cotizante 59".
+#
+# O sea que el 59, que fuera de aqui tiene salud y pension obligatorias, en la
+# planilla Y solo debe riesgos. Sin esto el sistema le reclamaria aportes que
+# el aportante no tiene por que hacer.
+OBLIGACIONES_POR_PLANILLA = {
+    "Y": {"59": ("V", "V", "O", "V")},
+}
+
+
+def reglas_de(tipo_cotizante, tipo_planilla: str = "") -> tuple:
+    """Las obligaciones de un tipo de cotizante dentro de una planilla.
+
+    Devuelve None cuando el tipo no esta en la tabla, que es la forma de decir
+    "no se valida": inventar una regla bloquearia planillas correctas.
+    """
+    tipo = _tipo(tipo_cotizante)
+    planilla = (tipo_planilla or "").strip().upper()
+    propias = OBLIGACIONES_POR_PLANILLA.get(planilla, {})
+    return propias.get(tipo) or OBLIGACIONES.get(tipo)
+
+
 def admite_horas(tipo_cotizante) -> bool:
     return _tipo(tipo_cotizante) in TIPOS_CON_HORAS
 
@@ -310,7 +337,7 @@ DOCS_EXTRANJERO = ("CE", "PA", "CD", "SC", "PE", "PT", "PC")
 
 def revisar(tipo_cotizante: str, servicios, extranjero_no_pension: bool = False,
             colombiano_exterior: bool = False, tipo_doc: str = "",
-            subtipo_cotizante: str = "") -> list:
+            subtipo_cotizante: str = "", tipo_planilla: str = "") -> list:
     """Choques entre el tipo de cotizante y lo contratado.
 
     Devuelve una lista de frases, vacía si todo cuadra. Cada frase dice qué
@@ -324,7 +351,7 @@ def revisar(tipo_cotizante: str, servicios, extranjero_no_pension: bool = False,
     con la salud del colombiano en el exterior.
     """
     tipo = (tipo_cotizante or "").strip().zfill(2)
-    reglas = OBLIGACIONES.get(tipo)
+    reglas = reglas_de(tipo, tipo_planilla)
     if not reglas:
         return []
 

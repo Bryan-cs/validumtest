@@ -273,7 +273,8 @@ def previsualizar(data: schemas.LiquidacionRequest, db: Session = Depends(get_db
                   token=Depends(require_admin_or_empleado)):
     """Calcula sin guardar nada."""
     af, ap = _afiliado_y_aportante(db, data.afiliado_id)
-    resumen = motor.liquidar([af], ap, data.anio, data.mes)
+    resumen = motor.liquidar([af], ap, data.anio, data.mes,
+                            tipo_planilla=data.tipo_planilla)
     resumen.avisos.extend(_aviso_primera_planilla(db, af, data.anio, data.mes))
     return _resumen_a_dict(resumen, af, ap, data.anio, data.mes)
 
@@ -292,7 +293,8 @@ def liquidar(data: schemas.LiquidacionRequest, db: Session = Depends(get_db),
         raise HTTPException(409, f"{_nombre(af)} ya tiene una planilla {ya.estado} "
                                  f"en {periodo}. Anúlala antes de volver a liquidar.")
 
-    resumen = motor.liquidar([af], ap, data.anio, data.mes)
+    resumen = motor.liquidar([af], ap, data.anio, data.mes,
+                            tipo_planilla=data.tipo_planilla)
     resumen.avisos.extend(_aviso_primera_planilla(db, af, data.anio, data.mes))
     d = resumen.detalles[0]
 

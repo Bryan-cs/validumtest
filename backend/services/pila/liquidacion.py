@@ -429,7 +429,8 @@ def liquidar(afiliados, aportante, anio: int, mes: int,
                 extranjero_no_pension=d.extranjero_no_pension,
                 colombiano_exterior=d.colombiano_exterior,
                 tipo_doc=d.tipo_doc,
-                subtipo_cotizante=d.subtipo_cotizante):
+                subtipo_cotizante=d.subtipo_cotizante,
+                tipo_planilla=tipo_planilla):
             resumen.avisos.append(f"{quien}: {choque}")
 
         # Y si ese tipo de cotizante cabe en este tipo de planilla, que es un
