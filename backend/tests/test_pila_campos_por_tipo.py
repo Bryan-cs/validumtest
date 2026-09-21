@@ -286,3 +286,50 @@ def test_sin_actividad_propia_hereda_la_del_aportante():
 def test_con_la_actividad_propia_correcta_no_hay_aviso():
     d = _liquidar("01", actividad_economica="1960901", clase_riesgo="1")
     assert ob.revisar_actividad(d) == []
+
+
+# ─── Las dos formas del detalle ───────────────────────────────────────────────
+#
+# El motor produce un `DetalleLiquidado` y la base guarda un `PlanillaDetalle`,
+# y no tienen las mismas columnas. `enviar` revisa el guardado y reventaba con
+# "'PlanillaDetalle' object has no attribute 'clase_riesgo'". Los tests no lo
+# vieron porque usaban un doble que si tenia el campo.
+
+def test_las_funciones_del_detalle_sirven_para_el_modelo_guardado():
+    """Contra el modelo de verdad, no contra un doble que yo controle."""
+    import models
+    guardado = models.PlanillaDetalle(
+        secuencia=1, tipo_doc="CC", doc="1",
+        dias_salud=30, cot_salud=70100, dias_ccf=30, valor_ccf=70100,
+        cod_eps="", cod_ccf="CCF24",
+    )
+    assert "EPS" in ob.liquidados(guardado)
+    assert ob.codigos_faltantes(guardado) == ["salud"]
+    assert ob.revisar_actividad(guardado) == []      # no tiene esos campos
+
+
+def test_el_modelo_guardado_no_tiene_todas_las_columnas_del_motor():
+    """Deja constancia de cuales faltan, para que el dia que se agreguen se vea."""
+    import dataclasses, models
+    from services.pila.liquidacion import DetalleLiquidado
+    columnas = {c.name for c in models.PlanillaDetalle.__table__.columns}
+    campos = {f.name for f in dataclasses.fields(DetalleLiquidado)}
+    ausentes = {c for c in ("clase_riesgo", "subactividad_economica")
+                if c in campos and c not in columnas}
+    assert ausentes == {"clase_riesgo", "subactividad_economica"}, (
+        "cambio que columnas guarda PlanillaDetalle: revisa que "
+        "`liquidados` y `revisar_actividad` sigan leyendolas con getattr")
+
+
+def test_las_dos_formas_dan_el_mismo_resultado_cuando_tienen_los_datos():
+    import models
+    d_motor = _liquidar("01")
+    guardado = models.PlanillaDetalle(
+        secuencia=1, tipo_doc="CC", doc="1",
+        dias_salud=d_motor.dias_salud, cot_salud=int(d_motor.cot_salud),
+        dias_pension=d_motor.dias_pension, cot_pension=int(d_motor.cot_pension),
+        dias_arl=d_motor.dias_arl, cot_arl=int(d_motor.cot_arl),
+        dias_ccf=d_motor.dias_ccf, valor_ccf=int(d_motor.valor_ccf),
+        cod_eps=d_motor.cod_eps, cod_afp=d_motor.cod_afp, cod_ccf=d_motor.cod_ccf,
+    )
+    assert ob.codigos_faltantes(guardado) == ob.codigos_faltantes(d_motor)

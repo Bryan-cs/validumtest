@@ -94,15 +94,23 @@ def liquidados(detalle) -> list:
 
     El régimen exceptuado reporta días e IBC de pensión con tarifa cero: eso
     cuenta como declarar el subsistema, y por eso se mira el día y no el valor.
+
+    Sirve para las dos formas del detalle: el `DetalleLiquidado` que produce el
+    motor y el `PlanillaDetalle` que queda guardado, que no tiene todas sus
+    columnas. Por eso los campos se leen con `getattr`.
     """
+    def campo(nombre):
+        return getattr(detalle, nombre, None) or 0
+
     presentes = []
-    if detalle.dias_salud or detalle.cot_salud:
+    if campo("dias_salud") or campo("cot_salud"):
         presentes.append("EPS")
-    if detalle.dias_pension or detalle.cot_pension:
+    if campo("dias_pension") or campo("cot_pension"):
         presentes.append("AFP")
-    if detalle.dias_arl or detalle.cot_arl:
-        presentes.append(f"ARL {detalle.clase_riesgo or ''}".strip())
-    if detalle.dias_ccf or detalle.valor_ccf:
+    if campo("dias_arl") or campo("cot_arl"):
+        clase = getattr(detalle, "clase_riesgo", "") or ""
+        presentes.append(f"ARL {clase}".strip())
+    if campo("dias_ccf") or campo("valor_ccf"):
         presentes.append("CCF")
     return presentes
 
