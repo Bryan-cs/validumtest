@@ -54,6 +54,21 @@ def _mes_anterior(anio: int, mes: int) -> str:
     return f"{anio - 1:04d}-12" if mes == 1 else f"{anio:04d}-{mes - 1:02d}"
 
 
+def _dias_facturados(db: Session, af, anio: int, mes: int):
+    """Los dias que dice la factura del periodo, si la hay.
+
+    Facturacion los guarda en `periodo`, y son los que el cliente contrato y
+    pago. Sin mirarlos se facturaba medio mes y se liquidaba el mes entero.
+    """
+    nombres_mes = {const.MESES[mes - 1]} if 1 <= mes <= 12 else set()
+    factura = (db.query(models.Factura)
+                 .filter(models.Factura.doc == af.doc,
+                         models.Factura.anio == str(anio),
+                         models.Factura.mes.in_(nombres_mes | {str(mes), f"{mes:02d}"}))
+                 .first())
+    return getattr(factura, "periodo", None) if factura else None
+
+
 def _aviso_primera_planilla(db: Session, af, anio: int, mes: int) -> list:
     """Si esta persona no aparece en la planilla del mes anterior.
 
@@ -274,7 +289,8 @@ def previsualizar(data: schemas.LiquidacionRequest, db: Session = Depends(get_db
     """Calcula sin guardar nada."""
     af, ap = _afiliado_y_aportante(db, data.afiliado_id)
     resumen = motor.liquidar([af], ap, data.anio, data.mes,
-                            tipo_planilla=data.tipo_planilla)
+                            tipo_planilla=data.tipo_planilla,
+                            dias_facturados=_dias_facturados(db, af, data.anio, data.mes))
     resumen.avisos.extend(_aviso_primera_planilla(db, af, data.anio, data.mes))
     return _resumen_a_dict(resumen, af, ap, data.anio, data.mes)
 
@@ -294,7 +310,8 @@ def liquidar(data: schemas.LiquidacionRequest, db: Session = Depends(get_db),
                                  f"en {periodo}. Anúlala antes de volver a liquidar.")
 
     resumen = motor.liquidar([af], ap, data.anio, data.mes,
-                            tipo_planilla=data.tipo_planilla)
+                            tipo_planilla=data.tipo_planilla,
+                            dias_facturados=_dias_facturados(db, af, data.anio, data.mes))
     resumen.avisos.extend(_aviso_primera_planilla(db, af, data.anio, data.mes))
     d = resumen.detalles[0]
 

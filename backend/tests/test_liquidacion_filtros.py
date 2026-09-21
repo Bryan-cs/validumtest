@@ -162,3 +162,93 @@ def test_el_anio_tambien_es_texto(client, admin_token, gente):
     import inspect
     fuente = inspect.getsource(pendientes)
     assert "str(anio)" in fuente, "el año debe compararse como texto"
+
+
+# ─── Los dias salen de la factura ─────────────────────────────────────────────
+#
+# Facturacion los guarda en el campo `periodo`. Son los que el cliente
+# contrato y pago, asi que son los que la planilla debe declarar: sin mirarlos
+# se facturaba medio mes y se liquidaba el mes entero.
+
+@pytest.fixture(scope="module")
+def empresa_dias(client, admin_token):
+    """Un aportante para las personas de estas pruebas."""
+    client.post("/aportantes", headers=_h(admin_token), json={
+        "cliente_ref": "DIAS SA", "razon_social": "DIAS SA",
+        "num_doc": "901333333", "cod_arl": "14-11", "clase_riesgo": "1",
+        "cod_depto": "11", "cod_municipio": "001", "cod_sucursal": "001",
+    })
+    return "DIAS SA"
+
+
+def test_la_planilla_declara_los_dias_que_se_facturaron(client, admin_token, empresa_dias):
+    doc = "95000111"
+    client.post("/afiliados", headers=_h(admin_token), json={
+        "nombre": "QUINCE DIAS", "doc": doc, "tipo_doc": "CC",
+        "servicios": ["EPS"], "fecha_afiliacion": "2026-01-01",
+        "empresa": empresa_dias, "cliente_txt": empresa_dias,
+        "fecha_ingreso": "2024-01-01", "ibc": 1750905,
+        "eps": "EPS SANITAS", "tipo_cotizante": "42",
+    })
+    client.post("/facturas", headers=_h(admin_token), json={
+        "doc": doc, "nombre_afiliado": "QUINCE DIAS", "anio": "2026",
+        "mes": "Septiembre", "codigo": f"F{doc}", "periodo": "15",
+        "cliente": empresa_dias,
+    })
+    fila = _pendientes(client, admin_token, q=doc)[0]
+    r = client.post("/liquidacion/previsualizar", headers=_h(admin_token),
+                    json={"afiliado_id": fila["id"], "anio": 2026, "mes": 9,
+                          "tipo_planilla": "I"})
+    assert r.status_code == 200, r.text
+    assert r.json()["detalle"]["dias"] == 15
+
+
+def test_un_periodo_parcial_facturado_lleva_novedad_de_ingreso(client, admin_token, empresa_dias):
+    """Quince dias sin explicacion los rechaza el operador."""
+    doc = "95000222"
+    client.post("/afiliados", headers=_h(admin_token), json={
+        "nombre": "QUINCE CON NOVEDAD", "doc": doc, "tipo_doc": "CC",
+        "servicios": ["EPS"], "fecha_afiliacion": "2026-01-01",
+        "empresa": empresa_dias, "cliente_txt": empresa_dias,
+        "fecha_ingreso": "2024-01-01", "ibc": 1750905,
+        "eps": "EPS SANITAS", "tipo_cotizante": "42",
+    })
+    client.post("/facturas", headers=_h(admin_token), json={
+        "doc": doc, "nombre_afiliado": "QUINCE CON NOVEDAD", "anio": "2026",
+        "mes": "Septiembre", "codigo": f"F{doc}", "periodo": "15",
+        "cliente": empresa_dias,
+    })
+    fila = _pendientes(client, admin_token, q=doc)[0]
+    liq = client.post("/liquidacion", headers=_h(admin_token),
+                      json={"afiliado_id": fila["id"], "anio": 2026, "mes": 9,
+                            "tipo_planilla": "I"})
+    assert liq.status_code in (200, 201), liq.text
+    plano_txt = client.get(f"/liquidacion/{liq.json()['id']}/plano",
+                           headers=_h(admin_token)).text
+    from services.pila import plano as P
+    linea = [l for l in plano_txt.splitlines() if l.strip()][1]
+    ing = next(x for x in P.CAMPOS_TIPO_2 if x.nombre == "nov_ING")
+    dias = next(x for x in P.CAMPOS_TIPO_2 if x.nombre == "dias_salud")
+    assert linea[dias.inicio - 1:dias.inicio + 1] == "15"
+    assert linea[ing.inicio - 1] == "X"
+
+
+def test_una_factura_de_mes_completo_no_cambia_nada(client, admin_token, empresa_dias):
+    doc = "95000333"
+    client.post("/afiliados", headers=_h(admin_token), json={
+        "nombre": "MES COMPLETO", "doc": doc, "tipo_doc": "CC",
+        "servicios": ["EPS"], "fecha_afiliacion": "2026-01-01",
+        "empresa": empresa_dias, "cliente_txt": empresa_dias,
+        "fecha_ingreso": "2024-01-01", "ibc": 1750905,
+        "eps": "EPS SANITAS", "tipo_cotizante": "42",
+    })
+    client.post("/facturas", headers=_h(admin_token), json={
+        "doc": doc, "nombre_afiliado": "MES COMPLETO", "anio": "2026",
+        "mes": "Septiembre", "codigo": f"F{doc}", "periodo": "30",
+        "cliente": empresa_dias,
+    })
+    fila = _pendientes(client, admin_token, q=doc)[0]
+    r = client.post("/liquidacion/previsualizar", headers=_h(admin_token),
+                    json={"afiliado_id": fila["id"], "anio": 2026, "mes": 9,
+                          "tipo_planilla": "I"})
+    assert r.json()["detalle"]["dias"] == 30

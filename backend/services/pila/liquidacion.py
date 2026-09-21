@@ -165,11 +165,16 @@ def _servicios_crudos(afiliado) -> list:
         return []
 
 
-def dias_cotizados(afiliado, anio: int, mes: int) -> tuple:
+def dias_cotizados(afiliado, anio: int, mes: int, dias_facturados=None) -> tuple:
     """Días del período y las novedades de ingreso o retiro que los explican.
 
     PILA cuenta sobre meses de 30 días. Un ingreso el día 10 deja 21 días
     cotizados (del 10 al 30), no los días naturales que queden de mes.
+
+    `dias_facturados` son los de la factura del período, que es lo que el
+    cliente contrató y pagó. Mandan sobre el cálculo por fecha de ingreso:
+    si se facturaron 15 días, la planilla declara 15. Sin esto se facturaba
+    medio mes y se liquidaba el mes entero.
     """
     novedades, fechas = {}, {}
     dias = P.DIAS_MES_PILA
@@ -187,6 +192,14 @@ def dias_cotizados(afiliado, anio: int, mes: int) -> tuple:
         novedades["ING"] = "X"
         fechas["ING"] = ingreso.isoformat()
 
+    if dias_facturados is not None:
+        try:
+            facturados = int(dias_facturados)
+        except (TypeError, ValueError):
+            facturados = None
+        if facturados is not None and 0 < facturados <= P.DIAS_MES_PILA:
+            dias = facturados
+
     return max(dias, 0), novedades, fechas
 
 
@@ -202,12 +215,13 @@ def _ibc(base: Decimal, dias: int, smlmv: Decimal) -> Decimal:
     return P.redondear_peso(min(max(proporcional, piso), techo))
 
 
-def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquidado:
+def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
+                     dias_facturados=None) -> DetalleLiquidado:
     """Calcula el registro de un cotizante. No toca la base de datos."""
     par = P.parametros(anio)
     smlmv = par.smlmv
 
-    dias, novedades, fechas = dias_cotizados(afiliado, anio, mes)
+    dias, novedades, fechas = dias_cotizados(afiliado, anio, mes, dias_facturados)
 
     # El IBC individual manda sobre el salario básico; si no hay ninguno de los
     # dos se cae al mínimo, que es lo que aplica a la mayoría de independientes.
@@ -457,12 +471,12 @@ def _depurar_campos_del_tipo(d: DetalleLiquidado) -> None:
 
 
 def liquidar(afiliados, aportante, anio: int, mes: int,
-             tipo_planilla: str = "E") -> ResumenLiquidacion:
+             tipo_planilla: str = "E", dias_facturados=None) -> ResumenLiquidacion:
     """Liquida una lista de afiliados y suma los totales por subsistema."""
     resumen = ResumenLiquidacion(detalles=[])
 
     for af in afiliados:
-        d = liquidar_afiliado(af, aportante, anio, mes)
+        d = liquidar_afiliado(af, aportante, anio, mes, dias_facturados)
 
         quien = f"{d.doc} {d.primer_nombre} {d.primer_apellido}".strip()
 
