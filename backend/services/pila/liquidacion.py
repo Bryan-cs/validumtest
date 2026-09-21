@@ -238,7 +238,10 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         centro_trabajo=afiliado.centro_trabajo or "",
         novedades=novedades, fechas_novedades=fechas,
         horas_laboradas=dias * 8,
-        subactividad_economica=(getattr(aportante, "actividad_economica", "") or ""),
+        # La actividad del afiliado manda: su primer dígito es la clase de
+        # riesgo, y la del aportante solo sirve para quien comparta la suya.
+        subactividad_economica=(getattr(afiliado, "actividad_economica", "") or ""
+                                or getattr(aportante, "actividad_economica", "") or ""),
     )
 
     ibc = _ibc(base, dias, smlmv)
@@ -346,7 +349,33 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.valor_icbf = P.aproximar_aporte(ibc * P.TARIFA_ICBF)
 
     _depurar_campos_del_tipo(d)
+    _garantizar_novedad_de_ingreso(d, anio, mes)
     return d
+
+
+def _garantizar_novedad_de_ingreso(d: DetalleLiquidado, anio: int, mes: int) -> None:
+    """Un período parcial tiene que decir por qué lo es.
+
+    Si la planilla declara menos de 30 días y no trae ninguna novedad que lo
+    explique, el operador pregunta por la de ingreso. Hoy los días solo se
+    reducen por la fecha de ingreso, que ya marca la novedad; esto es la red
+    para cualquier otro camino que termine con un período parcial.
+
+    La fecha sale de los días declarados, no se inventa: si se cotizan 20 de
+    30 días, el primero cotizado es el 11. Se recorta al último día real del
+    mes porque PILA cuenta sobre meses de 30 pero la fecha tiene que existir.
+    """
+    dias = max(d.dias_salud, d.dias_pension, d.dias_arl, d.dias_ccf)
+    if not dias or dias >= P.DIAS_MES_PILA:
+        return
+    if d.novedades.get("ING") or d.novedades.get("RET"):
+        return
+
+    d.novedades["ING"] = "X"
+    if not d.fechas_novedades.get("ING"):
+        import calendar
+        dia = min(P.DIAS_MES_PILA - dias + 1, calendar.monthrange(anio, mes)[1])
+        d.fechas_novedades["ING"] = date(anio, mes, dia).isoformat()
 
 
 def _depurar_campos_del_tipo(d: DetalleLiquidado) -> None:

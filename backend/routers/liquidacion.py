@@ -146,6 +146,7 @@ def _resumen_a_dict(resumen, af, ap, anio, mes) -> dict:
 
 @router.get("/pendientes")
 def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
+               subtipo: str = "", tipo_cotizante: str = "",
                db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """Afiliados activos y si ya tienen planilla en el período.
 
@@ -158,9 +159,21 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
     if cliente:
         consulta = consulta.filter(models.Afiliado.cliente_txt == cliente)
     if q:
-        patron = f"%{q}%"
+        # La cédula se busca completa o por el pedazo que uno recuerde, igual
+        # que el nombre: quien llega de una factura tiene el número, no el
+        # nombre como está escrito en el sistema.
+        patron = f"%{q.strip()}%"
         consulta = consulta.filter(models.Afiliado.nombre.ilike(patron) |
                                    models.Afiliado.doc.ilike(patron))
+    if subtipo:
+        # Varios separados por coma, para ver de un golpe todo un grupo.
+        valores = [v.strip() for v in subtipo.split(",") if v.strip()]
+        if valores:
+            consulta = consulta.filter(models.Afiliado.subtipo.in_(valores))
+    if tipo_cotizante:
+        valores = [v.strip().zfill(2) for v in tipo_cotizante.split(",") if v.strip()]
+        if valores:
+            consulta = consulta.filter(models.Afiliado.tipo_cotizante.in_(valores))
     afiliados = consulta.order_by(models.Afiliado.nombre).limit(500).all()
 
     liquidadas = {
@@ -175,10 +188,22 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
         l = liquidadas.get(a.doc)
         return bool(l and l.creado and a.actualizado and a.actualizado > l.creado)
 
+    # La factura del mismo periodo, para cerrar el circulo con Facturacion:
+    # quien llega con una factura en la mano busca por cedula y quiere ver si
+    # esa persona ya tiene la planilla hecha, y al reves.
+    facturas = {
+        f.doc: f
+        for f in db.query(models.Factura)
+                   .filter(models.Factura.anio == anio, models.Factura.mes == mes)
+                   .all()
+    }
+
     return [{
         "id": a.id, "doc": a.doc, "tipo_doc": a.tipo_doc,
         "nombre": _nombre(a), "cliente": a.cliente_txt,
         "tipo_cotizante": a.tipo_cotizante,
+        "factura_codigo": getattr(facturas.get(a.doc), "codigo", None),
+        "factura_estado": getattr(facturas.get(a.doc), "estado", None),
         "desactualizada": _vieja(a),
         # Los subtipos 20 y 22 se identifican ante el operador con cedula de
         # extranjeria. Se sugiere aqui para que el selector venga puesto y no

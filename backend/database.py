@@ -103,6 +103,7 @@ def _ensure_columns():
     _check("afiliados", "ciudad", "ALTER TABLE afiliados ADD COLUMN ciudad VARCHAR(100)")
     _check("afiliados", "detalle", "ALTER TABLE afiliados ADD COLUMN detalle TEXT")
     _check("afiliados", "fecha_expedicion", "ALTER TABLE afiliados ADD COLUMN fecha_expedicion VARCHAR(10)")
+    _check("afiliados", "actividad_economica", "ALTER TABLE afiliados ADD COLUMN actividad_economica VARCHAR(7)")
     _check("tareas", "privada", "ALTER TABLE tareas ADD COLUMN privada BOOLEAN DEFAULT 0")
     _check("tareas", "completado_en", "ALTER TABLE tareas ADD COLUMN completado_en TIMESTAMP")
     _check("tareas", "finalizado_en", "ALTER TABLE tareas ADD COLUMN finalizado_en TIMESTAMP")

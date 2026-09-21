@@ -98,6 +98,7 @@ CAMPOS_PILA = (
     "extranjero_no_pension", "colombiano_exterior",
     "cod_depto_labor", "cod_municipio_labor",
     "cod_eps", "cod_afp", "cod_ccf", "cod_arl", "clase_riesgo", "tarifa_arl",
+    "actividad_economica",
     "tipo_salario", "salario_basico", "centro_trabajo",
     "cotizante_principal_tipo_doc", "cotizante_principal_doc", "horas_laboradas",
 )

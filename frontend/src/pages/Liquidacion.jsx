@@ -72,6 +72,7 @@ export default function Liquidacion() {
   const [anio, setAnio] = useState(hoy.getFullYear());
   const [mes, setMes] = useState(hoy.getMonth() + 1);
   const [busqueda, setBusqueda] = useState('');
+  const [subtipo, setSubtipo] = useState('');   // el del formulario: 0, 3, 4, 20, 22
   const [soloPendientes, setSoloPendientes] = useState(false);
   const [previa, setPrevia] = useState(null);      // { afiliado, resumen }
   const [porAnular, setPorAnular] = useState(null);
@@ -96,10 +97,20 @@ export default function Liquidacion() {
     const q = busqueda.trim().toLowerCase();
     return personas.filter(p => {
       if (soloPendientes && p.planilla_id) return false;
+      if (subtipo && String(p.subtipo ?? '') !== subtipo) return false;
       if (!q) return true;
       return [p.nombre, p.doc, p.cliente].some(v => (v || '').toLowerCase().includes(q));
     });
-  }, [personas, busqueda, soloPendientes]);
+  }, [personas, busqueda, soloPendientes, subtipo]);
+
+  // Los subtipos que de verdad hay en pantalla, con su significado.
+  const SUBTIPOS = {
+    '0':  'Cotiza pension',
+    '3':  'Exonerada por edad',
+    '4':  'Requisitos cumplidos',
+    '20': 'Obligada a pension',
+    '22': 'Extranjera',
+  };
 
   const pendientes = personas.filter(p => !p.planilla_id).length;
 
@@ -221,6 +232,15 @@ export default function Liquidacion() {
                  placeholder="Nombre, documento o cliente…"
                  onChange={e => setBusqueda(e.target.value)} />
         </div>
+        <div style={{ minWidth: 170 }}>
+          <label style={lbl}>Subtipo</label>
+          <select style={{ ...inp, width: '100%' }} value={subtipo}
+                  onChange={e => setSubtipo(e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(SUBTIPOS).map(([k, v]) =>
+              <option key={k} value={k}>{k} · {v}</option>)}
+          </select>
+        </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 6,
                         fontSize: 13, color: C.text2, paddingBottom: 9 }}>
           <input type="checkbox" checked={soloPendientes}
@@ -270,6 +290,19 @@ export default function Liquidacion() {
                 <div style={{ fontSize: 12, color: C.text2, fontFamily: 'monospace' }}>
                   {p.tipo_doc} {p.doc}
                   {p.cliente && <span style={{ fontFamily: 'inherit' }}> · {p.cliente}</span>}
+                  {p.subtipo != null && p.subtipo !== '' && (
+                    <span style={{ fontFamily: 'inherit' }}>
+                      {' '}· subtipo {p.subtipo}
+                    </span>
+                  )}
+                  {/* La factura del mismo periodo, para no tener que abrir
+                      Facturacion a comprobarlo. */}
+                  {p.factura_codigo && (
+                    <span style={{ fontFamily: 'inherit', color: C.text2 }}>
+                      {' '}· factura {p.factura_codigo}
+                      {p.factura_estado ? ` (${p.factura_estado})` : ''}
+                    </span>
+                  )}
                 </div>
                 {/* El plano se congela al liquidar. Si los datos cambiaron
                     despues, descargar trae el archivo viejo sin avisar. */}

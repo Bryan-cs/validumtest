@@ -208,3 +208,81 @@ def test_sin_datos_no_inventa_avisos(codigo, clase):
 
 def test_un_codigo_que_no_empieza_por_digito_se_ignora():
     assert ob.revisar_actividad(_Act("X661401", "5")) == []
+
+
+# ─── Novedad de ingreso en periodos parciales ─────────────────────────────────
+
+def _con_dias(dias, **cambios):
+    """Un afiliado que entra el dia que deja justo esos dias cotizados."""
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    from services.pila.liquidacion import liquidar_afiliado
+    af = _Afiliado()
+    af.subtipo = "0"; af.subtipo_cotizante = ""
+    af.servicios = '["EPS","AFP","CCF","ARL 1"]'
+    af.fecha_ingreso = f"2026-09-{31 - dias:02d}" if dias < 30 else "2024-01-15"
+    for k, v in cambios.items():
+        setattr(af, k, v)
+    return liquidar_afiliado(af, _Aportante(), 2026, 9)
+
+
+@pytest.mark.parametrize("dias", [1, 5, 15, 20, 29])
+def test_un_periodo_parcial_siempre_lleva_novedad_de_ingreso(dias):
+    d = _con_dias(dias)
+    assert d.dias_salud == dias
+    assert d.novedades.get("ING") == "X"
+    assert d.fechas_novedades.get("ING")
+
+
+def test_un_mes_completo_no_lleva_novedad():
+    d = _con_dias(30)
+    assert d.dias_salud == 30
+    assert d.novedades.get("ING") is None
+
+
+def test_la_fecha_sale_de_los_dias_declarados():
+    """20 de 30 dias cotizados significa que el primero fue el 11."""
+    d = _con_dias(20)
+    assert d.fechas_novedades["ING"] == "2026-09-11"
+
+
+def test_la_novedad_llega_al_archivo():
+    d = _con_dias(20)
+    linea = plano.registro_tipo_2(plano.valores_desde_detalle(d, 1))
+    c = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == "nov_ING")
+    assert linea[c.inicio - 1] == "X"
+
+
+def test_la_fecha_nunca_cae_fuera_del_mes():
+    """PILA cuenta meses de 30 dias, pero la fecha tiene que existir."""
+    from services.pila.liquidacion import _garantizar_novedad_de_ingreso
+    from services.pila.liquidacion import DetalleLiquidado
+    d = DetalleLiquidado(afiliado_id=1, tipo_doc="CC", doc="1", dias_salud=1)
+    _garantizar_novedad_de_ingreso(d, 2026, 2)      # febrero tiene 28
+    assert d.fechas_novedades["ING"] == "2026-02-28"
+
+
+def test_no_se_pisa_una_novedad_ya_puesta():
+    from services.pila.liquidacion import _garantizar_novedad_de_ingreso
+    from services.pila.liquidacion import DetalleLiquidado
+    d = DetalleLiquidado(afiliado_id=1, tipo_doc="CC", doc="1", dias_salud=10)
+    d.novedades = {"RET": "X"}
+    d.fechas_novedades = {"RET": "2026-09-10"}
+    _garantizar_novedad_de_ingreso(d, 2026, 9)
+    assert "ING" not in d.novedades
+
+
+# ─── Actividad economica propia del afiliado ──────────────────────────────────
+
+def test_la_actividad_del_afiliado_le_gana_a_la_del_aportante():
+    d = _liquidar("01", actividad_economica="5960901")
+    assert d.subactividad_economica == "5960901"
+
+
+def test_sin_actividad_propia_hereda_la_del_aportante():
+    d = _liquidar("01", actividad_economica=None)
+    assert d.subactividad_economica == _Aportante.actividad_economica
+
+
+def test_con_la_actividad_propia_correcta_no_hay_aviso():
+    d = _liquidar("01", actividad_economica="1960901", clase_riesgo="1")
+    assert ob.revisar_actividad(d) == []

@@ -103,6 +103,7 @@ class AfiliadoCreate(LargosDeColumna):
     cod_arl: Optional[str] = None
     clase_riesgo: Optional[str] = None
     tarifa_arl: Optional[float] = None
+    actividad_economica: Optional[str] = None
     tipo_salario: Optional[str] = None
     salario_basico: Optional[float] = None
     centro_trabajo: Optional[str] = None

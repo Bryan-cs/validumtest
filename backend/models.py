@@ -142,6 +142,9 @@ class Afiliado(Base):
     cod_arl = Column(String(6))
     clase_riesgo = Column(String(1))          # 1..5
     tarifa_arl   = Column(Numeric(7, 5))      # p.ej. 0.00522 para riesgo 1
+    # Campo 98. Su primer dígito es la clase de riesgo (Decreto 1607 de 2002),
+    # así que quien no comparta la clase del aportante necesita la suya.
+    actividad_economica = Column(String(7))
     tipo_salario   = Column(String(1))        # F fijo | V variable | I integral
     salario_basico = Column(Numeric(15, 2))
     centro_trabajo = Column(String(9))
