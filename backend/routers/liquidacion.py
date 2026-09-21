@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routers.deps import require_admin, require_admin_or_empleado
+import const
 import models, schemas
 from crud_helpers import _log
 from services.pila import (liquidacion as motor, obligaciones, operador,
@@ -168,8 +169,16 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
     """
     periodo = _periodo(anio, mes)
 
-    q_fact = db.query(models.Factura).filter(models.Factura.anio == anio,
-                                             models.Factura.mes == mes)
+    # Facturacion guarda el mes por su nombre —"Septiembre"— y el año como
+    # texto, no como numeros. Comparar contra enteros falla en Postgres con
+    # "operator does not exist: character varying = integer", y en SQLite pasa
+    # en silencio sin encontrar nada. Se aceptan tambien las formas numericas
+    # por si quedan facturas viejas guardadas asi.
+    nombres_mes = {const.MESES[mes - 1]} if 1 <= mes <= 12 else set()
+    formas_mes = nombres_mes | {str(mes), f"{mes:02d}"}
+    q_fact = db.query(models.Factura).filter(
+        models.Factura.anio == str(anio),
+        models.Factura.mes.in_(formas_mes))
     if cliente:
         q_fact = q_fact.filter(models.Factura.cliente == cliente)
     facturas = q_fact.order_by(models.Factura.nombre_afiliado).limit(500).all()

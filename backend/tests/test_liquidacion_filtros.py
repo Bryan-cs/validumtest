@@ -37,9 +37,12 @@ def gente(client, admin_token):
         assert r.status_code in (200, 201), r.text
         if not con_factura:
             continue
+        # Como las guarda Facturacion de verdad: el mes por su nombre y el
+        # año como texto. Crearlas con "9" hacia que el test pasara contra un
+        # formato que la aplicacion nunca produce.
         r = client.post("/facturas", headers=_h(admin_token), json={
-            "doc": doc, "nombre_afiliado": nombre, "anio": "2026", "mes": "9",
-            "codigo": f"F{doc}",
+            "doc": doc, "nombre_afiliado": nombre, "anio": "2026",
+            "mes": "Septiembre", "codigo": f"F{doc}",
         })
         assert r.status_code in (200, 201), r.text
 
@@ -102,7 +105,8 @@ def test_quien_no_tiene_factura_no_aparece(client, admin_token, gente):
 
 
 def test_un_mes_sin_facturar_no_ofrece_a_nadie(client, admin_token, gente):
-    r = client.get("/liquidacion/pendientes?anio=2026&mes=3",
+    """Un año que ningun otro test toca: la base es compartida por la sesion."""
+    r = client.get("/liquidacion/pendientes?anio=2099&mes=1",
                    headers=_h(admin_token))
     assert r.status_code == 200
     assert r.json() == []
@@ -125,3 +129,36 @@ def test_la_fila_trae_el_subtipo_y_el_hueco_de_la_factura(client, admin_token, g
     fila = _pendientes(client, admin_token, q="70011002")[0]
     assert fila["subtipo"] == "22"
     assert "factura_codigo" in fila and "factura_estado" in fila
+
+
+# ─── El formato del mes ───────────────────────────────────────────────────────
+#
+# Facturacion guarda el mes por su nombre y el año como texto. Comparar contra
+# enteros reventaba en Postgres —"operator does not exist: character varying =
+# integer"— y en SQLite pasaba en silencio sin encontrar nada. Los tests no lo
+# vieron porque creaban las facturas con "9", un formato que la aplicacion no
+# produce.
+
+@pytest.mark.parametrize("guardado", ["Septiembre", "9", "09"])
+def test_el_mes_se_encuentra_como_lo_guarde_facturacion(client, admin_token, guardado):
+    doc = f"7002{abs(hash(guardado)) % 10000:04d}"
+    client.post("/afiliados", headers=_h(admin_token), json={
+        "nombre": f"FORMATO {guardado}", "doc": doc, "tipo_doc": "CC",
+        "servicios": ["EPS"], "fecha_afiliacion": "2026-01-01",
+    })
+    r = client.post("/facturas", headers=_h(admin_token), json={
+        "doc": doc, "nombre_afiliado": f"FORMATO {guardado}",
+        "anio": "2026", "mes": guardado, "codigo": f"FMT{doc}",
+    })
+    assert r.status_code in (200, 201), r.text
+
+    docs = {f["doc"] for f in _pendientes(client, admin_token)}
+    assert doc in docs, f"no se encontro la factura guardada con mes={guardado!r}"
+
+
+def test_el_anio_tambien_es_texto(client, admin_token, gente):
+    """Si se comparara como entero, Postgres rechazaria la consulta entera."""
+    from routers.liquidacion import pendientes
+    import inspect
+    fuente = inspect.getsource(pendientes)
+    assert "str(anio)" in fuente, "el año debe compararse como texto"

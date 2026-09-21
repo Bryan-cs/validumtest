@@ -451,7 +451,7 @@ def test_pendientes_marca_quien_ya_tiene_planilla(client, admin_token, afiliado_
     # La lista sale de las facturas del periodo: sin factura no hay fila que
     # marcar, porque primero se factura y despues se liquida.
     client.post("/facturas", headers=_h(admin_token), json={
-        "doc": afiliado_listo["doc"], "anio": "2026", "mes": "9",
+        "doc": afiliado_listo["doc"], "anio": "2026", "mes": "Septiembre",
         "codigo": f"F{afiliado_listo['doc']}",
     })
 
