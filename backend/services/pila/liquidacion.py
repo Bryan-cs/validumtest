@@ -359,6 +359,32 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.cot_arl = P.aproximar_aporte(ibc * d.tarifa_arl)
         d.clase_riesgo = str(clase)
         d.cod_arl = afiliado.cod_arl or getattr(aportante, "cod_arl", "") or ""
+    else:
+        # Sin riesgos contratados, pero afiliado a una ARL: se reporta la
+        # afiliacion con sus dias e IBC y la tarifa en cero. El archivo dice
+        # "esta afiliado, este mes no hay aporte", que es cierto, y satisface
+        # tres reglas que el operador exige juntas:
+        #
+        #   819  los dias de riesgos no pueden ser 0
+        #   283  los dias de salud y riesgos deben ser iguales
+        #   691  los IBC de salud y riesgos deben ser iguales
+        #
+        # Sin esto, alguien con salud y caja pero sin riesgos no podia generar
+        # una planilla que el operador aceptara. Es lo mismo que hace el
+        # sistema con el que se contrasto.
+        #
+        # Solo cuando hay afiliacion de verdad en la ficha: inventar una ARL
+        # para que cuadren los dias seria otra cosa.
+        cod_arl = afiliado.cod_arl or getattr(aportante, "cod_arl", "") or ""
+        clase_afiliacion = str(afiliado.clase_riesgo or
+                               getattr(aportante, "clase_riesgo", "") or "")
+        if cod_arl and clase_afiliacion in P.TARIFA_ARL_POR_CLASE and dias:
+            d.dias_arl = dias
+            d.ibc_arl = ibc
+            d.tarifa_arl = Decimal("0")
+            d.cot_arl = Decimal("0")
+            d.clase_riesgo = clase_afiliacion
+            d.cod_arl = cod_arl
 
     # Parafiscales
     if contrata_caja:

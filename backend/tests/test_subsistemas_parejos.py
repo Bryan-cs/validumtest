@@ -80,3 +80,78 @@ def test_el_aviso_llega_al_resumen():
     af.servicios = '["EPS"]'; af.arl = ""
     avisos = liquidar([af], _Aportante(), 2026, 9).avisos
     assert any("van los tres o no va ninguno" in a for a in avisos)
+
+
+# ─── Riesgos reportados sin aporte ────────────────────────────────────────────
+#
+# Quien esta afiliado a una ARL pero no cotiza riesgos este periodo se reporta
+# con sus dias e IBC y la tarifa en cero. El archivo dice "esta afiliado, no
+# hay aporte", que es cierto, y satisface las tres reglas que el operador
+# exige juntas: 819, 283 y 691.
+
+import json
+
+
+def _liquidar(servicios, **cambios):
+    from services.pila.liquidacion import liquidar
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.subtipo = "20"; af.subtipo_cotizante = ""
+    af.arl = ""; af.clase_riesgo = "4"; af.cod_arl = "14-11"; af.cod_ccf = "CCF24"
+    af.servicios = json.dumps(servicios)
+    af.ibc = af.salario_basico = 1750905
+    for k, v in cambios.items():
+        setattr(af, k, v)
+    return liquidar([af], _Aportante(), 2026, 9).detalles[0]
+
+
+def test_sin_riesgos_contratados_se_reporta_la_afiliacion():
+    d = _liquidar(["EPS", "CCF"])
+    assert d.dias_arl == d.dias_salud == 30
+    assert int(d.ibc_arl) == int(d.ibc_salud)
+    assert int(d.tarifa_arl) == 0
+    assert int(d.cot_arl) == 0
+    assert d.cod_arl == "14-11"
+    assert d.clase_riesgo == "4"
+
+
+def test_con_riesgos_contratados_se_cobra_normal():
+    d = _liquidar(["EPS", "CCF", "ARL 4"])
+    assert float(d.tarifa_arl) == 0.0435
+    assert int(d.cot_arl) > 0
+
+
+def test_salud_y_caja_sin_riesgos_ya_no_avisa():
+    """Era el caso que no se podia generar: ahora cuadra solo."""
+    from services.pila import obligaciones as ob
+    d = _liquidar(["EPS", "CCF"])
+    assert ob.revisar_subsistemas_parejos(d) == []
+
+
+def test_la_afiliacion_puede_venir_del_aportante():
+    """La ARL la contrata la empresa: si el afiliado no la tiene, es la suya."""
+    d = _liquidar(["EPS", "CCF"], cod_arl="", clase_riesgo="")
+    assert d.dias_arl == 30
+    assert d.cod_arl == "14-11"          # la del aportante
+
+
+def test_sin_afiliacion_en_ningun_lado_no_se_inventa_una():
+    """Rellenar los dias con una ARL que no existe seria otra cosa."""
+    from services.pila.liquidacion import liquidar
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.subtipo = "20"; af.subtipo_cotizante = ""; af.arl = ""
+    af.cod_arl = ""; af.clase_riesgo = ""
+    af.servicios = json.dumps(["EPS", "CCF"])
+    af.ibc = af.salario_basico = 1750905
+    ap = _Aportante(); ap.cod_arl = ""; ap.clase_riesgo = ""
+    d = liquidar([af], ap, 2026, 9).detalles[0]
+    assert d.dias_arl == 0
+    assert d.cod_arl == ""
+
+
+def test_el_ibc_de_riesgos_sigue_al_de_salud_en_periodos_parciales():
+    """La regla 691 pide que sean iguales, tambien con menos dias."""
+    d = _liquidar(["EPS", "CCF"], fecha_ingreso="2026-09-11")
+    assert d.dias_arl == d.dias_salud == 20
+    assert int(d.ibc_arl) == int(d.ibc_salud)
