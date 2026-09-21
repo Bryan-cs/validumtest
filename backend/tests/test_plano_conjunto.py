@@ -183,3 +183,66 @@ def test_sin_ids_no_se_arma_nada(client, admin_token):
 def test_ids_que_no_son_numeros(client, admin_token):
     r = client.get("/liquidacion/plano-conjunto?ids=a,b", headers=_h(admin_token))
     assert r.status_code == 400
+
+
+# ─── El documento se elige por persona ────────────────────────────────────────
+#
+# En un archivo con varias, una puede ir con cedula de extranjeria por su
+# subtipo y las demas con la suya. El selector de cada fila tiene que llegar
+# hasta el archivo, no solo el de la primera.
+
+def _docs(pares):
+    return ",".join(f"{i}:{d}" for i, d in pares)
+
+
+def test_cada_persona_lleva_el_documento_que_se_le_eligio(client, admin_token, grupo):
+    liqs = grupo["liquidaciones"]
+    r = _bajar(client, admin_token, liqs,
+               docs=_docs([(liqs[0], "CE"), (liqs[1], "PA"), (liqs[2], "CC")]))
+    assert r.status_code == 200, r.text
+    lineas = _lineas(r.text)
+    assert [l[7:9] for l in lineas[1:]] == ["CE", "PA", "CC"]
+
+
+def test_quien_no_aparece_en_la_lista_conserva_el_suyo(client, admin_token, grupo):
+    liqs = grupo["liquidaciones"]
+    lineas = _lineas(_bajar(client, admin_token, liqs,
+                            docs=_docs([(liqs[1], "CE")])).text)
+    documentos = [l[7:9] for l in lineas[1:]]
+    assert documentos[1] == "CE"
+    assert documentos[0] == "CC" and documentos[2] == "CC"
+
+
+def test_lo_elegido_para_una_persona_manda_sobre_lo_pedido_para_el_archivo(
+        client, admin_token, grupo):
+    liqs = grupo["liquidaciones"]
+    lineas = _lineas(_bajar(client, admin_token, liqs, tipo_doc="PA",
+                            docs=_docs([(liqs[0], "CE")])).text)
+    documentos = [l[7:9] for l in lineas[1:]]
+    assert documentos[0] == "CE"          # lo suyo gana
+    assert documentos[1] == "PA" and documentos[2] == "PA"
+
+
+def test_un_documento_invalido_se_rechaza(client, admin_token, grupo):
+    liqs = grupo["liquidaciones"]
+    r = _bajar(client, admin_token, liqs, docs=_docs([(liqs[0], "XX")]))
+    assert r.status_code == 400
+    assert "tipo_doc" in r.json()["detail"]
+
+
+@pytest.mark.parametrize("malo", ["12", "abc:CE", "12-CE"])
+def test_una_lista_mal_escrita_se_explica(client, admin_token, grupo, malo):
+    r = _bajar(client, admin_token, grupo["liquidaciones"], docs=malo)
+    assert r.status_code == 400
+
+
+def test_el_resto_del_archivo_no_cambia_por_el_documento(client, admin_token, grupo):
+    """Se tocan dos posiciones y nada mas."""
+    liqs = grupo["liquidaciones"]
+    normal = _lineas(_bajar(client, admin_token, liqs).text)
+    con_ce = _lineas(_bajar(client, admin_token, liqs,
+                            docs=_docs([(l, "CE") for l in liqs])).text)
+    assert normal[0] == con_ce[0]                     # el encabezado, igual
+    for a, b in zip(normal[1:], con_ce[1:]):
+        assert a[:7] == b[:7] and a[9:] == b[9:]
+        assert b[7:9] == "CE"

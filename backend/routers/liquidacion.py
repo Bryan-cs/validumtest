@@ -425,7 +425,7 @@ def _liquidaciones_del_grupo(db: Session, ids: str):
 
 
 @router.get("/plano-conjunto", response_class=PlainTextResponse)
-def descargar_plano_conjunto(ids: str, tipo_doc: str = "",
+def descargar_plano_conjunto(ids: str, tipo_doc: str = "", docs: str = "",
                              db: Session = Depends(get_db),
                              token=Depends(require_admin_or_empleado)):
     """Un solo archivo con varias personas de la misma empresa y período.
@@ -435,13 +435,14 @@ def descargar_plano_conjunto(ids: str, tipo_doc: str = "",
     como se presenta una nómina.
     """
     filas = _liquidaciones_del_grupo(db, ids)
-    cuerpo, nombre, _ = _armar_plano(db, filas, tipo_doc)
+    cuerpo, nombre, _ = _armar_plano(db, filas, tipo_doc, _documentos_pedidos(docs))
     return PlainTextResponse(
         cuerpo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
 
 
 @router.post("/enviar-conjunto")
 def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
+                    docs: str = "",
                     db: Session = Depends(get_db),
                     token=Depends(require_admin_or_empleado)):
     """Manda un archivo con varias personas y reparte la respuesta entre todas.
@@ -468,7 +469,7 @@ def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
                          f"código de la administradora. Complétalo en su ficha, "
                          f"vuelve a liquidar y envía.")
 
-    cuerpo, nombre, ap = _armar_plano(db, filas, tipo_doc)
+    cuerpo, nombre, ap = _armar_plano(db, filas, tipo_doc, _documentos_pedidos(docs))
     try:
         resultado = operador.enviar_planilla(
             cuerpo, nombre, ap.tipo_doc or "NI", ap.num_doc, tipo_archivo=tipo_archivo)
@@ -569,7 +570,30 @@ def _renumerar(linea: str, secuencia: int) -> str:
     return linea[:2] + f"{secuencia:05d}" + linea[7:]
 
 
-def _armar_plano(db: Session, liquidaciones, tipo_doc: str = "") -> tuple:
+def _documentos_pedidos(docs: str) -> dict:
+    """Interpreta "12:CE,13:CC" como {12: "CE", 13: "CC"}.
+
+    Es el documento que se eligio para cada persona en la pantalla. En un
+    archivo con varias no tiene por que ser el mismo para todas: una puede ir
+    con cedula de extranjeria por su subtipo y el resto con la suya.
+    """
+    elegidos = {}
+    for parte in str(docs or "").split(","):
+        parte = parte.strip()
+        if not parte:
+            continue
+        if ":" not in parte:
+            raise HTTPException(400, f"'{parte}' no tiene la forma id:DOCUMENTO")
+        crudo_id, crudo_doc = parte.split(":", 1)
+        try:
+            elegidos[int(crudo_id)] = crudo_doc.strip().upper()
+        except ValueError:
+            raise HTTPException(400, f"'{crudo_id}' no es un id de liquidación")
+    return elegidos
+
+
+def _armar_plano(db: Session, liquidaciones, tipo_doc: str = "",
+                 docs: dict = None) -> tuple:
     """El archivo plano de una o varias liquidaciones, y su nombre sugerido.
 
     Acepta una sola o una lista. Varias personas caben en un mismo archivo
@@ -612,10 +636,12 @@ def _armar_plano(db: Session, liquidaciones, tipo_doc: str = "") -> tuple:
                       .order_by(models.PlanillaDetalle.secuencia).all())
         detalles_todos.extend(detalles)
 
-        # Si nadie pidió un documento en concreto, lo decide el subtipo de cada
-        # afiliado: en un archivo con varias personas no tiene por qué ser el
+        # Manda lo que se eligio para esa persona; despues un documento
+        # pedido para todo el archivo; y si no hay ninguno, lo decide su
+        # subtipo. En un archivo con varias personas no tiene por que ser el
         # mismo para todas.
-        doc = (tipo_doc or _doc_del_afiliado(db, l)).strip().upper()
+        doc = ((docs or {}).get(l.id) or tipo_doc
+               or _doc_del_afiliado(db, l)).strip().upper()
         if doc and doc not in TIPOS_DOC_COTIZANTE:
             raise HTTPException(400, f"tipo_doc debe ser uno de: "
                                      f"{', '.join(sorted(TIPOS_DOC_COTIZANTE))}")
@@ -649,7 +675,8 @@ def _armar_plano(db: Session, liquidaciones, tipo_doc: str = "") -> tuple:
     })
 
     if len(liquidaciones) == 1:
-        sufijo = f"_{tipo_doc.strip().upper()}" if tipo_doc else ""
+        pedido = (docs or {}).get(primera.id) or tipo_doc
+        sufijo = f"_{pedido.strip().upper()}" if pedido else ""
         nombre = (f"PILA_{primera.afiliado_doc or ap.num_doc}_"
                   f"{primera.periodo_cotizacion}_{primera.tipo_planilla}{sufijo}.txt")
     else:

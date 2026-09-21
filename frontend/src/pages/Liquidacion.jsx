@@ -225,11 +225,23 @@ export default function Liquidacion() {
   });
 
   // El plano viaja con el token, así que se baja por blob y no por enlace.
+  // El documento que se eligio para cada persona viaja con su id: en un
+  // archivo con varias, una puede ir con CE y el resto con el suyo.
+  const documentosElegidos = () => seleccionadas
+    .map(p => {
+      const tipo = docDescarga[p.planilla_id] || p.tipo_doc_sugerido || p.tipo_doc;
+      return tipo ? `${p.planilla_id}:${tipo}` : null;
+    })
+    .filter(Boolean)
+    .join(',');
+
   const descargarConjunto = async () => {
     const ids = seleccionadas.map(p => p.planilla_id).join(',');
+    const docs = documentosElegidos();
     try {
-      const r = await api.get(`/liquidacion/plano-conjunto?ids=${ids}`,
-                              { responseType: 'blob' });
+      const r = await api.get(
+        `/liquidacion/plano-conjunto?ids=${ids}&docs=${encodeURIComponent(docs)}`,
+        { responseType: 'blob' });
       const url = URL.createObjectURL(new Blob([r.data], { type: 'text/plain' }));
       const a = document.createElement('a');
       a.href = url;
@@ -244,7 +256,9 @@ export default function Liquidacion() {
   const enviarConjunto = useMutation({
     mutationFn: async () => {
       const ids = seleccionadas.map(p => p.planilla_id).join(',');
-      return (await api.post(`/liquidacion/enviar-conjunto?ids=${ids}`)).data;
+      const docs = encodeURIComponent(documentosElegidos());
+      return (await api.post(
+        `/liquidacion/enviar-conjunto?ids=${ids}&docs=${docs}`)).data;
     },
     onSuccess: (d) => {
       setRespuesta({ ...d, conjunto: true });
