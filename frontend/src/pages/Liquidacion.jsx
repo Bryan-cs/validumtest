@@ -74,6 +74,8 @@ export default function Liquidacion() {
   const [busqueda, setBusqueda] = useState('');
   const [subtipo, setSubtipo] = useState('');   // el del formulario: 0, 3, 4, 20, 22
   const [tipoDocFiltro, setTipoDocFiltro] = useState('');
+  const [empresa, setEmpresa] = useState('');
+  const [elegidas, setElegidas] = useState(() => new Set());  // planilla_id
   const [soloPendientes, setSoloPendientes] = useState(false);
   const [previa, setPrevia] = useState(null);      // { afiliado, resumen }
   const [porAnular, setPorAnular] = useState(null);
@@ -100,10 +102,33 @@ export default function Liquidacion() {
       if (soloPendientes && p.planilla_id) return false;
       if (subtipo && String(p.subtipo ?? '') !== subtipo) return false;
       if (tipoDocFiltro && (p.tipo_doc || '') !== tipoDocFiltro) return false;
+      if (empresa && (p.cliente || '') !== empresa) return false;
       if (!q) return true;
       return [p.nombre, p.doc, p.cliente].some(v => (v || '').toLowerCase().includes(q));
     });
-  }, [personas, busqueda, soloPendientes, subtipo, tipoDocFiltro]);
+  }, [personas, busqueda, soloPendientes, subtipo, tipoDocFiltro, empresa]);
+
+  // Las empresas que hay en pantalla, para el selector.
+  const EMPRESAS = useMemo(
+    () => [...new Set(personas.map(p => p.cliente).filter(Boolean))].sort(),
+    [personas]);
+
+  // Un archivo plano lleva un solo aportante en el encabezado, asi que solo se
+  // pueden juntar personas de la misma empresa. Se sigue la primera elegida.
+  const empresaDeLaSeleccion = useMemo(() => {
+    const primera = visibles.find(p => elegidas.has(p.planilla_id));
+    return primera?.cliente ?? null;
+  }, [visibles, elegidas]);
+
+  const seleccionadas = useMemo(
+    () => visibles.filter(p => elegidas.has(p.planilla_id)),
+    [visibles, elegidas]);
+
+  const alternar = (p) => setElegidas(previas => {
+    const s = new Set(previas);
+    s.has(p.planilla_id) ? s.delete(p.planilla_id) : s.add(p.planilla_id);
+    return s;
+  });
 
   // Los subtipos que de verdad hay en pantalla, con su significado.
   const SUBTIPOS = {
@@ -200,6 +225,35 @@ export default function Liquidacion() {
   });
 
   // El plano viaja con el token, así que se baja por blob y no por enlace.
+  const descargarConjunto = async () => {
+    const ids = seleccionadas.map(p => p.planilla_id).join(',');
+    try {
+      const r = await api.get(`/liquidacion/plano-conjunto?ids=${ids}`,
+                              { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([r.data], { type: 'text/plain' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `PILA_${empresaDeLaSeleccion}_${periodo}_${seleccionadas.length}cotizantes.txt`;
+      document.body.appendChild(a); a.click(); a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || 'No se pudo descargar el archivo');
+    }
+  };
+
+  const enviarConjunto = useMutation({
+    mutationFn: async () => {
+      const ids = seleccionadas.map(p => p.planilla_id).join(',');
+      return (await api.post(`/liquidacion/enviar-conjunto?ids=${ids}`)).data;
+    },
+    onSuccess: (d) => {
+      setRespuesta({ ...d, conjunto: true });
+      setElegidas(new Set());
+      qc.invalidateQueries({ queryKey: ['liquidacion-pendientes'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'No se pudo enviar'),
+  });
+
   const descargar = async (persona) => {
     // Si se eligió un documento distinto al de la persona, se manda al backend
     // para que cambie solo ese campo del registro.
@@ -250,6 +304,14 @@ export default function Liquidacion() {
           <input style={{ ...inp, width: '100%' }} value={busqueda}
                  placeholder="Nombre, documento o cliente…"
                  onChange={e => setBusqueda(e.target.value)} />
+        </div>
+        <div style={{ minWidth: 160 }}>
+          <label style={lbl}>Empresa</label>
+          <select style={{ ...inp, width: '100%' }} value={empresa}
+                  onChange={e => { setEmpresa(e.target.value); setElegidas(new Set()); }}>
+            <option value="">Todas</option>
+            {EMPRESAS.map(x => <option key={x} value={x}>{x}</option>)}
+          </select>
         </div>
         <div style={{ minWidth: 170 }}>
           <label style={lbl}>Subtipo</label>
@@ -307,12 +369,52 @@ export default function Liquidacion() {
         </div>
       ) : (
         <div style={{ display: 'grid', gap: 8 }}>
+          {seleccionadas.length > 0 && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
+              border: `1px solid ${C.border}`, borderRadius: 10, padding: '10px 12px',
+              background: '#EFF6FF',
+            }}>
+              <strong style={{ fontSize: 13 }}>
+                {seleccionadas.length} {seleccionadas.length === 1 ? 'persona' : 'personas'}
+                {' '}de {empresaDeLaSeleccion} en un mismo archivo
+              </strong>
+              <span style={{ fontSize: 12, color: C.text2 }}>
+                {pesos(seleccionadas.reduce((t, x) => t + (x.total || 0), 0))}
+              </span>
+              <div style={{ flex: 1 }} />
+              <Btn size="sm" variant="secondary" onClick={() => setElegidas(new Set())}>
+                Quitar selección
+              </Btn>
+              <Btn size="sm" variant="secondary" onClick={descargarConjunto}>
+                Descargar plano conjunto
+              </Btn>
+              <Btn size="sm" disabled={enviarConjunto.isPending
+                                       || seleccionadas.some(x => x.desactualizada)}
+                   title={seleccionadas.some(x => x.desactualizada)
+                     ? 'Hay planillas desfasadas en la selección: anula y vuelve a liquidar'
+                     : undefined}
+                   onClick={() => enviarConjunto.mutate()}>
+                {enviarConjunto.isPending ? 'Enviando…' : 'Enviar las ' + seleccionadas.length}
+              </Btn>
+            </div>
+          )}
           {visibles.map(p => (
             <div key={p.id} style={{
               border: `1px solid ${C.border}`, borderRadius: 10, padding: 12,
               background: C.surface, display: 'flex', alignItems: 'center',
               gap: 12, flexWrap: 'wrap',
             }}>
+              {p.planilla_id && (
+                <input type="checkbox" style={{ width: 16, height: 16 }}
+                       checked={elegidas.has(p.planilla_id)}
+                       onChange={() => alternar(p)}
+                       disabled={!!empresaDeLaSeleccion
+                                 && empresaDeLaSeleccion !== p.cliente}
+                       title={empresaDeLaSeleccion && empresaDeLaSeleccion !== p.cliente
+                         ? `Un archivo plano lleva una sola empresa: ya hay ${empresaDeLaSeleccion} en la selección`
+                         : 'Incluir en un archivo con varias personas'} />
+              )}
               <div style={{ flex: 1, minWidth: 210 }}>
                 <div style={{ fontWeight: 700, fontSize: 14 }}>{p.nombre}</div>
                 <div style={{ fontSize: 12, color: C.text2, fontFamily: 'monospace' }}>

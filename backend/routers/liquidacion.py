@@ -155,6 +155,7 @@ def _en_lotes(valores, tamano=400):
 @router.get("/pendientes")
 def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
                subtipo: str = "", tipo_cotizante: str = "", tipo_doc: str = "",
+               aportante: str = "",
                db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """A quien hay que liquidarle el periodo, segun las facturas de ese mes.
 
@@ -181,6 +182,13 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
         models.Factura.mes.in_(formas_mes))
     if cliente:
         q_fact = q_fact.filter(models.Factura.cliente == cliente)
+    if aportante:
+        # Por empresa, que es como se agrupa un archivo plano: el encabezado
+        # lleva un solo aportante, asi que para juntar gente hay que poder
+        # verla junta primero.
+        valores = [v.strip() for v in aportante.split(",") if v.strip()]
+        if valores:
+            q_fact = q_fact.filter(models.Factura.cliente.in_(valores))
     facturas = q_fact.order_by(models.Factura.nombre_afiliado).limit(500).all()
     if not facturas:
         return []
@@ -387,6 +395,122 @@ def listar(cliente: str = "", periodo: str = "", doc: str = "", estado: str = ""
     } for l in filas]
 
 
+def _liquidaciones_del_grupo(db: Session, ids: str):
+    """Las liquidaciones de una lista de ids, validadas como conjunto.
+
+    Se exige que estén vivas y que el orden de salida sea estable: el archivo
+    numera los cotizantes de corrido, y si el orden cambiara entre la descarga
+    y el envío, serían dos archivos distintos para la misma gente.
+    """
+    try:
+        pedidos = [int(x) for x in str(ids).split(",") if x.strip()]
+    except ValueError:
+        raise HTTPException(400, "Los ids tienen que ser números separados por coma")
+    if not pedidos:
+        raise HTTPException(400, "No se indicó ninguna liquidación")
+
+    filas = (db.query(models.PlanillaLiquidacion)
+               .filter(models.PlanillaLiquidacion.id.in_(pedidos))
+               .order_by(models.PlanillaLiquidacion.afiliado_nombre).all())
+    encontrados = {l.id for l in filas}
+    faltan = [i for i in pedidos if i not in encontrados]
+    if faltan:
+        raise HTTPException(404, f"No se encontraron las liquidaciones: "
+                                 f"{', '.join(map(str, faltan))}")
+    anuladas = [l.afiliado_nombre for l in filas if l.estado == "anulada"]
+    if anuladas:
+        raise HTTPException(409, f"Hay planillas anuladas en la selección: "
+                                 f"{', '.join(anuladas)}")
+    return filas
+
+
+@router.get("/plano-conjunto", response_class=PlainTextResponse)
+def descargar_plano_conjunto(ids: str, tipo_doc: str = "",
+                             db: Session = Depends(get_db),
+                             token=Depends(require_admin_or_empleado)):
+    """Un solo archivo con varias personas de la misma empresa y período.
+
+    Liquidar sigue siendo de a uno —cada quien con su detalle y su total—,
+    pero el archivo que se sube al operador puede llevarlas juntas, que es
+    como se presenta una nómina.
+    """
+    filas = _liquidaciones_del_grupo(db, ids)
+    cuerpo, nombre, _ = _armar_plano(db, filas, tipo_doc)
+    return PlainTextResponse(
+        cuerpo, headers={"Content-Disposition": f'attachment; filename="{nombre}"'})
+
+
+@router.post("/enviar-conjunto")
+def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
+                    db: Session = Depends(get_db),
+                    token=Depends(require_admin_or_empleado)):
+    """Manda un archivo con varias personas y reparte la respuesta entre todas.
+
+    El operador devuelve un solo código y un solo número para el archivo, así
+    que ese resultado se escribe en cada una de las liquidaciones del grupo:
+    todas quedan apuntando a la misma planilla, que es lo que de verdad pasó.
+    """
+    filas = _liquidaciones_del_grupo(db, ids)
+
+    ya = [l.afiliado_nombre for l in filas if l.numero_planilla]
+    if ya:
+        raise HTTPException(409, f"Estas planillas ya fueron numeradas: "
+                                 f"{', '.join(ya)}")
+
+    # El mismo corte que en el envío individual: un código de administradora
+    # vacío es error duro y deja un registro allá que después toca anular.
+    for l in filas:
+        for d in db.query(models.PlanillaDetalle).filter_by(liquidacion_id=l.id).all():
+            faltan = obligaciones.codigos_faltantes(d)
+            if faltan:
+                raise HTTPException(
+                    409, f"{l.afiliado_nombre} liquida {', '.join(faltan)} sin el "
+                         f"código de la administradora. Complétalo en su ficha, "
+                         f"vuelve a liquidar y envía.")
+
+    cuerpo, nombre, ap = _armar_plano(db, filas, tipo_doc)
+    try:
+        resultado = operador.enviar_planilla(
+            cuerpo, nombre, ap.tipo_doc or "NI", ap.num_doc, tipo_archivo=tipo_archivo)
+    except operador.ErrorOperador as e:
+        raise HTTPException(502, str(e))
+
+    crudo = json.dumps(resultado, ensure_ascii=False, default=str)[:20000]
+    for l in filas:
+        l.respuesta_operador = crudo
+        if resultado.get("simulado"):
+            continue
+        l.operador = l.operador or "suaporte"
+        if resultado.get("numero_planilla"):
+            l.numero_planilla = resultado["numero_planilla"][:20]
+            l.estado = "numerada"
+        elif resultado.get("errores"):
+            l.estado = "inconsistente"
+        else:
+            l.estado = "enviada"
+        if resultado.get("codigo_planilla"):
+            l.planilla_corregida = resultado["codigo_planilla"][:20]
+        if resultado.get("url_pago"):
+            l.link_pago = resultado["url_pago"]
+    db.commit()
+
+    _log(db, token.get("sub", ""), "envió planilla conjunta al operador", "Liquidación",
+         f"{ap.razon_social} {filas[0].periodo_cotizacion} — {len(filas)} cotizantes"
+         + (" (simulación)" if resultado.get("simulado") else
+            f" — N.º {filas[0].numero_planilla or 'sin número'}"))
+    db.commit()
+
+    return {"simulado": resultado.get("simulado", False),
+            "cotizantes": len(filas),
+            "estado": filas[0].estado,
+            "codigo_planilla": resultado.get("codigo_planilla"),
+            "numero_planilla": filas[0].numero_planilla,
+            "link_pago": filas[0].link_pago,
+            "errores": resultado.get("errores", []),
+            "advertencias": resultado.get("advertencias", []),
+            "totales": resultado.get("totales")}
+
+
 @router.get("/{liquidacion_id}")
 def obtener(liquidacion_id: int, db: Session = Depends(get_db),
             token=Depends(require_admin_or_empleado)):
@@ -422,60 +546,118 @@ def obtener(liquidacion_id: int, db: Session = Depends(get_db),
     }
 
 
-def _armar_plano(db: Session, l, tipo_doc: str = "") -> tuple:
-    """El texto del archivo plano de una liquidación y su nombre sugerido.
+def _doc_del_afiliado(db: Session, liquidacion) -> str:
+    """Con qué documento sale esta persona, si su subtipo pide uno distinto."""
+    if not liquidacion.afiliado_id:
+        return ""
+    af = db.query(models.Afiliado).filter_by(id=liquidacion.afiliado_id).first()
+    return perfiles.documento_sugerido(af.subtipo, af.tipo_doc) if af else ""
 
-    El detalle no se recalcula: sale de la línea congelada al liquidar. Solo el
-    encabezado se arma al vuelo porque lleva totales y períodos.
+
+def _cambiar_documento(linea: str, tipo_doc: str) -> str:
+    """El campo 3 son las posiciones 8 y 9. Se cambian esas dos y nada más."""
+    return linea[:7] + tipo_doc.ljust(2)[:2] + linea[9:]
+
+
+def _renumerar(linea: str, secuencia: int) -> str:
+    """El campo 2 es la secuencia del cotizante dentro del archivo.
+
+    Cada liquidación se guarda sola, así que todas traen la suya en 1. Al
+    juntarlas en un archivo hay que numerarlas de corrido, o el operador ve
+    varios cotizantes con la misma secuencia.
     """
-    ap = db.query(models.AportantePila).filter_by(id=l.aportante_id).first()
-    detalles = (db.query(models.PlanillaDetalle)
-                  .filter_by(liquidacion_id=l.id)
-                  .order_by(models.PlanillaDetalle.secuencia).all())
+    return linea[:2] + f"{secuencia:05d}" + linea[7:]
+
+
+def _armar_plano(db: Session, liquidaciones, tipo_doc: str = "") -> tuple:
+    """El archivo plano de una o varias liquidaciones, y su nombre sugerido.
+
+    Acepta una sola o una lista. Varias personas caben en un mismo archivo
+    porque el registro tipo 2 se repite, pero el encabezado lleva un único
+    aportante y un único período: solo se pueden juntar las de la misma
+    empresa y el mismo mes. Eso no es decisión nuestra, es la forma del
+    archivo.
+
+    Las liquidaciones siguen siendo una por persona. Lo que se agrupa es el
+    archivo, no la liquidación: cada quien conserva su detalle, su total y su
+    rastro.
+
+    El detalle no se recalcula: sale de la línea congelada al liquidar. Solo
+    el encabezado se arma al vuelo, porque lleva los totales del conjunto.
+    """
+    if not isinstance(liquidaciones, (list, tuple)):
+        liquidaciones = [liquidaciones]
+    if not liquidaciones:
+        raise HTTPException(400, "No hay liquidaciones para armar el archivo")
+
+    if len({l.aportante_id for l in liquidaciones}) > 1:
+        raise HTTPException(409, "Un archivo plano lleva un solo aportante en el "
+                                 "encabezado: no se pueden juntar personas de "
+                                 "empresas distintas")
+    periodos = {l.periodo_cotizacion for l in liquidaciones}
+    if len(periodos) > 1:
+        raise HTTPException(409, "Un archivo plano lleva un solo período: "
+                                 f"llegaron {', '.join(sorted(periodos))}")
+    if len({l.tipo_planilla for l in liquidaciones}) > 1:
+        raise HTTPException(409, "Todas las planillas del archivo tienen que ser "
+                                 "del mismo tipo")
+
+    primera = liquidaciones[0]
+    ap = db.query(models.AportantePila).filter_by(id=primera.aportante_id).first()
+
+    lineas, detalles_todos = [], []
+    for l in liquidaciones:
+        detalles = (db.query(models.PlanillaDetalle)
+                      .filter_by(liquidacion_id=l.id)
+                      .order_by(models.PlanillaDetalle.secuencia).all())
+        detalles_todos.extend(detalles)
+
+        # Si nadie pidió un documento en concreto, lo decide el subtipo de cada
+        # afiliado: en un archivo con varias personas no tiene por qué ser el
+        # mismo para todas.
+        doc = (tipo_doc or _doc_del_afiliado(db, l)).strip().upper()
+        if doc and doc not in TIPOS_DOC_COTIZANTE:
+            raise HTTPException(400, f"tipo_doc debe ser uno de: "
+                                     f"{', '.join(sorted(TIPOS_DOC_COTIZANTE))}")
+        for d in detalles:
+            if not d.linea_plana:
+                continue
+            linea = _renumerar(d.linea_plana, len(lineas) + 1)
+            lineas.append(_cambiar_documento(linea, doc) if doc else linea)
 
     forma, cod_sucursal, nombre_sucursal = plano.datos_sucursal(ap)
-    periodo_otros, periodo_salud = plano.periodos_del_encabezado(l.periodo_cotizacion)
+    periodo_otros, periodo_salud = plano.periodos_del_encabezado(primera.periodo_cotizacion)
 
     encabezado = plano.registro_tipo_1({
         "modalidad_planilla": 1, "secuencia": 1,
         "razon_social": ap.razon_social,
         "tipo_doc_aportante": ap.tipo_doc or "NI", "num_doc_aportante": ap.num_doc,
-        "dv_aportante": ap.dv or 0, "tipo_planilla": l.tipo_planilla,
+        "dv_aportante": ap.dv or 0, "tipo_planilla": primera.tipo_planilla,
         "planilla_asociada": 0, "fecha_planilla_asociada": "",
         "forma_presentacion": forma,
         "cod_sucursal": cod_sucursal, "nombre_sucursal": nombre_sucursal,
         "cod_arl": ap.cod_arl or "",
         "periodo_pago_otros": periodo_otros, "periodo_pago_salud": periodo_salud,
-        "numero_planilla": l.numero_planilla or 0,
-        "fecha_pago": l.fecha_limite_pago or "",
-        "total_cotizantes": l.total_cotizantes or len(detalles),
-        "valor_total_nomina": int(sum((d.ibc_salud or d.ibc_pension or 0) for d in detalles)),
+        # El número solo se escribe cuando el archivo es de una sola planilla:
+        # un conjunto todavía no tiene número propio.
+        "numero_planilla": (primera.numero_planilla or 0) if len(liquidaciones) == 1 else 0,
+        "fecha_pago": primera.fecha_limite_pago or "",
+        "total_cotizantes": len(lineas),
+        "valor_total_nomina": int(sum((d.ibc_salud or d.ibc_pension or 0)
+                                      for d in detalles_todos)),
         "tipo_aportante": ap.tipo_aportante or 1, "cod_operador": 0,
     })
 
-    lineas = [d.linea_plana for d in detalles if d.linea_plana]
+    if len(liquidaciones) == 1:
+        sufijo = f"_{tipo_doc.strip().upper()}" if tipo_doc else ""
+        nombre = (f"PILA_{primera.afiliado_doc or ap.num_doc}_"
+                  f"{primera.periodo_cotizacion}_{primera.tipo_planilla}{sufijo}.txt")
+    else:
+        nombre = (f"PILA_{ap.num_doc}_{primera.periodo_cotizacion}_"
+                  f"{primera.tipo_planilla}_{len(lineas)}cotizantes.txt")
 
-    # Si nadie pidio un documento en concreto, lo decide el subtipo del
-    # afiliado. Dejarlo en manos de quien llame al endpoint era fragil: el
-    # envio salio una vez con la cedula de ciudadania y el operador lo
-    # rechazo, porque la marca de extranjero no vale con CC.
-    if not tipo_doc and l.afiliado_id:
-        af = db.query(models.Afiliado).filter_by(id=l.afiliado_id).first()
-        if af:
-            tipo_doc = perfiles.documento_sugerido(af.subtipo, af.tipo_doc)
-
-    if tipo_doc:
-        tipo_doc = tipo_doc.strip().upper()
-        if tipo_doc not in TIPOS_DOC_COTIZANTE:
-            raise HTTPException(400, f"tipo_doc debe ser uno de: "
-                                     f"{', '.join(sorted(TIPOS_DOC_COTIZANTE))}")
-        # El campo 3 son las posiciones 8 y 9. Se cambian esas dos y nada más.
-        lineas = [x[:7] + tipo_doc.ljust(2) + x[9:] for x in lineas]
-
-    sufijo = f"_{tipo_doc}" if tipo_doc else ""
-    nombre = (f"PILA_{l.afiliado_doc or ap.num_doc}_{l.periodo_cotizacion}"
-              f"_{l.tipo_planilla}{sufijo}.txt")
-    return "\r\n".join([encabezado] + lineas) + "\r\n", nombre, ap
+    salto = chr(13) + chr(10)
+    return salto.join([encabezado] + lineas) + salto, nombre, ap
 
 
 @router.get("/{liquidacion_id}/plano", response_class=PlainTextResponse)
