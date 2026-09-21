@@ -133,7 +133,8 @@ export default function Liquidacion() {
     // El envio sale con el mismo documento que se eligio para descargar: si la
     // persona esta en las bases del operador como CE, mandar CC la deja fuera.
     mutationFn: async (persona) => {
-      const tipo = docDescarga[persona.planilla_id] || persona.tipo_doc || 'CC';
+      const tipo = docDescarga[persona.planilla_id] || persona.tipo_doc_sugerido
+                   || persona.tipo_doc || 'CC';
       const qs = tipo && tipo !== persona.tipo_doc ? `?tipo_doc=${tipo}` : '';
       return (await api.post(`/liquidacion/${persona.planilla_id}/enviar${qs}`)).data;
     },
@@ -172,7 +173,8 @@ export default function Liquidacion() {
   const descargar = async (persona) => {
     // Si se eligió un documento distinto al de la persona, se manda al backend
     // para que cambie solo ese campo del registro.
-    const tipo = docDescarga[persona.planilla_id] || persona.tipo_doc || 'CC';
+    const tipo = docDescarga[persona.planilla_id] || persona.tipo_doc_sugerido
+                 || persona.tipo_doc || 'CC';
     const qs = tipo && tipo !== persona.tipo_doc ? `?tipo_doc=${tipo}` : '';
     try {
       const r = await api.get(`/liquidacion/${persona.planilla_id}/plano${qs}`,
@@ -289,7 +291,7 @@ export default function Liquidacion() {
                     <select
                       style={{ ...inp, padding: '6px 8px', fontSize: 12, width: 72 }}
                       title="Documento con el que se identifica a la persona en el archivo"
-                      value={docDescarga[p.planilla_id] || p.tipo_doc || 'CC'}
+                      value={docDescarga[p.planilla_id] || p.tipo_doc_sugerido || p.tipo_doc || 'CC'}
                       onChange={e => setDocDescarga(d => ({ ...d, [p.planilla_id]: e.target.value }))}
                     >
                       {TIPOS_DOC.map(t => <option key={t} value={t}>{t}</option>)}

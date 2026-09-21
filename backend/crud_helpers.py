@@ -104,7 +104,31 @@ def _afiliado_to_dict(a: models.Afiliado) -> dict:
         "ibc": float(a.ibc) if a.ibc is not None else None, "fecha_ingreso": a.fecha_ingreso,
         "fecha_afiliacion": a.fecha_afiliacion,
         "registrado_por": a.registrado_por, "activo": a.activo,
+        **_campos_pila(a),
     }
+
+
+# Los campos del registro tipo 2. Van aparte para no ensuciar el dict principal
+# y porque la lista tiene que ser la misma que escribe `crud_afiliados`: si el
+# formulario no puede leerlos de vuelta, tampoco puede editarlos.
+_CAMPOS_PILA = (
+    "primer_apellido", "segundo_apellido", "primer_nombre", "segundo_nombre",
+    "fecha_nacimiento", "sexo", "tipo_cotizante", "subtipo_cotizante",
+    "extranjero_no_pension", "colombiano_exterior",
+    "cod_depto_labor", "cod_municipio_labor",
+    "cod_eps", "cod_afp", "cod_ccf", "cod_arl", "clase_riesgo",
+    "tipo_salario", "centro_trabajo",
+    "cotizante_principal_tipo_doc", "cotizante_principal_doc", "horas_laboradas",
+)
+
+
+def _campos_pila(a: models.Afiliado) -> dict:
+    datos = {c: getattr(a, c, None) for c in _CAMPOS_PILA}
+    # Los dos Numeric salen como float para que el JSON no los mande como texto.
+    for c in ("tarifa_arl", "salario_basico"):
+        v = getattr(a, c, None)
+        datos[c] = float(v) if v is not None else None
+    return datos
 
 def _factura_to_dict(f: models.Factura) -> dict:
     try:

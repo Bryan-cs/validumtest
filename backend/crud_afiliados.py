@@ -89,6 +89,33 @@ def get_afiliado(db, id):
 def get_afiliado_by_doc(db, doc):
     return db.query(models.Afiliado).filter_by(doc=doc, activo=True).first()
 
+# Los campos del registro tipo 2 que el afiliado guarda. Van en una sola lista
+# porque create y update los recorren los dos: mantenerlos duplicados a mano es
+# como se pierden columnas sin que ningun test lo note.
+CAMPOS_PILA = (
+    "primer_apellido", "segundo_apellido", "primer_nombre", "segundo_nombre",
+    "fecha_nacimiento", "sexo", "tipo_cotizante", "subtipo_cotizante",
+    "extranjero_no_pension", "colombiano_exterior",
+    "cod_depto_labor", "cod_municipio_labor",
+    "cod_eps", "cod_afp", "cod_ccf", "cod_arl", "clase_riesgo", "tarifa_arl",
+    "tipo_salario", "salario_basico", "centro_trabajo",
+    "cotizante_principal_tipo_doc", "cotizante_principal_doc", "horas_laboradas",
+)
+
+
+def _aplicar_pila(afiliado, data):
+    """Escribe solo los campos PILA que el cliente haya mandado.
+
+    El formulario de afiliados no los envia todos, y escribirlos igual dejaria
+    en blanco los codigos de quien ya los tiene cargados: un guardado inocente
+    romperia su liquidacion.
+    """
+    enviados = data.model_dump(exclude_unset=True)
+    for campo in CAMPOS_PILA:
+        if campo in enviados:
+            setattr(afiliado, campo, enviados[campo])
+
+
 def create_afiliado(db, data: schemas.AfiliadoCreate):
     from sqlalchemy.exc import IntegrityError
     cache_invalidar("cobro:"); cache_invalidar("dashboard:"); cache_invalidar("dashboard_clientes:"); cache_invalidar("afiliados:")
@@ -102,6 +129,7 @@ def create_afiliado(db, data: schemas.AfiliadoCreate):
         "ibc":data.ibc,"fecha_ingreso":data.fecha_ingreso,
         "fecha_afiliacion":data.fecha_afiliacion,"registrado_por":data.registrado_por,
     })
+    _aplicar_pila(a, data)
     db.add(a); _log(db, data.registrado_por, "agregó un afiliado nuevo", "Afiliados", data.nombre)
     try:
         db.commit()
@@ -133,6 +161,7 @@ def update_afiliado(db, id, data: schemas.AfiliadoCreate, editor=""):
         ("fecha_afiliacion",data.fecha_afiliacion),
     ]:
         setattr(a, field, val)
+    _aplicar_pila(a, data)
     nombre_cambio  = data.nombre      != nombre_anterior
     cliente_cambio = data.cliente_txt != cliente_anterior
     if nombre_cambio or cliente_cambio:

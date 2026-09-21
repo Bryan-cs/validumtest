@@ -83,6 +83,30 @@ NOMBRES_TIPO = {
 }
 
 
+def liquidados(detalle) -> list:
+    """Los subsistemas que el archivo va a declarar.
+
+    No es lo mismo que lo contratado. Alguien del subtipo 20 no tiene la
+    pensión contratada y aun así se le liquida, porque está obligada; alguien
+    del subtipo 4 la tiene y no se le liquida, porque está exonerada. El
+    operador valida el archivo, no el formulario, así que lo que hay que
+    revisar es esto.
+
+    El régimen exceptuado reporta días e IBC de pensión con tarifa cero: eso
+    cuenta como declarar el subsistema, y por eso se mira el día y no el valor.
+    """
+    presentes = []
+    if detalle.dias_salud or detalle.cot_salud:
+        presentes.append("EPS")
+    if detalle.dias_pension or detalle.cot_pension:
+        presentes.append("AFP")
+    if detalle.dias_arl or detalle.cot_arl:
+        presentes.append(f"ARL {detalle.clase_riesgo or ''}".strip())
+    if detalle.dias_ccf or detalle.valor_ccf:
+        presentes.append("CCF")
+    return presentes
+
+
 def _contrata(servicios, sigla: str) -> bool:
     """Si el afiliado tiene contratado ese subsistema.
 
@@ -98,13 +122,80 @@ def nombre_tipo(tipo_cotizante: str) -> str:
     return NOMBRES_TIPO.get(tipo, f"tipo {tipo}")
 
 
+# ── Subtipos de cotizante (campo 6) ───────────────────────────────────────────
+#
+# El subtipo no reemplaza al tipo: lo matiza. Alguien sigue siendo tipo 01
+# "Dependiente", con todo lo que eso obliga, y el subtipo levanta una de esas
+# obligaciones por una razón personal suya —ya se pensionó, ya cumplió los
+# requisitos, ya le devolvieron los saldos—. Sin esto no hay forma de liquidar
+# a un dependiente que no cotiza a pensión sin que el operador lo rechace.
+# Sección 2.1.2.3.2 del anexo. No existen los subtipos 7 ni 8.
+SUBTIPOS_SIN_PENSION = {
+    "01",   # Dependiente pensionado por vejez, jubilación o invalidez activo
+    "02",   # Independiente pensionado activo
+    "03",   # No obligado a cotización a pensiones por edad
+    "04",   # Requisitos cumplidos para pensión o indemnización sustitutiva
+    "05",   # Indemnización sustitutiva o devolución de saldos reconocida
+    "09",   # Pensionado con mesada igual o superior a 25 SMLMV
+    "12",   # Conductor de taxi no obligado a cotizar a pensión
+}
+
+SUBTIPOS_SIN_SALUD = {
+    "09",   # Pensionado con mesada >= 25 SMLMV: no aporta ni a pensión ni a salud
+    "10",   # Residente en el exterior
+}
+
+# El régimen exceptuado es distinto de los demás: tampoco aporta a pensión,
+# pero el anexo exige reportar los días y el IBC de pensión con tarifa 0, y
+# pagar el Fondo de Solidaridad Pensional cuando el IBC llega a 4 SMLMV. Por
+# eso no está en SUBTIPOS_SIN_PENSION: no se apaga, se reporta distinto.
+SUBTIPO_REGIMEN_EXCEPTUADO = "06"
+
+COD_FONDO_SOLIDARIDAD = "FSP001"
+
+
+def normalizar_subtipo(subtipo) -> str:
+    """"4" y "04" son el mismo subtipo; "" y "00" son ninguno."""
+    s = str(subtipo or "").strip()
+    if not s or s == "0":
+        return ""
+    s = s.zfill(2)
+    return "" if s == "00" else s
+
+
+def exenciones(subtipo, extranjero_no_pension: bool = False,
+               colombiano_exterior: bool = False) -> set:
+    """Qué subsistemas quedan exentos para este cotizante.
+
+    Devuelve un subconjunto de {"pension", "salud"}. Junta las dos fuentes de
+    exención que existen: el subtipo de cotizante (campo 6) y las marcas de
+    los campos 7 y 8.
+    """
+    sub = normalizar_subtipo(subtipo)
+    exentos = set()
+    if sub in SUBTIPOS_SIN_PENSION:
+        exentos.add("pension")
+    if sub in SUBTIPOS_SIN_SALUD:
+        exentos.add("salud")
+    if extranjero_no_pension:
+        exentos.add("pension")
+    if colombiano_exterior:
+        exentos.add("salud")
+    return exentos
+
+
+def es_regimen_exceptuado(subtipo) -> bool:
+    return normalizar_subtipo(subtipo) == SUBTIPO_REGIMEN_EXCEPTUADO
+
+
 # Documentos que el anexo acepta para un extranjero no obligado a pensión
 # (sección 2.1.2.3.3). Con cédula de ciudadanía la marca no tiene sentido.
 DOCS_EXTRANJERO = ("CE", "PA", "CD", "SC", "PE")
 
 
 def revisar(tipo_cotizante: str, servicios, extranjero_no_pension: bool = False,
-            colombiano_exterior: bool = False, tipo_doc: str = "") -> list:
+            colombiano_exterior: bool = False, tipo_doc: str = "",
+            subtipo_cotizante: str = "") -> list:
     """Choques entre el tipo de cotizante y lo contratado.
 
     Devuelve una lista de frases, vacía si todo cuadra. Cada frase dice qué
@@ -122,12 +213,13 @@ def revisar(tipo_cotizante: str, servicios, extranjero_no_pension: bool = False,
     if not reglas:
         return []
 
-    if extranjero_no_pension or colombiano_exterior:
+    exentos = exenciones(subtipo_cotizante, extranjero_no_pension, colombiano_exterior)
+    if exentos or es_regimen_exceptuado(subtipo_cotizante):
         reglas = list(reglas)
-        if colombiano_exterior:
-            reglas[0] = NO_APLICA     # salud
-        if extranjero_no_pension:
-            reglas[1] = NO_APLICA     # pensión
+        if "salud" in exentos:
+            reglas[0] = NO_APLICA
+        if "pension" in exentos or es_regimen_exceptuado(subtipo_cotizante):
+            reglas[1] = NO_APLICA
 
     servicios = list(servicios or [])
     etiqueta = f"tipo de cotizante {tipo} ({nombre_tipo(tipo)})"
@@ -138,16 +230,21 @@ def revisar(tipo_cotizante: str, servicios, extranjero_no_pension: bool = False,
     if faltan:
         problemas.append(
             f"el {etiqueta} está obligado a cotizar a {_y(faltan)}, "
-            f"pero eso no está contratado. El operador va a rechazar la planilla: "
-            f"agrega el servicio o corrige el tipo de cotizante.")
+            f"y la planilla no lo está liquidando. El operador la va a rechazar: "
+            f"revisa los servicios contratados, el subtipo o el tipo de cotizante.")
 
+    # Lo que el subtipo exime no "sobra": alguien pensionado puede seguir
+    # teniendo la AFP en el formulario y no por eso hay un dato mal puesto.
+    eximidos = {"salud": "EPS", "pension": "AFP"}
+    siglas_exentas = {eximidos[e] for e in exentos if e in eximidos}
     sobran = [nombre for (sigla, nombre), regla in zip(SUBSISTEMAS, reglas)
-              if regla == NO_APLICA and _contrata(servicios, sigla)]
+              if regla == NO_APLICA and _contrata(servicios, sigla)
+              and sigla not in siglas_exentas]
     if sobran:
         problemas.append(
-            f"el {etiqueta} no cotiza a {_y(sobran)}, y está contratado. "
-            f"El operador lo va a rechazar: quita el servicio o corrige el tipo "
-            f"de cotizante.")
+            f"el {etiqueta} no cotiza a {_y(sobran)}, y la planilla lo está "
+            f"liquidando. El operador la va a rechazar: revisa los servicios "
+            f"contratados o el tipo de cotizante.")
 
     # La marca del campo 7 solo vale con documento de extranjero; el operador
     # rechaza la combinación con CC. Como el tipo de documento del plano se

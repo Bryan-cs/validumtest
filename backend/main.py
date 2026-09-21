@@ -49,6 +49,12 @@ import threading as _rl_threading
 _rl_mem: dict = {}
 _rl_lock = _rl_threading.Lock()
 
+# Interruptor para los tests, igual que el de los otros dos limitadores. La
+# suite completa pasa de 60 peticiones a /afiliados en un minuto desde el mismo
+# usuario y empezaba a recibir 429 en los ultimos archivos: fallos que dependian
+# del orden de ejecucion, no del codigo.
+_rl_enabled = True
+
 # (path_prefix, max_requests, window_segundos)
 # Orden importa — se usa el primer match
 _RL_RULES: list[tuple[str, int, int]] = [
@@ -262,7 +268,7 @@ class PerUserRateLimitMiddleware(BaseHTTPMiddleware):
     """
     async def dispatch(self, request, call_next):
         path = request.url.path
-        if path in _RL_SKIP or request.method == "OPTIONS":
+        if not _rl_enabled or path in _RL_SKIP or request.method == "OPTIONS":
             return await call_next(request)
 
         subject = _rl_get_subject(request)

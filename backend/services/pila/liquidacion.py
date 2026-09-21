@@ -23,7 +23,7 @@ from decimal import Decimal
 from typing import Optional
 
 from crud_helpers import _servicios_afiliado
-from . import obligaciones
+from . import obligaciones, perfiles
 
 from . import parametros as P
 
@@ -258,11 +258,37 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
     # dejar vacios los campos 19, 20, 28, 31, 32, 36, 42 y 46 al 53, que son
     # justo los que llena este bloque. Lo mismo con salud para el colombiano en
     # el exterior.
-    if d.extranjero_no_pension:
+    # El subtipo del formulario dice lo que el tipo de cotizante no puede
+    # decir: si esta persona cotiza a pension o no, mas alla de lo contratado.
+    perfil = perfiles.perfil(getattr(afiliado, "subtipo", None))
+    # "00" en la base significa "ninguno", no "el subtipo cero": sin normalizar,
+    # el perfil nunca llegaba a aplicarse.
+    if perfil.subtipo_cotizante and not obligaciones.normalizar_subtipo(d.subtipo_cotizante):
+        d.subtipo_cotizante = perfil.subtipo_cotizante
+    if perfil.extranjero_no_pension:
+        d.extranjero_no_pension = True
+    if perfil.obliga_pension:
+        # Obligada a cotizar aunque no lo tenga contratado: es el unico caso
+        # en que la liquidacion no sigue al formulario, y es a proposito.
+        contrata_pension = True
+
+    # El subtipo de cotizante (campo 6) exime igual que las marcas: un
+    # dependiente ya pensionado, o con los requisitos cumplidos, sigue siendo
+    # tipo 01 y no cotiza a pension. Sin esto no habia forma de liquidarlo.
+    exentos = obligaciones.exenciones(
+        d.subtipo_cotizante, d.extranjero_no_pension, d.colombiano_exterior)
+    if "pension" in exentos:
         contrata_pension = False
         d.cod_afp = ""      # campo 31, tambien va vacio
-    if d.colombiano_exterior:
+    if "salud" in exentos:
         contrata_salud = False
+
+    # El regimen exceptuado no se apaga: se reporta distinto. Dias e IBC de
+    # pension van llenos con tarifa 0, y el Fondo de Solidaridad se paga desde
+    # los 4 SMLMV, con FSP001 en el campo 31.
+    exceptuado = obligaciones.es_regimen_exceptuado(d.subtipo_cotizante)
+    if exceptuado:
+        contrata_pension = False
     clase_contratada = next((s.split()[-1] for s in servicios if s.startswith("ARL")), None)
 
     # Pensión
@@ -272,6 +298,13 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.tarifa_pension = P.TARIFA_PENSION
         d.cot_pension = P.aproximar_aporte(ibc * P.TARIFA_PENSION)
         d.fsp_solidaridad, d.fsp_subsistencia = P.partir_fsp(ibc, smlmv)
+    elif exceptuado:
+        d.dias_pension = dias
+        d.ibc_pension = ibc
+        d.tarifa_pension = Decimal("0")
+        d.fsp_solidaridad, d.fsp_subsistencia = P.partir_fsp(ibc, smlmv)
+        d.cod_afp = (obligaciones.COD_FONDO_SOLIDARIDAD
+                     if ibc >= smlmv * 4 else "")
 
     # Salud. La exoneración del artículo 114-1 quita la parte patronal a los
     # cotizantes por debajo de 10 SMLMV; el 4% del trabajador no se toca.
@@ -345,11 +378,14 @@ def liquidar(afiliados, aportante, anio: int, mes: int) -> ResumenLiquidacion:
         # Lo contratado manda para liquidar, pero el operador valida contra el
         # tipo de cotizante. Cuando los dos no coinciden el rechazo es seguro,
         # así que conviene decirlo aquí y no después de subir el archivo.
+        # Se revisa lo que la planilla declara, no lo que el formulario dice:
+        # es lo que el operador va a mirar.
         for choque in obligaciones.revisar(
-                d.tipo_cotizante, d.servicios,
+                d.tipo_cotizante, obligaciones.liquidados(d),
                 extranjero_no_pension=d.extranjero_no_pension,
                 colombiano_exterior=d.colombiano_exterior,
-                tipo_doc=d.tipo_doc):
+                tipo_doc=d.tipo_doc,
+                subtipo_cotizante=d.subtipo_cotizante):
             resumen.avisos.append(f"{quien}: {choque}")
 
         resumen.detalles.append(d)

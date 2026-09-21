@@ -79,6 +79,10 @@ def client():
         _auth_mod._limiter.enabled = False
     except (ImportError, AttributeError):
         pass
+    # Y el tercero: el limitador por usuario del middleware, que cuenta en
+    # memoria y se agota con la suite completa (60/min a /afiliados).
+    import main as _main_mod
+    _main_mod._rl_enabled = False
 
     with TestClient(app) as c:
         yield c

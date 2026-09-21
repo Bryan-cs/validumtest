@@ -239,14 +239,28 @@ def test_reporte_cobro_excel(client, admin_token):
 # ─── RATE LIMITING: 429 TRAS SUPERAR LÍMITE ──────────────────────────────────
 
 def test_rate_limit_devuelve_429(client, admin_token):
-    """121 peticiones rápidas al mismo endpoint deben retornar al menos un 429."""
+    """121 peticiones rápidas al mismo endpoint deben retornar al menos un 429.
+
+    El conftest apaga el limitador para toda la suite, porque si no los
+    últimos archivos reciben 429 por culpa de los anteriores. Este test es el
+    que sí quiere verlo, así que lo enciende para sí mismo y lo devuelve como
+    estaba, incluso si falla.
+    """
+    import main as _main_mod
     h = {"Authorization": f"Bearer {admin_token}"}
-    statuses = set()
-    for _ in range(121):
-        r = client.get("/afiliados", headers=h)
-        statuses.add(r.status_code)
-        if 429 in statuses:
-            break
-    assert 429 in statuses, (
-        "Se esperaba al menos un 429 tras superar el límite de 60/min en /afiliados"
-    )
+    antes = _main_mod._rl_enabled
+    _main_mod._rl_enabled = True
+    _main_mod._rl_mem.clear()
+    try:
+        statuses = set()
+        for _ in range(121):
+            r = client.get("/afiliados", headers=h)
+            statuses.add(r.status_code)
+            if 429 in statuses:
+                break
+        assert 429 in statuses, (
+            "Se esperaba al menos un 429 tras superar el límite de 60/min en /afiliados"
+        )
+    finally:
+        _main_mod._rl_enabled = antes
+        _main_mod._rl_mem.clear()

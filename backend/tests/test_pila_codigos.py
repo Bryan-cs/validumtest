@@ -32,7 +32,9 @@ def test_sin_codigos_vacios_ni_duplicados():
 # ─── Datos de referencia (UGPP y DANE) ────────────────────────────────────────
 
 def test_administradoras_por_subsistema():
-    assert len(catalogos.ADMINISTRADORAS["AFP"]) == 8
+    # 8 administradoras de pensiones del archivo de la UGPP, mas FSP001, que no
+    # es una AFP pero ocupa el campo 31 del regimen exceptuado.
+    assert len(catalogos.ADMINISTRADORAS["AFP"]) == 9
     assert len(catalogos.ADMINISTRADORAS["ARL"]) == 10
     assert len(catalogos.ADMINISTRADORAS["EPS"]) >= 25
     assert len(catalogos.ADMINISTRADORAS["CCF"]) >= 40
@@ -43,6 +45,7 @@ def test_administradoras_conocidas():
     assert catalogos.ADMINISTRADORAS["AFP"]["230301"].endswith("PORVENIR")
     assert catalogos.ADMINISTRADORAS["AFP"]["230201"].endswith("PROTECCION")
     assert "COLPENSIONES" in catalogos.ADMINISTRADORAS["AFP"]["25-14"]
+    assert "Solidaridad" in catalogos.ADMINISTRADORAS["AFP"]["FSP001"]
     assert "SURA" in catalogos.ADMINISTRADORAS["ARL"]["14-11"]
 
 

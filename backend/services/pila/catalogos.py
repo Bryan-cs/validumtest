@@ -44,6 +44,22 @@ TIPO_APORTANTE = {
 
 # Campo 5 del registro tipo 2. La numeración es dispersa: los códigos que el
 # anexo v30 ya no lista quedaron derogados y no deben poder elegirse.
+# Campo 6 del registro tipo 2. El subtipo no reemplaza al tipo: lo matiza, y
+# varios de ellos levantan la obligación de cotizar a pensión sin dejar de ser
+# el cotizante que se es. No existen los números 7 ni 8.
+SUBTIPO_COTIZANTE = {
+    "01": "Dependiente pensionado por vejez, jubilación o invalidez activo",
+    "02": "Independiente pensionado por vejez, jubilación o invalidez activo",
+    "03": "Cotizante no obligado a cotización a pensiones por edad",
+    "04": "Cotizante con requisitos cumplidos para pensión o indemnización sustitutiva",
+    "05": "Cotizante con indemnización sustitutiva o devolución de saldos reconocida",
+    "06": "Cotizante de régimen exceptuado de pensiones",
+    "09": "Cotizante pensionado con mesada igual o superior a 25 SMLMV",
+    "10": "Residente en el exterior afiliado voluntario a pensiones",
+    "11": "Conductor de taxi de servicio público",
+    "12": "Conductor de taxi de servicio público no obligado a cotizar a pensión",
+}
+
 TIPO_COTIZANTE = {
     "01": "Dependiente",
     "02": "Servicio doméstico",
@@ -146,6 +162,12 @@ FUENTE_DANE = _REFERENCIA["fuente_dane"]
 # Un catálogo por subsistema: EPS, AFP, CCF, ARL, SENA, ICBF, ADRES.
 ADMINISTRADORAS = _REFERENCIA["administradoras"]
 
+# El Fondo de Solidaridad Pensional no es una AFP, pero ocupa el campo 31
+# cuando el cotizante es de régimen exceptuado (subtipo 6) y su IBC llega a 4
+# SMLMV: no aporta a pensión pero sí al Fondo. No viene en el archivo de la
+# UGPP porque no es una administradora de pensiones.
+ADMINISTRADORAS.setdefault("AFP", {})["FSP001"] = "Fondo de Solidaridad Pensional"
+
 DEPTO = _REFERENCIA["departamentos"]
 
 # El código DANE de municipio solo es único dentro de su departamento: "001" es
@@ -158,6 +180,7 @@ MUNICIPIO_DEPTO = {cod: dep for cod, (_nom, dep) in _REFERENCIA["municipios"].it
 CATALOGOS = {
     "TIPO_APORTANTE": TIPO_APORTANTE,
     "TIPO_COTIZANTE": TIPO_COTIZANTE,
+    "SUBTIPO_COTIZANTE": SUBTIPO_COTIZANTE,
     "TIPO_PLANILLA":  TIPO_PLANILLA,
     "TIPO_DOC":       TIPO_DOC,
     "DEPTO":          DEPTO,

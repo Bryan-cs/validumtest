@@ -15,8 +15,9 @@ def test_dependiente_con_solo_eps_avisa_los_tres_que_faltan():
     texto = avisos[0]
     for esperado in ("pensión", "riesgos laborales", "caja de compensación familiar"):
         assert esperado in texto
-    # Las dos salidas posibles, porque cualquiera de los dos datos puede estar mal.
-    assert "agrega el servicio" in texto and "corrige el tipo de cotizante" in texto
+    # Las salidas posibles, porque cualquiera de los datos puede estar mal.
+    assert "revisa los servicios contratados" in texto
+    assert "el tipo de cotizante" in texto
 
 
 def test_dependiente_completo_no_avisa():
@@ -36,7 +37,7 @@ def test_independiente_solo_salud_con_pension_contratada_sobra():
     avisos = ob.revisar("42", ["EPS", "AFP"])
     assert len(avisos) == 1
     assert "no cotiza a pensión" in avisos[0]
-    assert "quita el servicio" in avisos[0]
+    assert "revisa los servicios contratados" in avisos[0]
 
 
 def test_tiempo_parcial_no_exige_salud():

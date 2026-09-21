@@ -80,6 +80,36 @@ class AfiliadoCreate(LargosDeColumna):
     fecha_ingreso: str = ""
     fecha_expedicion: str = ""
 
+    # ── Datos PILA (Anexo Tecnico 2, registro tipo 2) ────────────────────────
+    # Todos opcionales y sin default util a proposito: el formulario viejo no
+    # los manda, y si llegaran con "" el update los escribiria igual y borraria
+    # los codigos de quien ya los tiene. `update_afiliado` solo aplica los que
+    # vengan de verdad en el payload.
+    primer_apellido: Optional[str] = None
+    segundo_apellido: Optional[str] = None
+    primer_nombre: Optional[str] = None
+    segundo_nombre: Optional[str] = None
+    fecha_nacimiento: Optional[str] = None
+    sexo: Optional[str] = None
+    tipo_cotizante: Optional[str] = None
+    subtipo_cotizante: Optional[str] = None
+    extranjero_no_pension: Optional[bool] = None
+    colombiano_exterior: Optional[bool] = None
+    cod_depto_labor: Optional[str] = None
+    cod_municipio_labor: Optional[str] = None
+    cod_eps: Optional[str] = None
+    cod_afp: Optional[str] = None
+    cod_ccf: Optional[str] = None
+    cod_arl: Optional[str] = None
+    clase_riesgo: Optional[str] = None
+    tarifa_arl: Optional[float] = None
+    tipo_salario: Optional[str] = None
+    salario_basico: Optional[float] = None
+    centro_trabajo: Optional[str] = None
+    cotizante_principal_tipo_doc: Optional[str] = None
+    cotizante_principal_doc: Optional[str] = None
+    horas_laboradas: Optional[int] = None
+
     @field_validator('ibc', mode='before')
     @classmethod
     def ibc_positivo(cls, v):

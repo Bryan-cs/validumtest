@@ -29,7 +29,7 @@ from database import get_db
 from routers.deps import require_admin, require_admin_or_empleado
 import models, schemas
 from crud_helpers import _log
-from services.pila import liquidacion as motor, operador, plano
+from services.pila import liquidacion as motor, operador, perfiles, plano
 
 router = APIRouter(prefix="/liquidacion", tags=["liquidacion"])
 
@@ -149,6 +149,11 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
         "nombre": _nombre(a), "cliente": a.cliente_txt,
         "tipo_cotizante": a.tipo_cotizante,
         "desactualizada": _vieja(a),
+        # Los subtipos 20 y 22 se identifican ante el operador con cedula de
+        # extranjeria. Se sugiere aqui para que el selector venga puesto y no
+        # dependa de que alguien se acuerde.
+        "tipo_doc_sugerido": perfiles.documento_sugerido(a.subtipo, a.tipo_doc),
+        "subtipo": a.subtipo,
         "planilla_id": liquidadas[a.doc].id if a.doc in liquidadas else None,
         "estado": liquidadas[a.doc].estado if a.doc in liquidadas else None,
         "total": int(liquidadas[a.doc].total_general or 0) if a.doc in liquidadas else None,
