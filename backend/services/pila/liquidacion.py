@@ -152,6 +152,19 @@ def _partir_nombre(nombre: str):
     return (partes[0] if partes else ""), "", "", ""
 
 
+def _servicios_crudos(afiliado) -> list:
+    """Los servicios tal como se guardaron, sin lo que deduce el normalizador."""
+    crudo = getattr(afiliado, "servicios", None)
+    if isinstance(crudo, (list, tuple)):
+        return list(crudo)
+    try:
+        import json as _json
+        datos = _json.loads(crudo or "[]")
+        return list(datos) if isinstance(datos, list) else []
+    except (ValueError, TypeError):
+        return []
+
+
 def dias_cotizados(afiliado, anio: int, mes: int) -> tuple:
     """Días del período y las novedades de ingreso o retiro que los explican.
 
@@ -288,7 +301,19 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
     exceptuado = obligaciones.es_regimen_exceptuado(d.subtipo_cotizante)
     if exceptuado:
         contrata_pension = False
-    clase_contratada = next((s.split()[-1] for s in servicios if s.startswith("ARL")), None)
+    # Riesgos se decide sobre los servicios tal como se guardaron, no sobre la
+    # lista normalizada. `_servicios_afiliado` agrega ARL cuando el campo `arl`
+    # de la ficha trae una clase, aunque el servicio no este contratado: eso le
+    # sirve a Cobro, donde la clase vive en su propio campo, pero aqui haria
+    # que alguien con solo EPS contratada liquidara riesgos igual.
+    #
+    # La clase si sale de la lista normalizada, que es la que sabe leerla de
+    # los dos sitios. Lo que no puede venir de ahi es la decision de cotizar.
+    contrata_riesgos = any("ARL" in str(x).upper()
+                           for x in _servicios_crudos(afiliado))
+    clase_contratada = (next((s.split()[-1] for s in servicios
+                              if s.startswith("ARL")), None)
+                        if contrata_riesgos else None)
 
     # Pensión
     if contrata_pension:
@@ -394,6 +419,16 @@ def _depurar_campos_del_tipo(d: DetalleLiquidado) -> None:
     if not obligaciones.admite_horas(d.tipo_cotizante) or not d.dias_ccf:
         d.horas_laboradas = 0
 
+    # El codigo de una administradora solo va cuando se le cotiza. Dejarlo
+    # puesto con cero dias dice que hay aporte a ese subsistema y no lo hay,
+    # y el operador reclama que los dias no cuadran. La AFP ya se vaciaba en
+    # los casos exentos; esto lo vuelve general para los tres.
+    for dias, codigo in (("dias_salud", "cod_eps"),
+                         ("dias_pension", "cod_afp"),
+                         ("dias_ccf", "cod_ccf")):
+        if not getattr(d, dias, 0):
+            setattr(d, codigo, "")
+
 
 def liquidar(afiliados, aportante, anio: int, mes: int,
              tipo_planilla: str = "E") -> ResumenLiquidacion:
@@ -443,6 +478,9 @@ def liquidar(afiliados, aportante, anio: int, mes: int,
             resumen.avisos.append(f"{quien}: {choque}")
 
         for choque in obligaciones.revisar_actividad(d):
+            resumen.avisos.append(f"{quien}: {choque}")
+
+        for choque in obligaciones.revisar_subsistemas_parejos(d, tipo_planilla):
             resumen.avisos.append(f"{quien}: {choque}")
 
         resumen.detalles.append(d)

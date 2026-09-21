@@ -136,6 +136,47 @@ def codigos_faltantes(detalle) -> list:
     return faltan
 
 
+def revisar_subsistemas_parejos(detalle, tipo_planilla: str = "E") -> list:
+    """Salud, riesgos y caja van juntos o no van.
+
+    Lo dijo el validador del operador en cinco mensajes distintos, probando
+    combinaciones una a una:
+
+        819  Dias cotizados a riesgos no pueden ser 0
+        283  Dias cotizados a salud (30) y riesgos laborales (0) deben ser iguales
+        691  Los IBC de salud y riesgos deben ser iguales para el cotizante
+        285  Dias cotizados a riesgos y parafiscales deben ser iguales
+        820  Dias cotizados a parafiscales no pueden ser 0
+
+    Solo aplica a los tipos de cotizante que deben los tres. La pension es la
+    excepcion y por eso se puede apagar sola con el subtipo de cotizante.
+
+    Se avisa aqui porque el operador lo rechaza despues, cuando ya se subio el
+    archivo y hay un registro que anular.
+    """
+    reglas = reglas_de(getattr(detalle, "tipo_cotizante", ""), tipo_planilla)
+    if not reglas:
+        return []
+    salud, _pension, riesgos, caja = reglas
+    if not (salud == riesgos == caja == OBLIGATORIO):
+        return []
+
+    dias = {"salud": getattr(detalle, "dias_salud", 0) or 0,
+            "riesgos laborales": getattr(detalle, "dias_arl", 0) or 0,
+            "caja de compensación": getattr(detalle, "dias_ccf", 0) or 0}
+    if len(set(dias.values())) == 1 and 0 not in dias.values():
+        return []
+
+    faltan = [nombre for nombre, d in dias.items() if not d]
+    if faltan:
+        return [f"le falta {_y(faltan)}. Para este tipo de cotizante el operador "
+                f"exige salud, riesgos y caja con los mismos días: van los tres "
+                f"o no va ninguno."]
+    detalle_dias = ", ".join(f"{n} {d}" for n, d in dias.items())
+    return [f"los días no coinciden entre subsistemas ({detalle_dias}). El "
+            f"operador exige que salud, riesgos y caja lleven los mismos."]
+
+
 def revisar_actividad(detalle) -> list:
     """Si el codigo de actividad economica cuadra con la clase de riesgo.
 
