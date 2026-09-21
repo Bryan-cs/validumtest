@@ -581,6 +581,50 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
             "totales": resultado.get("totales")}
 
 
+@router.post("/{liquidacion_id}/corregir")
+def corregir_en_el_operador(liquidacion_id: int, tipo_archivo: str = "I",
+                            db: Session = Depends(get_db),
+                            token=Depends(require_admin_or_empleado)):
+    """Le pide al operador que corrija lo que él mismo marcó como corregible.
+
+    Hay errores que el operador sabe arreglar y nosotros no: el código de
+    actividad económica sale del anexo del Decreto 768, que no está en ninguna
+    documentación pública que se pueda leer. Su validador sí lo tiene, así que
+    conviene preguntárselo en vez de adivinar un código que cambiaría la tarifa
+    de riesgos que se paga.
+
+    Solo corrige errores, no advertencias: eso lo decide el operador, no
+    nosotros.
+    """
+    l = db.query(models.PlanillaLiquidacion).filter_by(id=liquidacion_id).first()
+    if not l:
+        raise HTTPException(404, "Liquidación no encontrada")
+    if not l.planilla_corregida:
+        raise HTTPException(409, "Esta planilla todavía no tiene código del "
+                                 "operador: hay que enviarla antes de corregirla")
+
+    ap = db.query(models.AportantePila).filter_by(id=l.aportante_id).first()
+    try:
+        resultado = operador.pedir_correccion(
+            l.planilla_corregida, ap.tipo_doc or "NI", ap.num_doc,
+            tipo_archivo=tipo_archivo)
+    except operador.ErrorOperador as e:
+        raise HTTPException(502, str(e))
+
+    l.respuesta_operador = json.dumps(resultado, ensure_ascii=False, default=str)[:20000]
+    db.commit()
+
+    _log(db, token.get("sub", ""), "pidió corrección al operador", "Liquidación",
+         f"{l.afiliado_nombre} {l.periodo_cotizacion} — planilla {l.planilla_corregida}")
+    db.commit()
+
+    return {"simulado": resultado.get("simulado", False),
+            "codigo_planilla": l.planilla_corregida,
+            "inconsistencias": resultado.get("inconsistencias"),
+            "totales": resultado.get("totales"),
+            "url_pago": resultado.get("url_pago")}
+
+
 @router.get("/operador/estado")
 def estado_operador(token=Depends(require_admin_or_empleado)):
     """Si el envío al operador está configurado y en qué modo.

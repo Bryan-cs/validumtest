@@ -142,6 +142,23 @@ export default function Liquidacion() {
     onError: (e) => toast.error(e?.response?.data?.detail || 'No se pudo liquidar'),
   });
 
+  // Hay errores que el operador marca como corregibles por el. El codigo de
+  // actividad economica es el caso: sale del anexo del Decreto 768, que no
+  // esta en ninguna documentacion legible, y su validador si lo tiene.
+  const corregir = useMutation({
+    mutationFn: async (planillaId) =>
+      (await api.post(`/liquidacion/${planillaId}/corregir`)).data,
+    onSuccess: (d) => {
+      const quedan = d.inconsistencias?.errores?.length ?? 0;
+      toast.success(quedan
+        ? `El operador corrigió lo que pudo; quedan ${quedan} sin corregir.`
+        : 'El operador corrigió la planilla y no quedaron errores.');
+      setRespuesta(null);
+      qc.invalidateQueries({ queryKey: ['liquidacion-pendientes'] });
+    },
+    onError: (e) => toast.error(e?.response?.data?.detail || 'No se pudo corregir'),
+  });
+
   const enviar = useMutation({
     // El envio sale con el mismo documento que se eligio para descargar: si la
     // persona esta en las bases del operador como CE, mandar CC la deja fuera.
@@ -151,8 +168,8 @@ export default function Liquidacion() {
       const qs = tipo && tipo !== persona.tipo_doc ? `?tipo_doc=${tipo}` : '';
       return (await api.post(`/liquidacion/${persona.planilla_id}/enviar${qs}`)).data;
     },
-    onSuccess: (d) => {
-      setRespuesta(d);
+    onSuccess: (d, persona) => {
+      setRespuesta({ ...d, planilla_id: persona.planilla_id });
       if (d.simulado) {
         toast.info('Simulación: no se envió nada al operador. ' +
                    'Cambia SUAPORTE_MODO a "real" para enviar de verdad.');
@@ -429,8 +446,14 @@ export default function Liquidacion() {
               </div>
             ))}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 16 }}>
               <Btn variant="secondary" onClick={() => setRespuesta(null)}>Cerrar</Btn>
+              {(respuesta.errores || []).some(e => e.autocorrige) && respuesta.planilla_id && (
+                <Btn disabled={corregir.isPending}
+                     onClick={() => corregir.mutate(respuesta.planilla_id)}>
+                  {corregir.isPending ? 'Corrigiendo…' : 'Que el operador corrija'}
+                </Btn>
+              )}
             </div>
           </>
         )}

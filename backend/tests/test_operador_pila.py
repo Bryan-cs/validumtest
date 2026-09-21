@@ -396,3 +396,41 @@ def test_respuesta_sin_validaciones_no_revienta():
     assert operador.interpretar_validacion({"estadoValidacion": "OK"})["estado_validacion"] == "OK"
     assert operador.interpretar_validacion({})["estado_validacion"] == ""
     assert operador.interpretar_validacion(None) == {}
+
+
+# ─── Correccion automatica ────────────────────────────────────────────────────
+#
+# Hay errores que el operador sabe arreglar y nosotros no: el codigo de
+# actividad economica sale del anexo del Decreto 768, que no esta en ninguna
+# documentacion publica legible. Su validador si lo tiene.
+
+def test_corregir_en_simulacion_no_sale_a_la_red(monkeypatch):
+    from services.pila import operador
+    monkeypatch.setenv("SUAPORTE_MODO", "simulacion")
+    sesion = operador.Sesion(simulada=True)
+    r = operador.corregir_planilla(sesion, "287172522")
+    assert r["simulado"] is True
+    assert r["parametros"]["codigoPlanilla"] == "287172522"
+
+
+def test_el_cuerpo_lleva_lo_que_pide_el_operador(monkeypatch):
+    """Su documentacion exige estos seis campos, y las advertencias en false."""
+    from services.pila import operador
+    monkeypatch.setenv("SUAPORTE_MODO", "simulacion")
+    p = operador.corregir_planilla(
+        operador.Sesion(simulada=True), "123")["parametros"]
+    assert set(p) == {"codigoPlanilla", "corregirInconsistenciaInformativa",
+                      "planillaNSoloNovedades", "planillaUGPP", "tipoArchivo",
+                      "validarIngresoRetiro"}
+    # El servicio no autocorrige advertencias: mandarlo en true no haria nada
+    # y confundiria a quien lea el log.
+    assert p["corregirInconsistenciaInformativa"] is False
+
+
+def test_el_codigo_de_planilla_viaja_como_texto(monkeypatch):
+    """El operador lo devuelve como numero y su ruta lo espera como cadena."""
+    from services.pila import operador
+    monkeypatch.setenv("SUAPORTE_MODO", "simulacion")
+    p = operador.corregir_planilla(
+        operador.Sesion(simulada=True), 287172522)["parametros"]
+    assert p["codigoPlanilla"] == "287172522"

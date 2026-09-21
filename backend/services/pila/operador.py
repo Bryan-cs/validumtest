@@ -304,6 +304,55 @@ def validar_planilla(sesion: Sesion, contenido: str, nombre_archivo: str,
 
 # ─── Paso 4: resultado ────────────────────────────────────────────────────────
 
+def corregir_planilla(sesion: Sesion, codigo_planilla: str,
+                     tipo_archivo: str = "I", planilla_ugpp: bool = False,
+                     solo_novedades: bool = False,
+                     validar_ingreso_retiro: bool = False,
+                     cliente: Optional[httpx.Client] = None) -> dict:
+    """Le pide al operador que corrija lo que marcó como autocorregible.
+
+    Hay errores que el operador sabe arreglar solo, y el portal tiene un botón
+    para eso. El caso que lo hizo falta: el código de actividad económica, que
+    sale del anexo del Decreto 768 y no está en ningún documento que tengamos.
+    Preguntárselo a quien valida es mejor que adivinarlo.
+
+    Solo toca los errores del cotizante y del aportante. Las advertencias no
+    las corrige, y por eso `corregirInconsistenciaInformativa` va en false: lo
+    dice su propia documentación.
+    """
+    if not sesion.autorizada and modo_real():
+        raise ErrorOperador("Hay que autorizar sobre el aportante antes de corregir")
+
+    cuerpo = {
+        "codigoPlanilla": str(codigo_planilla),
+        "corregirInconsistenciaInformativa": False,
+        "planillaNSoloNovedades": solo_novedades,
+        "planillaUGPP": planilla_ugpp,
+        "tipoArchivo": tipo_archivo,
+        "validarIngresoRetiro": validar_ingreso_retiro,
+    }
+    _registrar("correccion", planilla=codigo_planilla)
+
+    if sesion.simulada or not modo_real():
+        return {"simulado": True, "parametros": cuerpo,
+                "mensaje": "No se pidió nada: el cliente está en modo simulación."}
+
+    propio = cliente is None
+    cliente = cliente or _cliente_nuevo()
+    try:
+        r = cliente.post(f"{BASE_PLANILLAS}/v1/planillas/{codigo_planilla}/correccion",
+                         json=cuerpo, headers=sesion.headers)
+        if r.status_code not in (200, 201):
+            raise ErrorOperador(f"El operador no pudo corregir la planilla "
+                                f"({r.status_code}): {r.text[:500]}")
+        return r.json() if r.headers.get("content-type", "").startswith("application/json")             else {"respuesta": r.text[:2000]}
+    except httpx.HTTPError as e:
+        raise ErrorOperador(f"No se pudo pedir la corrección: {e}") from e
+    finally:
+        if propio:
+            cliente.close()
+
+
 def _get_json(sesion: Sesion, url: str, params: dict = None,
               cliente: Optional[httpx.Client] = None, vacio=None):
     if sesion.simulada or not modo_real():
@@ -426,6 +475,40 @@ def interpretar_validacion(respuesta: dict) -> dict:
                    _lista("erroresCotizantePlanilla", "cotizante"),
         "advertencias": _lista("advertenciasPlanilla", "advertencia"),
     }
+
+
+def pedir_correccion(codigo_planilla: str, tipo_doc_aportante: str,
+                    num_doc_aportante: str, tipo_archivo: str = "I") -> dict:
+    """Pide la corrección automática y vuelve a leer cómo quedó la planilla.
+
+    El recorrido completo, igual que el envío: autenticar, autorizar sobre el
+    aportante, corregir y releer. Devolver el estado posterior es la mitad del
+    valor, porque es donde se ve qué quedó sin corregir.
+    """
+    with _cliente_nuevo() as cliente:
+        sesion = autenticar(cliente)
+        aportante = consultar_aportante(sesion, tipo_doc_aportante, num_doc_aportante, cliente)
+        autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente,
+                  aportante_id=aportante.get("id"))
+        respuesta = corregir_planilla(sesion, codigo_planilla,
+                                      tipo_archivo=tipo_archivo, cliente=cliente)
+        resultado = {"simulado": sesion.simulada, "respuesta": respuesta,
+                     "codigo_planilla": str(codigo_planilla)}
+        if sesion.simulada:
+            return resultado
+
+        # Lo que quedó después de corregir: si algo sigue mal, aquí se ve.
+        try:
+            resultado["inconsistencias"] = inconsistencias(sesion, codigo_planilla,
+                                                           cliente=cliente)
+        except ErrorOperador as e:
+            log.warning(f"PILA: no se pudieron releer las inconsistencias: {e}")
+        for clave, fn in (("totales", totales), ("url_pago", url_pago)):
+            try:
+                resultado[clave] = fn(sesion, codigo_planilla, cliente=cliente)
+            except ErrorOperador:
+                pass
+        return resultado
 
 
 def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str,
