@@ -267,10 +267,6 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int) -> DetalleLiquid
         d.subtipo_cotizante = perfil.subtipo_cotizante
     if perfil.extranjero_no_pension:
         d.extranjero_no_pension = True
-    if perfil.obliga_pension:
-        # Obligada a cotizar aunque no lo tenga contratado: es el unico caso
-        # en que la liquidacion no sigue al formulario, y es a proposito.
-        contrata_pension = True
 
     # El subtipo de cotizante (campo 6) exime igual que las marcas: un
     # dependiente ya pensionado, o con los requisitos cumplidos, sigue siendo

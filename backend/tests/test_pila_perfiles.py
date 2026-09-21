@@ -48,22 +48,18 @@ def test_el_exonerado_no_cotiza_pension_ni_teniendola_contratada():
     assert int(d.cot_pension) == 0
 
 
-def test_subtipo_20_cotiza_pension_aunque_no_este_contratada():
-    """El unico caso en que la liquidacion no sigue al formulario."""
-    d = _liquidar("20")
-    assert int(d.cot_pension) > 0
-    assert d.cod_afp == "230301"
-
-
-def test_subtipo_22_marca_el_campo_7_y_apaga_la_pension():
-    d = _liquidar("22")
+@pytest.mark.parametrize("subtipo", ["20", "22"])
+def test_los_dos_grupos_de_extranjeria_salen_sin_pension(subtipo):
+    """Su tipo de cotizante exigiria pension; la marca del campo 7 la levanta."""
+    d = _liquidar(subtipo)
     assert d.extranjero_no_pension is True
     assert int(d.cot_pension) == 0
     assert d.cod_afp == ""
 
 
-def test_el_22_no_cotiza_pension_ni_teniendola_contratada():
-    d = _liquidar("22", servicios='["EPS","AFP","CCF","ARL 1"]')
+@pytest.mark.parametrize("subtipo", ["20", "22"])
+def test_ni_teniendo_la_pension_contratada(subtipo):
+    d = _liquidar(subtipo, servicios='["EPS","AFP","CCF","ARL 1"]')
     assert int(d.cot_pension) == 0
 
 
