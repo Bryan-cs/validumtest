@@ -53,15 +53,12 @@ def test_la_regla_propia_solo_afecta_al_59():
     assert ob.reglas_de("01", "Y") == ob.OBLIGACIONES["01"]
 
 
-def test_la_planilla_Y_no_valida_que_tipos_acepta():
-    """No tenemos su lista autorizada, y inventarla bloquearia planillas buenas.
-
-    De la E si la tenemos, porque el operador la devolvio en el texto de un
-    rechazo. Cuando devuelva la de la Y, se agrega.
-    """
-    assert "Y" not in ob.TIPOS_POR_PLANILLA
+def test_la_planilla_Y_tiene_su_propia_lista():
+    """Salio de los nueve casos que enumera su seccion en el anexo."""
     assert ob.revisar_planilla("59", "Y") == []
     assert ob.revisar_planilla("59", "E") != []
+    # Un dependiente no cabe ahi: la Y es de independientes.
+    assert ob.revisar_planilla("01", "Y") != []
 
 
 def test_liquidar_en_planilla_Y_no_reclama_salud_ni_pension():
@@ -74,3 +71,85 @@ def test_liquidar_en_planilla_Y_no_reclama_salud_ni_pension():
     resumen = liquidar([af], _Aportante(), 2026, 9, tipo_planilla="Y")
     assert not any("obligado a cotizar" in a for a in resumen.avisos)
     assert int(resumen.total_arl) > 0
+
+
+# ─── Cooperativas y asociaciones que pagan por sus asociados ──────────────────
+#
+# El cuarto caso de la planilla Y:
+#
+#   "Aportante que sea agremiaciones, asociaciones o congregaciones religiosas
+#    autorizadas por este Ministerio que pagan los aportes de los trabajadores
+#    independientes agremiados o asociados a ellas para los tipos de cotizantes
+#    16 - Independiente agremiado o asociado y 57 - Independiente Voluntario a
+#    Riesgos Laborales"
+#
+# Y el tipo 16: "esta obligado a aportar a los Sistemas Generales de Salud y
+# Pension, el pago de aportes al Sistema General de Riesgos laborales y a Cajas
+# de Compensacion Familiar es voluntario".
+#
+# Es la figura de una cooperativa que cotiza por sus asociados independientes,
+# donde cada uno elige su cobertura.
+
+import json
+
+
+def _asociado(servicios, planilla="Y"):
+    from services.pila.liquidacion import liquidar
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.tipo_cotizante = "16"; af.subtipo = "0"; af.subtipo_cotizante = ""
+    af.servicios = json.dumps(servicios)
+    af.arl = ""; af.cod_arl = ""; af.clase_riesgo = ""; af.cod_ccf = "CCF24"
+    af.ibc = af.salario_basico = 1750905
+    ap = _Aportante()
+    ap.tipo_aportante = "04"; ap.cod_arl = ""; ap.clase_riesgo = ""
+    return liquidar([af], ap, 2026, 9, tipo_planilla=planilla)
+
+
+def test_el_16_esta_en_la_planilla_Y():
+    assert "16" in ob.TIPOS_POR_PLANILLA["Y"]
+    assert ob.revisar_planilla("16", "Y") == []
+
+
+def test_el_16_no_va_en_la_planilla_E():
+    """La lista oficial de la E no lo incluye, y el operador lo rechaza."""
+    assert "16" not in ob.TIPOS_POR_PLANILLA["E"]
+    assert ob.revisar_planilla("16", "E") != []
+
+
+def test_un_asociado_con_salud_y_pension_pasa():
+    """Riesgos y caja son voluntarios: no tenerlos no es un error."""
+    r = _asociado(["EPS", "AFP"])
+    avisos = [a for a in r.avisos if "no tiene planilla" not in a]
+    assert avisos == []
+    assert int(r.total_salud) > 0 and int(r.total_pension) > 0
+    assert int(r.total_arl) == 0 and int(r.total_ccf) == 0
+
+
+def test_un_asociado_sin_pension_si_avisa():
+    """La pension si es obligatoria para el 16."""
+    r = _asociado(["EPS"])
+    assert any("pensión" in a for a in r.avisos)
+
+
+def test_un_asociado_sin_salud_tambien():
+    r = _asociado(["AFP"])
+    assert any("salud" in a for a in r.avisos)
+
+
+def test_puede_aportar_riesgos_y_caja_si_quiere():
+    """Voluntario no es prohibido: quien los contrate, los paga."""
+    r = _asociado(["EPS", "AFP", "ARL 4", "CCF"])
+    assert int(r.total_arl) > 0 and int(r.total_ccf) > 0
+
+
+def test_el_asociado_paga_la_tarifa_plena_de_salud():
+    """No hay empleador que ponga la otra parte: aporta el 12,5%."""
+    from services.pila import parametros as P
+    d = _asociado(["EPS", "AFP"]).detalles[0]
+    assert d.tarifa_salud == P.TARIFA_SALUD
+
+
+def test_el_57_tambien_cabe_en_la_Y():
+    """El mismo caso del anexo nombra los dos tipos."""
+    assert ob.revisar_planilla("57", "Y") == []

@@ -260,6 +260,19 @@ TIPOS_POR_PLANILLA = {
     #   57  Independiente voluntario a riesgos         riesgos
     #   59  Independiente por prestacion de servicios  salud, pension y riesgos
     "I": {"03", "33", "40", "42", "43", "56", "57", "59"},
+    # La planilla Y tambien trae su lista, en los nueve casos que enumera su
+    # seccion. El cuarto es el que describe a una cooperativa o asociacion que
+    # paga por sus asociados independientes:
+    #
+    #   "Aportante que sea agremiaciones, asociaciones o congregaciones
+    #    religiosas autorizadas por este Ministerio que pagan los aportes de
+    #    los trabajadores independientes agremiados o asociados a ellas para
+    #    los tipos de cotizantes 16 y 57"
+    #
+    # Los demas casos traen sus propios tipos: contratistas (59), cesantes
+    # (52), concejales y ediles (34, 35, 36, 60), contrato sindical (53),
+    # reincorporacion (61) y prestacion humanitaria (63).
+    "Y": {"16", "34", "35", "36", "52", "53", "57", "59", "60", "61", "63"},
 }
 
 
