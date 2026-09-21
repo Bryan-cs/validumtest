@@ -74,6 +74,9 @@ def _linea(d):
 # otros dos son su consecuencia: durante la licencia no hay aporte a riesgos.
 # Nuestro cotizante no tiene esa novedad, asi que ahi difieren a proposito.
 CAMPOS_DE_LA_LICENCIA = {27, 61, 63}
+# Con CE y sin pensión el IBC de caja pasa a 2400 (campos 45 y 65). El archivo
+# de referencia todavía trae el IBC real; es justo lo que se cambió.
+CAMPOS_IBC_CCF_CE = {45, 65}
 
 
 def test_reproducimos_el_archivo_de_referencia_campo_por_campo():
@@ -83,7 +86,7 @@ def test_reproducimos_el_archivo_de_referencia_campo_por_campo():
     distintos = {c.numero for c in plano.CAMPOS_TIPO_2
                  if referencia[c.inicio - 1:c.inicio - 1 + c.longitud]
                  != nuestra[c.inicio - 1:c.inicio - 1 + c.longitud]}
-    assert distintos == CAMPOS_DE_LA_LICENCIA
+    assert distintos == CAMPOS_DE_LA_LICENCIA | CAMPOS_IBC_CCF_CE
 
 
 @pytest.mark.parametrize("campo,esperado", [
@@ -103,7 +106,6 @@ def test_reproducimos_el_archivo_de_referencia_campo_por_campo():
     ("tarifa_salud", "0.04000"),
     ("cot_salud", "000070100"),
     ("tarifa_ccf", "0.04000"),
-    ("valor_ccf", "000070100"),
 ])
 def test_la_pension_se_apaga_y_lo_demas_no(campo, esperado):
     """Byte por byte contra el archivo que el otro sistema genero."""
@@ -112,6 +114,14 @@ def test_la_pension_se_apaga_y_lo_demas_no(campo, esperado):
     trozo = slice(c.inicio - 1, c.inicio - 1 + c.longitud)
     assert referencia[trozo] == esperado, "cambio el archivo de referencia"
     assert _linea(_liquidar())[trozo] == esperado
+
+
+def test_con_ce_el_ibc_de_caja_es_2400():
+    c_ibc = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == "ibc_ccf")
+    c_val = next(x for x in plano.CAMPOS_TIPO_2 if x.nombre == "valor_ccf")
+    linea = _linea(_liquidar())
+    assert linea[c_ibc.inicio - 1:c_ibc.inicio - 1 + c_ibc.longitud] == "000002400"
+    assert linea[c_val.inicio - 1:c_val.inicio - 1 + c_val.longitud] == "000000100"
 
 
 def test_sin_subtipo_el_mismo_cotizante_queda_mal():

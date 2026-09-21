@@ -41,11 +41,12 @@ def test_los_demas_no_reportan_horas(tipo):
     assert _liquidar(tipo).horas_laboradas == 0
 
 
-def test_sin_aportes_a_caja_no_hay_horas():
-    """El operador avisa cuando hay horas reportadas y no hay aportes a CCF."""
+def test_sin_caja_contratada_igual_hay_horas_si_se_declara_parafiscales():
+    """EPS + ARL en un dependiente declara caja con IBC 2400; las horas van."""
     d = _liquidar("01", servicios='["EPS","AFP","ARL 1"]')
-    assert int(d.dias_ccf) == 0
-    assert d.horas_laboradas == 0
+    assert int(d.dias_ccf) == 30
+    assert int(d.ibc_ccf) == 2400
+    assert d.horas_laboradas == 30 * 8
 
 
 # ─── Campo 76: exoneracion de parafiscales ────────────────────────────────────

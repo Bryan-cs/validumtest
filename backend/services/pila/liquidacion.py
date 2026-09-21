@@ -400,14 +400,16 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
             d.clase_riesgo = clase_afiliacion
             d.cod_arl = cod_arl
 
-    # Parafiscales
+    # Parafiscales. Con CE y sin pensión el IBC de caja es 2400 en las cuatro
+    # combinaciones (solo EPS, EPS+caja, EPS+ARL, EPS+ARL+CCF). Sin CE, 2400
+    # solo entra cuando caja no está contratada y el operador igual la exige.
+    token_ccf = _ibc_ccf_token(afiliado, d, contrata_pension, exceptuado)
     if contrata_caja:
-        d.dias_ccf = dias
-        d.ibc_ccf = ibc
-        d.tarifa_ccf = P.TARIFA_CCF
-        d.valor_ccf = P.aproximar_aporte(ibc * P.TARIFA_CCF)
+        _llenar_ccf(d, dias, ibc, token=token_ccf)
+    elif _debe_declarar_caja_sin_contrato(d):
+        _llenar_ccf(d, dias, ibc, token=True)
 
-    if contrata_caja and not d.exonerado:
+    if contrata_caja and not d.exonerado and not token_ccf:
         d.tarifa_sena = P.TARIFA_SENA
         d.valor_sena = P.aproximar_aporte(ibc * P.TARIFA_SENA)
         d.tarifa_icbf = P.TARIFA_ICBF
@@ -416,6 +418,40 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
     _depurar_campos_del_tipo(d)
     _garantizar_novedad_de_ingreso(d, anio, mes)
     return d
+
+
+def _documento_es_ce(afiliado, d: DetalleLiquidado) -> bool:
+    """Si esta liquidación sale (o debe salir) con cédula de extranjería."""
+    if (d.tipo_doc or "").strip().upper() == "CE":
+        return True
+    return perfiles.perfil(getattr(afiliado, "subtipo", None)).tipo_doc == "CE"
+
+
+def _ibc_ccf_token(afiliado, d: DetalleLiquidado,
+                   contrata_pension: bool, exceptuado: bool) -> bool:
+    """CE sin pensión: las combinaciones de solo salud, riesgos y caja."""
+    return _documento_es_ce(afiliado, d) and not contrata_pension and not exceptuado
+
+
+def _llenar_ccf(d: DetalleLiquidado, dias: int, ibc: Decimal, token: bool) -> None:
+    base = P.IBC_CCF_SIN_CONTRATO if token else ibc
+    d.dias_ccf = dias
+    d.ibc_ccf = base
+    d.tarifa_ccf = P.TARIFA_CCF
+    d.valor_ccf = P.aproximar_aporte(base * P.TARIFA_CCF)
+
+
+def _debe_declarar_caja_sin_contrato(d: DetalleLiquidado) -> bool:
+    """Si hay que poner caja en el plano aunque no esté contratada.
+
+    Solo en los tipos que el operador obliga a los tres subsistemas juntos.
+    Un estudiante o un independiente no se inventan caja: en ellos faltaría
+    a propósito y mandarla sería otro rechazo.
+    """
+    if not d.dias_salud or not d.dias_arl:
+        return False
+    reglas = obligaciones.reglas_de(d.tipo_cotizante)
+    return bool(reglas) and reglas[3] == obligaciones.OBLIGATORIO
 
 
 def _garantizar_novedad_de_ingreso(d: DetalleLiquidado, anio: int, mes: int) -> None:

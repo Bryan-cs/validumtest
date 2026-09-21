@@ -36,6 +36,11 @@ TARIFA_CCF = Decimal("0.04")
 TARIFA_SENA = Decimal("0.02")
 TARIFA_ICBF = Decimal("0.03")
 
+# IBC de caja cuando el plano se liquida con CE sin pensión (solo EPS, EPS+CCF,
+# EPS+ARL o EPS+ARL+CCF) o cuando caja no está contratada y el operador igual
+# exige parafiscales. 2400 evita cotizar el 4% sobre el IBC real.
+IBC_CCF_SIN_CONTRATO = Decimal("2400")
+
 # La parte patronal de salud es la que exonera el artículo 114-1 del Estatuto
 # Tributario; el 4% del trabajador se sigue pagando siempre.
 TARIFA_SALUD_PATRONAL = Decimal("0.085")
