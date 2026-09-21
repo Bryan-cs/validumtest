@@ -178,3 +178,42 @@ def test_los_documentos_aceptados_se_pueden_pedir_en_el_plano():
     """De nada sirve aceptarlos si el endpoint del plano los rechaza."""
     from routers.liquidacion import TIPOS_DOC_COTIZANTE
     assert set(ob.DOCS_EXTRANJERO) <= TIPOS_DOC_COTIZANTE
+
+
+# ─── Regla del negocio: toda persona lleva salud ──────────────────────────────
+#
+# Aqui no se manejan afiliaciones de solo riesgos ni de solo pension. Una ficha
+# sin EPS no es un caso valido, es un dato a medio llenar.
+
+def test_sin_eps_contratada_se_avisa():
+    avisos = perfiles.revisar_salud_contratada(["ARL 4"])
+    assert len(avisos) == 1
+    assert "toda persona lleva EPS" in avisos[0]
+
+
+@pytest.mark.parametrize("servicios", [
+    ["EPS"],
+    ["EPS", "ARL 4"],
+    ["EPS", "AFP", "CCF", "ARL 1"],
+])
+def test_con_eps_no_se_avisa(servicios):
+    assert perfiles.revisar_salud_contratada(servicios) == []
+
+
+def test_solo_pension_tampoco_vale():
+    assert perfiles.revisar_salud_contratada(["AFP"]) != []
+
+
+def test_sin_nada_contratado_tambien_avisa():
+    assert perfiles.revisar_salud_contratada([]) != []
+    assert perfiles.revisar_salud_contratada(None) != []
+
+
+def test_el_aviso_llega_al_resumen():
+    from services.pila.liquidacion import liquidar
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.subtipo = "0"; af.subtipo_cotizante = ""
+    af.servicios = '["ARL 4"]'; af.clase_riesgo = "4"
+    avisos = liquidar([af], _Aportante(), 2026, 9).avisos
+    assert any("toda persona lleva EPS" in a for a in avisos)

@@ -405,6 +405,10 @@ def liquidar(afiliados, aportante, anio: int, mes: int,
 
         quien = f"{d.doc} {d.primer_nombre} {d.primer_apellido}".strip()
 
+        # Aqui toda persona lleva salud. Sin EPS la ficha esta a medio llenar.
+        for choque in perfiles.revisar_salud_contratada(d.servicios):
+            resumen.avisos.append(f"{quien}: {choque}")
+
         # Sin servicios contratados no hay nada que liquidar.
         if not d.servicios:
             resumen.avisos.append(

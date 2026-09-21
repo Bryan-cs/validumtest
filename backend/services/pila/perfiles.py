@@ -68,6 +68,27 @@ def perfil(subtipo) -> Perfil:
     return PERFILES.get(clave, Perfil(descripcion=f"Subtipo {clave} sin regla PILA"))
 
 
+# Regla del negocio, no del anexo: aqui no se manejan afiliaciones de solo
+# riesgos ni de solo pension. Toda persona lleva salud, sola o acompañada. Una
+# ficha sin EPS no es un caso valido: es un dato a medio llenar, y el operador
+# la rechaza mas adelante por otro camino.
+SALUD_SIEMPRE_OBLIGATORIA = True
+
+
+def revisar_salud_contratada(servicios) -> list:
+    """Avisa cuando una persona no tiene salud contratada.
+
+    Se comprueba sobre lo contratado y no sobre lo liquidado, porque el
+    problema esta en la ficha: alguien la guardo sin EPS.
+    """
+    if not SALUD_SIEMPRE_OBLIGATORIA:
+        return []
+    if any(str(s).strip().upper() == "EPS" for s in (servicios or [])):
+        return []
+    return ["no tiene salud contratada. Aquí toda persona lleva EPS, sola o "
+            "acompañada: revisa su ficha antes de liquidar."]
+
+
 def documento_sugerido(subtipo, tipo_doc_actual: str = "") -> str:
     """Con qué documento conviene mandar a esta persona al operador.
 
