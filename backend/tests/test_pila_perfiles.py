@@ -48,27 +48,40 @@ def test_el_exonerado_no_cotiza_pension_ni_teniendola_contratada():
     assert int(d.cot_pension) == 0
 
 
-@pytest.mark.parametrize("subtipo", ["20", "22"])
-def test_los_dos_grupos_de_extranjeria_salen_sin_pension(subtipo):
-    """Su tipo de cotizante exigiria pension; la marca del campo 7 la levanta."""
-    d = _liquidar(subtipo)
+def test_el_22_sale_sin_pension_por_la_marca_del_campo_7():
+    """Es extranjera de verdad: su tipo de cotizante exigiria pension y la ley no."""
+    d = _liquidar("22")
     assert d.extranjero_no_pension is True
     assert int(d.cot_pension) == 0
     assert d.cod_afp == ""
 
 
-@pytest.mark.parametrize("subtipo", ["20", "22"])
-def test_ni_teniendo_la_pension_contratada(subtipo):
-    d = _liquidar(subtipo, servicios='["EPS","AFP","CCF","ARL 1"]')
+def test_el_22_no_cotiza_pension_ni_teniendola_contratada():
+    d = _liquidar("22", servicios='["EPS","AFP","CCF","ARL 1"]')
     assert int(d.cot_pension) == 0
 
 
-@pytest.mark.parametrize("subtipo", ["20", "22"])
-def test_los_dos_grupos_de_extranjeria_salen_con_cedula_de_extranjeria(subtipo):
-    assert perfiles.documento_sugerido(subtipo, "CC") == "CE"
+def test_el_20_cotiza_pension_como_cualquiera():
+    """Esta obligada, y la falta de liquidez del aportante no la exime.
+
+    Marcarla como extranjera declararia algo falso y le costaria las semanas
+    al trabajador. El operador ademas lo rechaza: valida la marca contra su
+    propio registro, no contra el documento del archivo.
+    """
+    d = _liquidar("20", servicios='["EPS","AFP","CCF","ARL 1"]')
+    assert d.extranjero_no_pension is False
+    assert int(d.cot_pension) > 0
 
 
-@pytest.mark.parametrize("subtipo", ["0", "3", "4"])
+def test_el_20_conserva_su_documento():
+    assert perfiles.documento_sugerido("20", "CC") == ""
+
+
+def test_solo_el_22_sale_con_cedula_de_extranjeria():
+    assert perfiles.documento_sugerido("22", "CC") == "CE"
+
+
+@pytest.mark.parametrize("subtipo", ["0", "3", "4", "20"])
 def test_los_demas_conservan_su_documento(subtipo):
     assert perfiles.documento_sugerido(subtipo, "CC") == ""
 
@@ -126,12 +139,12 @@ def test_cada_perfil_se_explica():
 # no dependia de eso, y no debe depender.
 
 def test_una_cedula_de_ciudadania_no_sirve_con_la_marca():
-    assert perfiles.documento_sugerido("20", "CC") == "CE"
+    """Solo el 22 pide documento de extranjeria, y solo si no lo tiene ya."""
     assert perfiles.documento_sugerido("22", "CC") == "CE"
 
 
 def test_la_tarjeta_de_identidad_tampoco():
-    assert perfiles.documento_sugerido("20", "TI") == "CE"
+    assert perfiles.documento_sugerido("22", "TI") == "CE"
 
 
 @pytest.mark.parametrize("doc", ["CE", "PA", "CD", "SC", "PE", "PT", "PC"])
