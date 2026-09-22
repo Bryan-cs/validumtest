@@ -275,8 +275,18 @@ def test_no_se_pisa_una_novedad_ya_puesta():
 # ─── Actividad economica propia del afiliado ──────────────────────────────────
 
 def test_la_actividad_del_afiliado_le_gana_a_la_del_aportante():
+    """El CIIU es el de la ficha. El primer dígito queda en la clase reportada."""
     d = _liquidar("01", actividad_economica="5960901")
-    assert d.subactividad_economica == "5960901"
+    assert d.subactividad_economica[1:] == "960901"
+    assert d.subactividad_economica[0] == d.clase_riesgo
+
+
+def test_arl_de_otra_clase_lleva_el_mismo_ciiu_con_su_digito():
+    """ARL 4 sobre el CIIU de la empresa no puede salir con un código de clase 1."""
+    d = _liquidar("01", servicios='["EPS","CCF","ARL 4"]', clase_riesgo="4")
+    assert d.clase_riesgo == "4"
+    assert d.subactividad_economica == "4" + _Aportante.actividad_economica[1:]
+    assert ob.revisar_actividad(d) == []
 
 
 def test_sin_actividad_propia_hereda_la_del_aportante():

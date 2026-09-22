@@ -440,6 +440,7 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
         d.tarifa_icbf = P.TARIFA_ICBF
         d.valor_icbf = P.aproximar_aporte(ibc * P.TARIFA_ICBF)
 
+    _alinear_actividad_con_la_clase(d)
     _depurar_campos_del_tipo(d)
     _garantizar_novedad_de_ingreso(d, anio, mes)
     return d
@@ -474,6 +475,21 @@ def _llenar_ccf(d: DetalleLiquidado, dias: int, ibc: Decimal, token: bool,
             d.cod_ccf = P.COD_CCF_SIN_CONTRATO
             d.cod_depto_labor = P.DEPTO_CCF_SIN_CONTRATO
             d.cod_municipio_labor = P.MUN_CCF_SIN_CONTRATO
+
+
+def _alinear_actividad_con_la_clase(d: DetalleLiquidado) -> None:
+    """El primer dígito del código del Decreto 768 es la clase de riesgo.
+
+    La empresa tiene un solo CIIU (1661401, 1620101). Si la ficha cotiza ARL 4,
+    el archivo no puede salir con clase 4 y un código que empieza por 1: el
+    operador lo rechaza en cualquier empresa. Se deja el CIIU y el adicional,
+    y el primer dígito pasa a ser la clase que esta línea reporta.
+    """
+    codigo = (d.subactividad_economica or "").strip()
+    clase = (d.clase_riesgo or "").strip()
+    if (len(codigo) == 7 and codigo.isdigit() and clase in "12345"
+            and codigo[0] != clase):
+        d.subactividad_economica = clase + codigo[1:]
 
 
 def _debe_declarar_caja_sin_contrato(d: DetalleLiquidado) -> bool:
