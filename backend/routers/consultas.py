@@ -158,53 +158,83 @@ def _cache_lookup(db: Session, fuente: str, doc: str):
         return None
 
 
+def _opciones_lista(db: Session, nombre_lista: str) -> list:
+    try:
+        fila = db.query(models.Lista).filter(models.Lista.nombre == nombre_lista).first()
+        crudo = json.loads(fila.items or "[]") if fila else []
+    except Exception:
+        return []
+    out = []
+    for o in crudo:
+        if isinstance(o, str) and o.strip():
+            out.append(o)
+        elif isinstance(o, dict):
+            nombre = (o.get("nombre") or o.get("value") or "").strip()
+            if nombre:
+                out.append(nombre)
+    return out
+
+
+def _nombre_catalogo(tipo: str, valor: str):
+    """Nombre del anexo PILA si el texto apunta a una sola administradora."""
+    from services.pila.catalogos import CATALOGOS, buscar_codigo
+    codigo = buscar_codigo(tipo, valor)
+    if not codigo:
+        return None
+    return (CATALOGOS.get(tipo) or {}).get(codigo)
+
+
 def _match_lista(db: Session, nombre_lista: str, valor: str):
     """Intenta casar el nombre que devuelve la fuente con la lista de la organizacion.
 
-    ADRES dice "NUEVA EPS S.A."; la lista puede decir "Nueva EPS". Devuelve el
-    valor de la lista si hay match razonable, si no None — para que el empleado
-    elija a mano en vez de guardar un valor que no existe en los selects.
+    ADRES dice "ENTIDAD PROMOTORA DE SALUD SANITAS S.A.S."; la lista puede
+    decir "Sanitas" o "EPS SANITAS". Devuelve el valor de la lista si hay
+    match razonable, si no None.
     """
     if not valor:
         return None
-    try:
-        fila = db.query(models.Lista).filter(models.Lista.nombre == nombre_lista).first()
-        opciones = json.loads(fila.items or "[]") if fila else []
-    except Exception:
+    opciones = _opciones_lista(db, nombre_lista)
+    if not opciones:
         return None
 
-    def limpio(s):
-        s = (s or "").upper()
-        for ruido in (" S.A.S.", " S.A.S", " S.A.", " S.A", " EPS", " SAS", ".", ","):
-            s = s.replace(ruido, " ")
-        return " ".join(s.split())
+    from services.pila.catalogos import _normalizar, buscar_codigo
 
-    objetivo = limpio(valor)
+    objetivo = _normalizar(valor)
     if not objetivo:
         return None
     for o in opciones:
-        if limpio(o) == objetivo:
+        if _normalizar(o) == objetivo:
             return o
-    for o in opciones:
-        a, b = limpio(o), objetivo
-        if a and b and (a in b or b in a):
-            return o
+    parciales = [o for o in opciones
+                 if (a := _normalizar(o)) and (a in objetivo or objetivo in a)]
+    if len(parciales) == 1:
+        return parciales[0]
+
+    tipo = {"eps": "EPS", "afp": "AFP", "ccf": "CCF"}.get((nombre_lista or "").lower())
+    if tipo:
+        codigo = buscar_codigo(tipo, valor)
+        if codigo:
+            por_codigo = [o for o in opciones if buscar_codigo(tipo, o) == codigo]
+            if por_codigo:
+                return por_codigo[0]
     return None
 
 
 def _sugerencia(db: Session, datos: dict) -> dict:
     """Campos del formulario de Afiliados que la consulta puede prellenar.
 
-    `eps` solo se sugiere si casa con la lista de la organizacion; si no, va en
-    `eps_sin_match` para que el empleado lo vea y elija.
+    La EPS se sugiere siempre que ADRES la traiga: primero el valor de la
+    lista de la organizacion, si no el nombre del catálogo PILA, si no el
+    texto crudo. `eps_sin_match` avisa cuando no estaba en el select.
     """
     eps_crudo = datos.get("eps")
     eps_match = _match_lista(db, "eps", eps_crudo)
     sug = {}
     if datos.get("nombre"):
         sug["nombre"] = datos["nombre"]
-    if eps_match:
-        sug["eps"] = eps_match
+    eps_aplicable = eps_match or _nombre_catalogo("EPS", eps_crudo) or eps_crudo
+    if eps_aplicable:
+        sug["eps"] = eps_aplicable
     if datos.get("municipio"):
         sug["ciudad"] = datos["municipio"]
     return {
@@ -239,9 +269,11 @@ def _sugerencia_ruaf(db: Session, datos: dict) -> dict:
         if not vigente:
             continue
         match = _match_lista(db, lista, vigente)
+        tipo = {"eps": "EPS", "afp": "AFP", "ccf": "CCF"}[campo]
         if match:
             sug[campo] = match
         else:
+            sug[campo] = _nombre_catalogo(tipo, vigente) or vigente
             sin_match[campo] = vigente
 
     # Ciudad: la reporta salud como "Departamento -> Municipio".

@@ -306,6 +306,60 @@ def test_match_eps_normaliza_sufijos(client, db):
     assert _match_lista(db, "eps", "EPS QUE NO EXISTE") is None
 
 
+def test_el_nombre_largo_de_adres_casa_con_la_lista(client, db):
+    """ADRES escribe la razón social; la lista suele tener el nombre corto.
+
+    'ENTIDAD PROMOTORA DE SALUD SANITAS S.A.S.' no contiene el token ' EPS '
+    que el matcher viejo recortaba, y 'EPS SANITAS' del catálogo tampoco
+    coincidía por subcadena. El empleado veía la EPS y no podía aplicarla.
+    """
+    import models
+    from routers.consultas import _match_lista, _sugerencia
+    from tenant import set_org, reset_org
+
+    org = db.query(models.Organizacion).filter_by(slug="org-test").first()
+    db.query(models.Lista).filter(models.Lista.nombre == "eps",
+                                  models.Lista.organizacion_id == org.id).delete()
+    db.add(models.Lista(organizacion_id=org.id, nombre="eps",
+                        items=json.dumps(["Sanitas", "Nueva EPS"])))
+    db.commit()
+
+    adres = "ENTIDAD PROMOTORA DE SALUD SANITAS S.A.S."
+    tok = set_org(org.id)
+    try:
+        assert _match_lista(db, "eps", adres) == "Sanitas"
+        sug = _sugerencia(db, {"nombre": "JUAN", "eps": adres, "municipio": "SOACHA"})
+    finally:
+        reset_org(tok)
+    assert sug["campos"]["eps"] == "Sanitas"
+    assert sug["campos"]["nombre"] == "JUAN"
+    assert sug["campos"]["ciudad"] == "SOACHA"
+    assert sug["eps_sin_match"] is None
+
+
+def test_si_la_eps_no_esta_en_la_lista_igual_se_sugiere(client, db):
+    """Nombre y ciudad se aplican aunque no estén en un select; la EPS también."""
+    import models
+    from routers.consultas import _sugerencia
+    from tenant import set_org, reset_org
+
+    org = db.query(models.Organizacion).filter_by(slug="org-test").first()
+    db.query(models.Lista).filter(models.Lista.nombre == "eps",
+                                  models.Lista.organizacion_id == org.id).delete()
+    db.add(models.Lista(organizacion_id=org.id, nombre="eps",
+                        items=json.dumps(["Nueva EPS"])))
+    db.commit()
+
+    adres = "ENTIDAD PROMOTORA DE SALUD SANITAS S.A.S."
+    tok = set_org(org.id)
+    try:
+        sug = _sugerencia(db, {"nombre": "JUAN", "eps": adres, "municipio": "SOACHA"})
+    finally:
+        reset_org(tok)
+    assert sug["campos"]["eps"] == "EPS SANITAS"
+    assert sug["eps_sin_match"] == adres
+
+
 # --- auditoria ---------------------------------------------------------------
 
 def test_log_consulta_registra_tambien_al_admin(client, db):

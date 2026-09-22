@@ -262,8 +262,8 @@ export default function ConsultaSS({ open, onClose, tipoDoc, doc, fechaExpedicio
             <div style={{ ...card, borderColor: C.amber, background: C.amberBg, fontSize: 12 }}>
               {Object.entries(sinMatch).map(([k, v]) => (
                 <div key={k}>
-                  <strong>{ETIQUETAS[k] || k}:</strong> {v} — no coincide con ninguna opción
-                  de la lista de esta empresa. Selecciónala a mano.
+                  <strong>{ETIQUETAS[k] || k}:</strong> {v} — no está en la lista de esta
+                  empresa. Igual puedes marcarla abajo y llevarla al formulario.
                 </div>
               ))}
             </div>
