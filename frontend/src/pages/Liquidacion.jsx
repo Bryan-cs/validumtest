@@ -44,6 +44,7 @@ const COLUMNAS = [
   ['Afiliado', C.text],
   ['Documento', '#0369A1'],
   ['Empresa', '#6D28D9'],
+  ['Cliente', '#7C3AED'],
   ['Subtipo', '#C2410C'],
   ['Servicios', '#0F766E'],
   ['Factura', '#047857'],
@@ -141,8 +142,10 @@ export default function Liquidacion() {
   const [subtipo, setSubtipo] = useState('');   // el del formulario: 0, 3, 4, 20, 22
   const [tipoDocFiltro, setTipoDocFiltro] = useState('');
   const [empresa, setEmpresa] = useState('');
+  const [clienteFiltro, setClienteFiltro] = useState('');
   const [elegidas, setElegidas] = useState(() => new Set());  // planilla_id
   const [soloPendientes, setSoloPendientes] = useState(false);
+  const [estadoFactura, setEstadoFactura] = useState('pagado');
   const [previa, setPrevia] = useState(null);      // { afiliado, resumen }
   const [porAnular, setPorAnular] = useState(null);
   const [docDescarga, setDocDescarga] = useState({});   // planilla_id → tipo de documento
@@ -158,9 +161,9 @@ export default function Liquidacion() {
   });
 
   const { data: personas = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['liquidacion-pendientes', anio, mes],
+    queryKey: ['liquidacion-pendientes', anio, mes, estadoFactura],
     queryFn: async () =>
-      (await api.get(`/liquidacion/pendientes?anio=${anio}&mes=${mes}`)).data,
+      (await api.get(`/liquidacion/pendientes?anio=${anio}&mes=${mes}&estado_factura=${estadoFactura}`)).data,
   });
 
   const visibles = useMemo(() => {
@@ -169,11 +172,12 @@ export default function Liquidacion() {
       if (soloPendientes && p.planilla_id) return false;
       if (subtipo && String(p.subtipo ?? '') !== subtipo) return false;
       if (tipoDocFiltro && (p.tipo_doc || '') !== tipoDocFiltro) return false;
-      if (empresa && (p.cliente || '') !== empresa) return false;
+      if (empresa && (p.empresa || '') !== empresa) return false;
+      if (clienteFiltro && (p.cliente || '') !== clienteFiltro) return false;
       if (!q) return true;
-      return [p.nombre, p.doc, p.cliente].some(v => (v || '').toLowerCase().includes(q));
+      return [p.nombre, p.doc, p.cliente, p.empresa].some(v => (v || '').toLowerCase().includes(q));
     });
-  }, [personas, busqueda, soloPendientes, subtipo, tipoDocFiltro, empresa]);
+  }, [personas, busqueda, soloPendientes, subtipo, tipoDocFiltro, empresa, clienteFiltro]);
 
   const totalPaginas = Math.max(1, Math.ceil(visibles.length / POR_PAGINA));
   const paginaActual = Math.min(pagina, totalPaginas);
@@ -181,8 +185,10 @@ export default function Liquidacion() {
     (paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA);
   const irAPagina = (n) => setPagina(Math.min(Math.max(1, n), totalPaginas));
 
-  // Las empresas que hay en pantalla, para el selector.
   const EMPRESAS = useMemo(
+    () => [...new Set(personas.map(p => p.empresa).filter(Boolean))].sort(),
+    [personas]);
+  const CLIENTES = useMemo(
     () => [...new Set(personas.map(p => p.cliente).filter(Boolean))].sort(),
     [personas]);
 
@@ -190,7 +196,7 @@ export default function Liquidacion() {
   // pueden juntar personas de la misma empresa. Se sigue la primera elegida.
   const empresaDeLaSeleccion = useMemo(() => {
     const primera = visibles.find(p => elegidas.has(p.planilla_id));
-    return primera?.cliente ?? null;
+    return primera?.empresa ?? null;
   }, [visibles, elegidas]);
 
   const seleccionadas = useMemo(
@@ -421,12 +427,12 @@ export default function Liquidacion() {
 
       <div style={{ display: 'flex', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
         <Resumen etiqueta="Por liquidar" valor={pendientes}
-                 detalle={pendientes ? 'Facturadas, sin plano' : 'Este mes ya está liquidado'} />
+                 detalle={pendientes ? 'Pagadas por el cliente, sin plano' : 'Este mes ya está liquidado'} />
         <Resumen etiqueta="Con plano" valor={personas.length - pendientes}
                  detalle="Listas para enviar o pagar" />
         <Resumen etiqueta="En pantalla" valor={`${visibles.length} de ${personas.length}`}
-                 detalle={busqueda || empresa || subtipo || tipoDocFiltro || soloPendientes
-                   ? 'Con el filtro activo' : 'Sin filtro'} />
+                 detalle={busqueda || empresa || clienteFiltro || subtipo || tipoDocFiltro || soloPendientes || estadoFactura !== 'pagado'
+                   ? 'Con el filtro activo' : 'Solo facturas pagadas'} />
       </div>
 
       <div style={{
@@ -454,12 +460,30 @@ export default function Liquidacion() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 170 }}>
+            <Etiqueta color="#047857">Estado de la factura</Etiqueta>
+            <select style={{ ...inp, width: '100%' }} value={estadoFactura}
+                    onChange={e => { setEstadoFactura(e.target.value); setPagina(1); }}>
+              <option value="pagado">Pagada</option>
+              <option value="pendiente">Pendiente</option>
+              <option value="planilla_pagada">Planilla pagada</option>
+              <option value="todos">Todos</option>
+            </select>
+          </div>
           <div style={{ minWidth: 160, flex: 1 }}>
             <Etiqueta color="#6D28D9">Empresa</Etiqueta>
             <select style={{ ...inp, width: '100%' }} value={empresa}
                     onChange={e => { setEmpresa(e.target.value); setElegidas(new Set()); setPagina(1); }}>
               <option value="">Todas</option>
               {EMPRESAS.map(x => <option key={x} value={x}>{x}</option>)}
+            </select>
+          </div>
+          <div style={{ minWidth: 180, flex: 1 }}>
+            <Etiqueta color="#7C3AED">Cliente</Etiqueta>
+            <select style={{ ...inp, width: '100%' }} value={clienteFiltro}
+                    onChange={e => { setClienteFiltro(e.target.value); setPagina(1); }}>
+              <option value="">Todos</option>
+              {CLIENTES.map(x => <option key={x} value={x}>{x}</option>)}
             </select>
           </div>
           <div style={{ minWidth: 180, flex: 1 }}>
@@ -514,8 +538,11 @@ export default function Liquidacion() {
           border: `1px dashed ${C.border}`, borderRadius: 10,
         }}>
           {personas.length === 0
-            ? `No hay facturas de ${periodo}. La liquidación sale de lo facturado:
-               genera las facturas del mes y aquí aparecerá a quién liquidarle.`
+            ? (estadoFactura === 'pagado'
+              ? `No hay facturas pagadas de ${periodo}. Entran a liquidar cuando el cliente ya pagó.`
+              : estadoFactura === 'todos'
+                ? `No hay facturas de ${periodo}.`
+                : `No hay facturas en ese estado para ${periodo}.`)
             : 'Ninguna persona coincide con el filtro.'}
         </div>
       ) : (
@@ -578,8 +605,8 @@ export default function Liquidacion() {
                             <input type="checkbox" style={{ width: 15, height: 15 }}
                                    checked={elegida}
                                    onChange={() => alternar(p)}
-                                   disabled={!!empresaDeLaSeleccion && empresaDeLaSeleccion !== p.cliente}
-                                   title={empresaDeLaSeleccion && empresaDeLaSeleccion !== p.cliente
+                                   disabled={!!empresaDeLaSeleccion && empresaDeLaSeleccion !== p.empresa}
+                                   title={empresaDeLaSeleccion && empresaDeLaSeleccion !== p.empresa
                                      ? `Un archivo plano lleva una sola empresa: ya hay ${empresaDeLaSeleccion} en la selección`
                                      : 'Incluir en un archivo con varias personas'} />
                           )}
@@ -588,7 +615,8 @@ export default function Liquidacion() {
                         <td style={{ ...td, color: '#0369A1', fontFamily: 'ui-monospace, monospace', fontSize: 12 }}>
                           {p.tipo_doc} {p.doc}
                         </td>
-                        <td style={{ ...td, color: '#6D28D9', fontWeight: 700 }}>{p.cliente || '—'}</td>
+                        <td style={{ ...td, color: '#6D28D9', fontWeight: 700 }}>{p.empresa || '—'}</td>
+                        <td style={{ ...td, color: '#7C3AED', fontWeight: 600 }}>{p.cliente || '—'}</td>
                         <td style={{ ...td, color: '#C2410C', fontWeight: 600 }}>
                           {p.subtipo != null && p.subtipo !== ''
                             ? `${p.subtipo}${sub ? ` · ${sub}` : ''}` : '—'}
@@ -664,9 +692,15 @@ export default function Liquidacion() {
                             ) : (
                               <>
                                 <Btn size="sm" variant="secondary"
-                                     disabled={previsualizar.isPending}
+                                     disabled={previsualizar.isPending || p.factura_estado !== 'pagado'}
+                                     title={p.factura_estado !== 'pagado'
+                                       ? 'Se liquida cuando la factura está pagada: el cliente ya entregó el dinero'
+                                       : undefined}
                                      onClick={() => previsualizar.mutate(p)}>Previsualizar</Btn>
-                                <Btn size="sm" disabled={liquidar.isPending || p.sin_afiliado}
+                                <Btn size="sm" disabled={liquidar.isPending || p.sin_afiliado || p.factura_estado !== 'pagado'}
+                                     title={p.factura_estado !== 'pagado'
+                                       ? 'Se liquida cuando la factura está pagada: el cliente ya entregó el dinero'
+                                       : undefined}
                                      onClick={() => liquidar.mutate(p)}>Liquidar</Btn>
                               </>
                             )}
@@ -675,7 +709,7 @@ export default function Liquidacion() {
                       </tr>
                       {(p.sin_afiliado || p.desactualizada) && (
                         <tr>
-                          <td colSpan={10} style={{
+                          <td colSpan={11} style={{
                             ...td, fontSize: 12,
                             color: p.sin_afiliado ? '#B91C1C' : '#92400E',
                             background: p.sin_afiliado ? '#FEF2F2' : '#FFFBEB',
@@ -794,7 +828,7 @@ export default function Liquidacion() {
             <div style={{ fontSize: 12, color: C.text2, marginBottom: 14 }}>
               {previa.datos.afiliado.tipo_doc} {previa.datos.afiliado.doc} ·
               aportante {previa.datos.aportante.razon_social} ({previa.datos.aportante.nit}) ·
-              cotización {previa.datos.periodo_cotizacion}, se paga en {previa.datos.periodo_pago}
+              pensión {previa.datos.periodo_pension} · salud {previa.datos.periodo_salud}
             </div>
 
             {previa.datos.detalle && (

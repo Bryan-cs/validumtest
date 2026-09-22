@@ -476,7 +476,8 @@ def test_pendientes_marca_quien_ya_tiene_planilla(client, admin_token, afiliado_
         "codigo": f"F{afiliado_listo['doc']}",
     })
 
-    r = client.get("/liquidacion/pendientes?anio=2026&mes=9", headers=_h(admin_token))
+    r = client.get("/liquidacion/pendientes?anio=2026&mes=9&estado_factura=todos",
+                   headers=_h(admin_token))
     assert r.status_code == 200
     fila = next(x for x in r.json() if x["doc"] == afiliado_listo["doc"])
     assert fila["planilla_id"] is None
@@ -484,7 +485,8 @@ def test_pendientes_marca_quien_ya_tiene_planilla(client, admin_token, afiliado_
     client.post("/liquidacion", headers=_h(admin_token),
                 json={"afiliado_id": afiliado_listo["afiliado_id"], "anio": 2026, "mes": 9})
 
-    r = client.get("/liquidacion/pendientes?anio=2026&mes=9", headers=_h(admin_token))
+    r = client.get("/liquidacion/pendientes?anio=2026&mes=9&estado_factura=todos",
+                   headers=_h(admin_token))
     fila = next(x for x in r.json() if x["doc"] == afiliado_listo["doc"])
     assert fila["planilla_id"] is not None
     assert fila["estado"] == "generada"

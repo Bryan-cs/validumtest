@@ -48,6 +48,7 @@ def gente(client, admin_token):
 
 
 def _pendientes(client, admin_token, **params):
+    params.setdefault("estado_factura", "todos")
     qs = "&".join(f"{k}={v}" for k, v in params.items())
     r = client.get(f"/liquidacion/pendientes?anio=2026&mes=9&{qs}",
                    headers=_h(admin_token))
@@ -96,6 +97,19 @@ def test_el_tipo_de_cotizante_admite_un_digito(client, admin_token, gente):
 def test_sin_filtros_salen_todos_los_facturados(client, admin_token, gente):
     docs = {f["doc"] for f in _pendientes(client, admin_token)}
     assert {"70011001", "70011002", "70011003"} <= docs
+
+
+def test_por_defecto_solo_entran_las_facturas_pagadas(client, admin_token, gente):
+    """La cola de trabajo es el dinero ya recibido. Lo pendiente se ve con el filtro."""
+    r = client.get("/liquidacion/pendientes?anio=2026&mes=9", headers=_h(admin_token))
+    assert r.status_code == 200, r.text
+    assert "70011002" not in {f["doc"] for f in r.json()}
+
+
+def test_el_filtro_de_estado_deja_ver_las_pendientes(client, admin_token, gente):
+    filas = _pendientes(client, admin_token, estado_factura="pendiente", q="70011002")
+    assert [f["doc"] for f in filas] == ["70011002"]
+    assert filas[0]["factura_estado"] == "pendiente"
 
 
 def test_quien_no_tiene_factura_no_aparece(client, admin_token, gente):

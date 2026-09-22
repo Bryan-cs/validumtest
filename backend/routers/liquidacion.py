@@ -5,10 +5,10 @@ con su propio número y su propio enlace de pago; no se liquida a toda la
 empresa de una vez.
 
 El aportante sigue apareciendo en el encabezado porque la planilla tipo E lo
-exige, y se deduce del cliente del afiliado (`Afiliado.cliente_txt` contra
-`AportantePila.cliente_ref`). Si ese cliente no tiene aportante cargado, la
-liquidación se detiene y lo dice: sin NIT y dígito de verificación no hay
-encabezado válido.
+exige, y se deduce de la empresa de la ficha (`Afiliado.empresa` contra
+`AportantePila.cliente_ref`). `cliente_txt` es a quien se le cobra, no quien
+cotiza. Si esa empresa no tiene aportante cargado, la liquidación se detiene
+y lo dice: sin NIT y dígito de verificación no hay encabezado válido.
 
 El flujo es previsualizar → liquidar → descargar. La previsualización no toca
 la base. Liquidar congela el cálculo, incluida la línea exacta del registro
@@ -103,10 +103,17 @@ def _afiliado_y_aportante(db: Session, afiliado_id: int):
     if not af.activo:
         raise HTTPException(400, f"{af.nombre} está retirado: no se le puede liquidar")
 
-    ap = (db.query(models.AportantePila)
-            .filter_by(cliente_ref=af.cliente_txt or "").first())
+    # La empresa de la ficha es quien va en el encabezado. cliente_txt es el
+    # cliente al que se le cobra. Si no hay aportante con el nombre de la
+    # empresa, se intenta el cliente.
+    ref = (af.empresa or "").strip() or (af.cliente_txt or "").strip()
+    ap = (db.query(models.AportantePila).filter_by(cliente_ref=ref).first()
+          if ref else None)
+    if not ap and (af.cliente_txt or "").strip() and (af.cliente_txt or "").strip() != ref:
+        ap = (db.query(models.AportantePila)
+                .filter_by(cliente_ref=af.cliente_txt.strip()).first())
     if not ap:
-        raise HTTPException(400, f"El cliente '{af.cliente_txt or '(sin cliente)'}' no tiene "
+        raise HTTPException(400, f"La empresa '{ref or '(sin empresa)'}' no tiene "
                                  f"aportante cargado. Créalo en Aportantes para poder "
                                  f"liquidar: la planilla necesita su NIT y dígito de "
                                  f"verificación en el encabezado.")
@@ -141,14 +148,18 @@ def _detalle_a_dict(d) -> dict:
 
 
 def _resumen_a_dict(resumen, af, ap, anio, mes) -> dict:
+    periodo = _periodo(anio, mes)
+    periodo_pension, periodo_salud = plano.periodos_del_encabezado(periodo)
     return {
         "afiliado": {"id": af.id, "doc": af.doc, "tipo_doc": af.tipo_doc,
                      "nombre": _nombre(af), "cliente": af.cliente_txt},
         "aportante": {"id": ap.id, "razon_social": ap.razon_social,
                       "nit": f"{ap.num_doc}-{ap.dv}" if ap.dv else ap.num_doc,
                       "exonerado_parafiscales": bool(ap.exonerado_parafiscales)},
-        "periodo_cotizacion": _periodo(anio, mes),
+        "periodo_cotizacion": periodo,
         "periodo_pago": _mes_siguiente(anio, mes),
+        "periodo_pension": periodo_pension,
+        "periodo_salud": periodo_salud,
         "totales": {
             "pension": int(resumen.total_pension), "salud": int(resumen.total_salud),
             "arl": int(resumen.total_arl), "ccf": int(resumen.total_ccf),
@@ -167,22 +178,31 @@ def _en_lotes(valores, tamano=400):
         yield valores[i:i + tamano]
 
 
+# Lo que Facturacion guarda en Factura.estado. "pagado" es cuando el cliente
+# ya entrego el dinero; "planilla_pagada" es un paso posterior.
+_ESTADOS_FACTURA = {"pendiente", "pagado", "planilla_pagada"}
+
+
 @router.get("/pendientes")
 def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
                subtipo: str = "", tipo_cotizante: str = "", tipo_doc: str = "",
-               aportante: str = "",
+               aportante: str = "", estado_factura: str = "pagado",
                db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)):
     """A quien hay que liquidarle el periodo, segun las facturas de ese mes.
 
-    El orden del trabajo es: primero se factura, despues se liquida. Por eso
-    la lista sale de las facturas del periodo y no de los afiliados activos:
-    si el mes no se ha facturado, aqui no hay nada que hacer todavia y la
-    pantalla debe decirlo en vez de ofrecer a todo el mundo.
+    El orden del trabajo es: primero se factura, el cliente paga, y recien
+    ahi se liquida la planilla. Por defecto solo entran las facturas en
+    estado pagado. `estado_factura=todos` (o pendiente, o planilla_pagada)
+    deja ver el resto sin meterlas al trabajo de liquidar.
 
     Cada fila es una factura. Cuando su afiliado ya no esta —se elimino, o la
     factura quedo de alguien que se fue— la fila igual aparece, sin `id`, para
     que se vea que hay una factura sin con que liquidarla.
     """
+    estado_factura = (estado_factura or "pagado").strip().lower()
+    if estado_factura != "todos" and estado_factura not in _ESTADOS_FACTURA:
+        raise HTTPException(400, "estado_factura debe ser pagado, pendiente, "
+                                  "planilla_pagada o todos")
     periodo = _periodo(anio, mes)
 
     # Facturacion guarda el mes por su nombre —"Septiembre"— y el año como
@@ -204,7 +224,9 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
         valores = [v.strip() for v in aportante.split(",") if v.strip()]
         if valores:
             q_fact = q_fact.filter(models.Factura.cliente.in_(valores))
-    facturas = q_fact.order_by(models.Factura.nombre_afiliado).limit(500).all()
+    if estado_factura != "todos":
+        q_fact = q_fact.filter(models.Factura.estado == estado_factura)
+    facturas = q_fact.order_by(models.Factura.nombre_afiliado).limit(5000).all()
     if not facturas:
         return []
 
@@ -229,7 +251,7 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
             patron = q.strip().lower()
             campos = [f.nombre_afiliado, f.doc, f.cliente]
             if a is not None:
-                campos += [_nombre(a), a.doc, a.cliente_txt]
+                campos += [_nombre(a), a.doc, a.cliente_txt, a.empresa]
             if not any(patron in (v or "").lower() for v in campos):
                 return False
         for valor, atributo, normalizar in (
@@ -262,6 +284,7 @@ def pendientes(anio: int, mes: int, cliente: str = "", q: str = "",
             "tipo_doc": getattr(a, "tipo_doc", None),
             "nombre": _nombre(a) if a is not None else f.nombre_afiliado,
             "cliente": getattr(a, "cliente_txt", None) or f.cliente,
+            "empresa": getattr(a, "empresa", None) or "",
             "tipo_cotizante": getattr(a, "tipo_cotizante", None),
             "subtipo": getattr(a, "subtipo", None),
             "servicios": _servicios_afiliado(a) if a is not None else [],

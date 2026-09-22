@@ -407,6 +407,12 @@ def liquidar_afiliado(afiliado, aportante, anio: int, mes: int,
         cod_arl = afiliado.cod_arl or getattr(aportante, "cod_arl", "") or ""
         clase_afiliacion = str(afiliado.clase_riesgo or
                                getattr(aportante, "clase_riesgo", "") or "")
+        # La ARL es de la empresa. Si el código está y la clase no, se usa la
+        # 1: sin eso los días de riesgos quedan en 0, la caja no se declara y
+        # el departamento sale en blanco. Pasa en cualquier empresa a la que
+        # no se le haya cargado la clase, con la misma ficha.
+        if cod_arl and clase_afiliacion not in P.TARIFA_ARL_POR_CLASE:
+            clase_afiliacion = "1"
         if cod_arl and clase_afiliacion in P.TARIFA_ARL_POR_CLASE and dias:
             # Tarifa 0 en tipo 01 solo la acepta el operador si el campo 27
             # trae L (licencia remunerada), igual que el plano de ARUS que

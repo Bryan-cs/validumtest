@@ -137,6 +137,41 @@ def test_la_afiliacion_puede_venir_del_aportante():
     assert d.cod_arl == "14-11"          # la del aportante
 
 
+def test_sin_clase_la_arl_de_la_empresa_igual_declara_riesgos_y_caja():
+    """Una ficha de solo EPS en una empresa sin departamento ni clase.
+
+    Antes los días de riesgos quedaban en 0, la caja no se declaraba y el
+    departamento salía vacío. El operador lo rechaza en bloque. Con el código
+    de ARL de la empresa alcanza para reportar lo mismo que en las demás.
+    """
+    from services.pila.liquidacion import liquidar
+    from tests.test_pila_subtipo import _Afiliado, _Aportante
+    af = _Afiliado()
+    af.subtipo = "20"
+    af.subtipo_cotizante = ""
+    af.arl = ""
+    af.cod_arl = ""
+    af.clase_riesgo = ""
+    af.cod_ccf = ""
+    af.ccf = ""
+    af.cod_depto_labor = ""
+    af.cod_municipio_labor = ""
+    af.servicios = json.dumps(["EPS"])
+    af.ibc = af.salario_basico = 1750905
+    ap = _Aportante()
+    ap.cod_arl = "14-11"
+    ap.clase_riesgo = ""
+    ap.cod_depto = ""
+    ap.cod_municipio = ""
+    d = liquidar([af], ap, 2026, 9).detalles[0]
+    assert d.dias_arl == d.dias_salud == d.dias_ccf == 30
+    assert int(d.ibc_arl) == int(d.ibc_salud)
+    assert int(d.tarifa_arl) == 0
+    assert d.cod_ccf == "CCF68"
+    assert d.cod_depto_labor == "99"
+    assert d.cod_municipio_labor == "773"
+
+
 def test_sin_afiliacion_en_ningun_lado_no_se_inventa_una():
     """Rellenar los dias con una ARL que no existe seria otra cosa."""
     from services.pila.liquidacion import liquidar
