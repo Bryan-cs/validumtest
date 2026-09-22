@@ -24,9 +24,11 @@ import json
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import PlainTextResponse, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from database import get_db
 from routers.deps import require_admin, require_admin_or_empleado
+from routers.credenciales import credenciales_de_aportante
 import const
 import models, schemas
 from crud_helpers import _log, _servicios_afiliado
@@ -41,6 +43,13 @@ from services.pila.archivo import (
 router = APIRouter(prefix="/liquidacion", tags=["liquidacion"])
 
 ESTADOS_BORRABLES = {"borrador", "generada", "anulada"}
+
+
+def _creds(db: Session, ap) -> tuple | None:
+    """Las de esa empresa en Credenciales, o None para caer al entorno."""
+    if ap is None:
+        return None
+    return credenciales_de_aportante(db, getattr(ap, "num_doc", "") or "")
 
 
 def _periodo(anio: int, mes: int) -> str:
@@ -508,7 +517,7 @@ def descargar_plano_conjunto(ids: str, tipo_doc: str = "", docs: str = "",
 
 
 @router.post("/enviar-conjunto")
-def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
+async def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
                     docs: str = "",
                     db: Session = Depends(get_db),
                     token=Depends(require_admin_or_empleado)):
@@ -539,8 +548,10 @@ def enviar_conjunto(ids: str, tipo_archivo: str = "I", tipo_doc: str = "",
     _corta_si_no_se_envia(db, filas)
     cuerpo, nombre, ap = _armar_plano(db, filas, tipo_doc, _documentos_pedidos(docs))
     try:
-        resultado = operador.enviar_planilla(
-            cuerpo, nombre, ap.tipo_doc or "NI", ap.num_doc, tipo_archivo=tipo_archivo)
+        resultado = await run_in_threadpool(
+            operador.enviar_planilla,
+            cuerpo, nombre, ap.tipo_doc or "NI", ap.num_doc,
+            tipo_archivo, _creds(db, ap))
     except operador.ErrorOperador as e:
         raise HTTPException(502, str(e))
 
@@ -636,7 +647,7 @@ def descargar_plano(liquidacion_id: int, tipo_doc: str = "",
 
 
 @router.get("/{liquidacion_id}/comprobante")
-def descargar_comprobante(liquidacion_id: int,
+async def descargar_comprobante(liquidacion_id: int,
                           db: Session = Depends(get_db),
                           token=Depends(require_admin_or_empleado)):
     """El recibo que emite el operador después de pagar, no el plano tipo 1/2."""
@@ -650,8 +661,9 @@ def descargar_comprobante(liquidacion_id: int,
     if not ap:
         raise HTTPException(409, "No hay aportante para pedir el comprobante")
     try:
-        cuerpo, tipo, nombre = operador.traer_comprobante(
-            l.numero_planilla, ap.tipo_doc or "NI", ap.num_doc)
+        cuerpo, tipo, nombre = await run_in_threadpool(
+            operador.traer_comprobante,
+            l.numero_planilla, ap.tipo_doc or "NI", ap.num_doc, _creds(db, ap))
     except operador.ErrorOperador as e:
         raise HTTPException(502, str(e))
     return Response(
@@ -660,7 +672,7 @@ def descargar_comprobante(liquidacion_id: int,
 
 
 @router.post("/{liquidacion_id}/enviar")
-def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
+async def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
                        tipo_doc: str = "",
                        db: Session = Depends(get_db),
                        token=Depends(require_admin_or_empleado)):
@@ -704,8 +716,10 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
     cuerpo, nombre, ap = _armar_plano(db, l, tipo_doc)
 
     try:
-        resultado = operador.enviar_planilla(
-            cuerpo, nombre, ap.tipo_doc or "NI", ap.num_doc, tipo_archivo=tipo_archivo)
+        resultado = await run_in_threadpool(
+            operador.enviar_planilla,
+            cuerpo, nombre, ap.tipo_doc or "NI", ap.num_doc,
+            tipo_archivo, _creds(db, ap))
     except operador.ErrorOperador as e:
         # El mensaje del operador es más útil que uno nuestro: se pasa tal cual.
         raise HTTPException(502, str(e))
@@ -745,7 +759,7 @@ def enviar_al_operador(liquidacion_id: int, tipo_archivo: str = "I",
 
 
 @router.post("/{liquidacion_id}/corregir")
-def corregir_en_el_operador(liquidacion_id: int, tipo_archivo: str = "I",
+async def corregir_en_el_operador(liquidacion_id: int, tipo_archivo: str = "I",
                             db: Session = Depends(get_db),
                             token=Depends(require_admin_or_empleado)):
     """Le pide al operador que corrija lo que él mismo marcó como corregible.
@@ -768,9 +782,10 @@ def corregir_en_el_operador(liquidacion_id: int, tipo_archivo: str = "I",
 
     ap = db.query(models.AportantePila).filter_by(id=l.aportante_id).first()
     try:
-        resultado = operador.pedir_correccion(
+        resultado = await run_in_threadpool(
+            operador.pedir_correccion,
             l.planilla_corregida, ap.tipo_doc or "NI", ap.num_doc,
-            tipo_archivo=tipo_archivo)
+            tipo_archivo, _creds(db, ap))
     except operador.ErrorOperador as e:
         raise HTTPException(502, str(e))
 
@@ -807,18 +822,22 @@ def corregir_en_el_operador(liquidacion_id: int, tipo_archivo: str = "I",
 
 
 @router.get("/operador/estado")
-def estado_operador(token=Depends(require_admin_or_empleado)):
+def estado_operador(num_doc: str = "", db: Session = Depends(get_db),
+                    token=Depends(require_admin_or_empleado)):
     """Si el envío al operador está configurado y en qué modo.
 
     Lo consulta la pantalla para no ofrecer un botón que no va a funcionar.
+    Con `num_doc` dice si esa empresa tiene clave propia o cae a la global.
     """
+    propias = credenciales_de_aportante(db, num_doc) if num_doc else None
     return {"modo": "real" if operador.modo_real() else "simulacion",
-            "credenciales": operador.hay_credenciales(),
-            "operador": operador.operador_nombre()}
+            "credenciales": operador.hay_credenciales(propias),
+            "operador": operador.operador_nombre(),
+            "origen": "empresa" if propias else "entorno"}
 
 
 @router.post("/{liquidacion_id}/pago")
-def refrescar_pago(liquidacion_id: int, db: Session = Depends(get_db),
+async def refrescar_pago(liquidacion_id: int, db: Session = Depends(get_db),
                    token=Depends(require_admin_or_empleado)):
     """Vuelve a pedirle al operador el enlace de pago y los totales.
 
@@ -837,7 +856,7 @@ def refrescar_pago(liquidacion_id: int, db: Session = Depends(get_db),
     resumen = None
     try:
         with operador._cliente_nuevo() as cliente:
-            sesion = operador.autenticar(cliente)
+            sesion = operador.autenticar(cliente, creds=_creds(db, ap))
             datos = operador.consultar_aportante(sesion, ap.tipo_doc or "NI",
                                                  ap.num_doc, cliente)
             operador.autorizar(sesion, ap.tipo_doc or "NI", ap.num_doc, cliente,

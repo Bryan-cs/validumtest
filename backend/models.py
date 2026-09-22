@@ -491,6 +491,7 @@ class CredencialPortal(Base):
     entidad        = Column(String(100), default="")     # Sura EPS, Compensar, etc.
     usuario_portal = Column(String(150), nullable=False)
     clave_portal   = Column(Text, nullable=False)        # encriptada con Fernet
+    clave_api      = Column(Text, nullable=True)         # clave de API del operador (Pago Simple / SuAporte)
     obs            = Column(Text, default="")
     creado_por     = Column(String(60), default="")
     creado         = Column(DateTime(timezone=True), default=_utcnow)

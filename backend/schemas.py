@@ -493,6 +493,7 @@ class CredencialCreate(BaseModel):
     entidad: str = ""
     usuario_portal: str
     clave_portal: str
+    clave_api: Optional[str] = None
     obs: str = ""
 
     @field_validator('usuario_portal', 'clave_portal', 'portal', mode='before')
@@ -510,6 +511,7 @@ class CredencialUpdate(BaseModel):
     entidad: Optional[str] = None
     usuario_portal: Optional[str] = None
     clave_portal: Optional[str] = None
+    clave_api: Optional[str] = None
     obs: Optional[str] = None
 
 

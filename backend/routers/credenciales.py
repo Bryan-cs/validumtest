@@ -1,4 +1,9 @@
-"""Credenciales de portales — EPS, CCF, Aportes en Línea, Pago Simple, Asopagos."""
+"""Credenciales de portales — EPS, CCF, Aportes en Línea, Pago Simple, Asopagos.
+
+Las de Pago Simple / SuAporte alimentan el envío PILA: usuario, contraseña y
+clave de API por NIT de empresa. Si esa empresa no tiene ficha, se usa la
+clave global del entorno.
+"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from database import get_db
@@ -7,7 +12,9 @@ import models, schemas
 from crud_helpers import _log
 import os, hashlib, base64
 
-PORTALES_VALIDOS = {"EPS", "CCF", "ARL", "Aportes en Línea", "Pago Simple", "Asopagos"}
+PORTALES_VALIDOS = {"EPS", "CCF", "ARL", "Aportes en Línea", "Pago Simple",
+                    "Asopagos", "SuAporte"}
+PORTALES_OPERADOR = ("Pago Simple", "SuAporte", "Asopagos")
 
 router = APIRouter(prefix="/credenciales", tags=["credenciales"])
 
@@ -32,6 +39,42 @@ def _decrypt(token: str) -> str:
         return "[error al descifrar]"
 
 
+def _norm_doc(s: str) -> str:
+    return "".join(c for c in str(s or "") if c.isalnum()).upper()
+
+
+def credenciales_de_aportante(db: Session, num_doc: str):
+    """Usuario, contraseña y clave de API de esa empresa en el operador.
+
+    Devuelve None si no hay ficha para ese NIT: el llamador cae a las variables
+    de entorno. El NIT se compara sin puntos ni guiones.
+    """
+    doc = _norm_doc(num_doc)
+    if not doc:
+        return None
+    filas = (db.query(models.CredencialPortal)
+               .filter(models.CredencialPortal.portal.in_(PORTALES_OPERADOR))
+               .all())
+    candidatas = [c for c in filas if _norm_doc(c.numero_doc) == doc]
+    if not candidatas:
+        return None
+    from services.pila.operador import operador_nombre
+    preferido = "Pago Simple" if operador_nombre() == "pagosimple" else "SuAporte"
+    candidatas.sort(key=lambda c: (0 if c.portal == preferido else 1, c.id))
+    c = candidatas[0]
+    usuario = (c.usuario_portal or "").strip()
+    clave = _decrypt(c.clave_portal) if c.clave_portal else ""
+    api = _decrypt(c.clave_api) if c.clave_api else ""
+    if clave == "[error al descifrar]" or api == "[error al descifrar]":
+        return None
+    if not (usuario and clave):
+        return None
+    if not api:
+        from services.pila.operador import credenciales as _env
+        api = _env()[2]
+    return usuario, clave, api
+
+
 def _to_dict(c: models.CredencialPortal, include_clave: bool = False) -> dict:
     from models import COL_TZ
     from datetime import timezone
@@ -51,6 +94,7 @@ def _to_dict(c: models.CredencialPortal, include_clave: bool = False) -> dict:
         "entidad":        c.entidad,
         "usuario_portal": c.usuario_portal,
         "clave_portal":   _decrypt(c.clave_portal) if include_clave else None,
+        "tiene_clave_api": bool(c.clave_api),
         "obs":            c.obs,
         "creado_por":     c.creado_por,
         "creado":         _fmt(c.creado),
@@ -78,6 +122,7 @@ def crear(data: schemas.CredencialCreate, db: Session = Depends(get_db), token=D
         entidad=data.entidad,
         usuario_portal=data.usuario_portal,
         clave_portal=_encrypt(data.clave_portal),
+        clave_api=_encrypt(data.clave_api) if data.clave_api else None,
         obs=data.obs,
         creado_por=token.get("sub", ""),
     )
@@ -106,6 +151,8 @@ def actualizar(cred_id: int, data: schemas.CredencialUpdate,
     if data.entidad is not None:        c.entidad        = data.entidad
     if data.usuario_portal is not None: c.usuario_portal = data.usuario_portal
     if data.clave_portal is not None:   c.clave_portal   = _encrypt(data.clave_portal)
+    if data.clave_api is not None:
+        c.clave_api = _encrypt(data.clave_api) if data.clave_api else None
     if data.obs is not None:            c.obs            = data.obs
     db.commit()
     _log(db, token.get("sub", ""), "editó credencial de portal", "Credenciales",
@@ -135,4 +182,7 @@ def revelar_clave(cred_id: int, db: Session = Depends(get_db), token=Depends(req
     _log(db, token.get("sub", ""), "reveló clave de portal", "Credenciales",
          f"{c.portal} — {c.entidad}")
     db.commit()
-    return {"clave": _decrypt(c.clave_portal)}
+    return {
+        "clave": _decrypt(c.clave_portal),
+        "clave_api": _decrypt(c.clave_api) if c.clave_api else None,
+    }

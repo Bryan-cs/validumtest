@@ -27,6 +27,7 @@ import ssl
 import unicodedata
 from dataclasses import dataclass, field, asdict
 from typing import Any
+import asyncio
 
 import httpx
 from bs4 import BeautifulSoup
@@ -37,6 +38,17 @@ URL_CONSULTA = f"{URL_PAGES}ConsultarAfiliadoWeb.aspx"
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/124.0 Safari/537.36")
 TIMEOUT = 30.0
+
+# Tope de consultas ADRES a la vez desde este proceso. ADRES es un portal
+# público con captcha: veinte en paralelo desde la misma IP se bloquean.
+# Las demás esperan el semáforo, no fallan.
+def _adres_sem() -> asyncio.Semaphore:
+    n = max(1, int(os.getenv("CONSULTAS_ADRES_CONCURRENCY", "6")))
+    sem = getattr(_adres_sem, "_sem", None)
+    if sem is None or getattr(_adres_sem, "_n", None) != n:
+        _adres_sem._sem = asyncio.Semaphore(n)
+        _adres_sem._n = n
+    return _adres_sem._sem
 
 _CERTS_DIR = os.path.join(os.path.dirname(__file__), "certs")
 
@@ -260,35 +272,36 @@ class ConsultaADRES:
 
         headers = {"User-Agent": UA, "Accept-Language": "es-CO,es;q=0.9"}
         try:
-            async with _cliente(headers=headers) as cli:
-                r = await cli.get(URL_CONSULTA)
-                r.raise_for_status()
-                soup = BeautifulSoup(r.text, "html.parser")
+            async with _adres_sem():
+                async with _cliente(headers=headers) as cli:
+                    r = await cli.get(URL_CONSULTA)
+                    r.raise_for_status()
+                    soup = BeautifulSoup(r.text, "html.parser")
 
-                vs = _hidden(soup, "__VIEWSTATE")
-                if not vs:
-                    raise FuenteNoDisponible("ADRES no devolvio __VIEWSTATE")
+                    vs = _hidden(soup, "__VIEWSTATE")
+                    if not vs:
+                        raise FuenteNoDisponible("ADRES no devolvio __VIEWSTATE")
 
-                guid = _captcha_guid(soup)
-                img = await cli.get(
-                    BASE + "/Telerik.Web.UI.WebResource.axd",
-                    params={"type": "rca", "isc": "true", "guid": guid},
-                    headers={"Referer": URL_CONSULTA},
-                )
-                img.raise_for_status()
-                if not img.content:
-                    raise FuenteNoDisponible("ADRES devolvio un captcha vacio")
+                    guid = _captcha_guid(soup)
+                    img = await cli.get(
+                        BASE + "/Telerik.Web.UI.WebResource.axd",
+                        params={"type": "rca", "isc": "true", "guid": guid},
+                        headers={"Referer": URL_CONSULTA},
+                    )
+                    img.raise_for_status()
+                    if not img.content:
+                        raise FuenteNoDisponible("ADRES devolvio un captcha vacio")
 
-                estado = EstadoConsulta(
-                    tipo_doc=TIPOS_DOC[tipo_doc],
-                    doc=doc,
-                    cookies=dict(cli.cookies),
-                    viewstate=vs,
-                    viewstate_generator=_hidden(soup, "__VIEWSTATEGENERATOR"),
-                    event_validation=_hidden(soup, "__EVENTVALIDATION"),
-                    captcha_guid=guid,
-                )
-                return estado, img.content
+                    estado = EstadoConsulta(
+                        tipo_doc=TIPOS_DOC[tipo_doc],
+                        doc=doc,
+                        cookies=dict(cli.cookies),
+                        viewstate=vs,
+                        viewstate_generator=_hidden(soup, "__VIEWSTATEGENERATOR"),
+                        event_validation=_hidden(soup, "__EVENTVALIDATION"),
+                        captcha_guid=guid,
+                    )
+                    return estado, img.content
         except httpx.HTTPError as e:
             raise FuenteNoDisponible(
                 "No se pudo contactar a ADRES: " + type(e).__name__) from e
@@ -325,20 +338,21 @@ class ConsultaADRES:
             # crea ASP.NET_SessionId, y el resultado vive en esa sesion: si se
             # abre un cliente nuevo para el popup, ADRES responde 500
             # (NullReferenceException en Presentacion.Pages.RespuestaConsulta).
-            async with _cliente(headers=headers, cookies=estado.cookies) as cli:
-                r = await cli.post(URL_CONSULTA, data=data)
-                r.raise_for_status()
-                _volcar("1_post.html", r.text)
+            async with _adres_sem():
+                async with _cliente(headers=headers, cookies=estado.cookies) as cli:
+                    r = await cli.post(URL_CONSULTA, data=data)
+                    r.raise_for_status()
+                    _volcar("1_post.html", r.text)
 
-                url_resultado = _url_popup(r.text)
-                if not url_resultado:
-                    # Sin popup no hubo consulta: el formulario explica por que.
-                    ConsultaADRES._diagnosticar_formulario(r.text)
+                    url_resultado = _url_popup(r.text)
+                    if not url_resultado:
+                        # Sin popup no hubo consulta: el formulario explica por que.
+                        ConsultaADRES._diagnosticar_formulario(r.text)
 
-                rp = await cli.get(URL_PAGES + url_resultado,
-                                   headers={"Referer": URL_CONSULTA})
-                rp.raise_for_status()
-                _volcar("2_resultado.html", rp.text)
+                    rp = await cli.get(URL_PAGES + url_resultado,
+                                       headers={"Referer": URL_CONSULTA})
+                    rp.raise_for_status()
+                    _volcar("2_resultado.html", rp.text)
         except httpx.HTTPError as e:
             raise FuenteNoDisponible(
                 "ADRES no respondio la consulta: " + type(e).__name__) from e

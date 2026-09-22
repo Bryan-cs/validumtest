@@ -135,8 +135,18 @@ def credenciales() -> tuple:
     return usuario, contrasena, clave
 
 
-def hay_credenciales() -> bool:
-    return all(credenciales())
+def hay_credenciales(creds: Optional[tuple] = None) -> bool:
+    return all(_triple(creds))
+
+
+def _triple(creds: Optional[tuple] = None) -> tuple:
+    """Las de la empresa, o las globales del entorno."""
+    if creds and all(creds[:2]):
+        usuario, contrasena, clave = creds[0], creds[1], creds[2] if len(creds) > 2 else ""
+        if not clave:
+            clave = credenciales()[2]
+        return usuario, contrasena, clave
+    return credenciales()
 
 
 def _registrar(paso: str, **datos):
@@ -182,8 +192,9 @@ def cifrar(dato: str, cliente: Optional[httpx.Client] = None) -> str:
 
 # ─── Paso 1: autenticación ────────────────────────────────────────────────────
 
-def autenticar(cliente: Optional[httpx.Client] = None) -> Sesion:
-    usuario, contrasena, clave = credenciales()
+def autenticar(cliente: Optional[httpx.Client] = None,
+               creds: Optional[tuple] = None) -> Sesion:
+    usuario, contrasena, clave = _triple(creds)
 
     # En simulación no se piden credenciales: sirve para revisar el armado de
     # las peticiones en una máquina que no tiene los secretos.
@@ -660,7 +671,8 @@ def interpretar_validacion(respuesta: dict) -> dict:
 
 
 def pedir_correccion(codigo_planilla: str, tipo_doc_aportante: str,
-                    num_doc_aportante: str, tipo_archivo: str = "I") -> dict:
+                    num_doc_aportante: str, tipo_archivo: str = "I",
+                    creds: Optional[tuple] = None) -> dict:
     """Pide la corrección automática y vuelve a leer cómo quedó la planilla.
 
     El recorrido completo, igual que el envío: autenticar, autorizar sobre el
@@ -668,7 +680,7 @@ def pedir_correccion(codigo_planilla: str, tipo_doc_aportante: str,
     valor, porque es donde se ve qué quedó sin corregir.
     """
     with _cliente_nuevo() as cliente:
-        sesion = autenticar(cliente)
+        sesion = autenticar(cliente, creds=creds)
         aportante = consultar_aportante(sesion, tipo_doc_aportante, num_doc_aportante, cliente)
         autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente,
                   aportante_id=aportante.get("id"))
@@ -694,10 +706,11 @@ def pedir_correccion(codigo_planilla: str, tipo_doc_aportante: str,
 
 
 def traer_comprobante(numero_planilla: str, tipo_doc_aportante: str,
-                      num_doc_aportante: str) -> tuple[bytes, str, str]:
+                      num_doc_aportante: str,
+                      creds: Optional[tuple] = None) -> tuple[bytes, str, str]:
     """Login, autoriza sobre el aportante y baja el comprobante pagado."""
     with _cliente_nuevo() as cliente:
-        sesion = autenticar(cliente)
+        sesion = autenticar(cliente, creds=creds)
         aportante = consultar_aportante(
             sesion, tipo_doc_aportante, num_doc_aportante, cliente)
         autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente,
@@ -706,7 +719,8 @@ def traer_comprobante(numero_planilla: str, tipo_doc_aportante: str,
 
 
 def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str,
-                    num_doc_aportante: str, tipo_archivo: str = "I") -> dict:
+                    num_doc_aportante: str, tipo_archivo: str = "I",
+                    creds: Optional[tuple] = None) -> dict:
     """Los pasos del recorrido de una vez, reutilizando una sola conexión.
 
     Devuelve lo que se pueda obtener en cada etapa. Si el operador rechaza la
@@ -714,7 +728,7 @@ def enviar_planilla(contenido: str, nombre_archivo: str, tipo_doc_aportante: str
     nuestro.
     """
     with _cliente_nuevo() as cliente:
-        sesion = autenticar(cliente)
+        sesion = autenticar(cliente, creds=creds)
         aportante = consultar_aportante(sesion, tipo_doc_aportante, num_doc_aportante, cliente)
         autorizar(sesion, tipo_doc_aportante, num_doc_aportante, cliente,
                   aportante_id=aportante.get("id"))

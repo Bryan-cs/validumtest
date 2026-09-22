@@ -5,7 +5,7 @@ import api from '../utils/api';
 import { C, PageHeader, Btn, Modal, ConfirmModal, ErrorMsg } from '../components/UI';
 import useAuthStore from '../hooks/useAuth';
 
-const PORTALES = ['EPS', 'CCF', 'ARL', 'Aportes en Línea', 'Pago Simple', 'Asopagos'];
+const PORTALES = ['EPS', 'CCF', 'ARL', 'Aportes en Línea', 'Pago Simple', 'SuAporte', 'Asopagos'];
 const TIPOS_DOC = ['NIT', 'CC'];
 
 const PORTAL_STYLE = {
@@ -14,13 +14,16 @@ const PORTAL_STYLE = {
   'ARL':              { bg: '#FEF2F2', color: '#DC2626' },
   'Aportes en Línea': { bg: '#FFFBEB', color: '#D97706' },
   'Pago Simple':      { bg: '#F5F3FF', color: '#7C3AED' },
+  'SuAporte':         { bg: '#EEF2FF', color: '#4F46E5' },
   'Asopagos':         { bg: '#FDF2F8', color: '#DB2777' },
 };
 
 const EMPTY_FORM = {
-  portal: 'EPS', entidad: '',
-  usuario_portal: '', clave_portal: '', obs: '',
+  portal: 'EPS', entidad: '', tipo_doc: 'NIT', numero_doc: '', titular: '',
+  usuario_portal: '', clave_portal: '', clave_api: '', obs: '',
 };
+
+const esOperador = p => ['Pago Simple', 'SuAporte', 'Asopagos'].includes(p);
 
 // Detecta URLs http(s) en texto plano y las convierte en <a> seguros.
 // Soporta hasta el primer carácter de espacio o salto de línea.
@@ -150,7 +153,7 @@ export default function CredencialesPortales() {
     }
     try {
       const r = await api.get(`/credenciales/${id}/clave`);
-      setClaves(p => ({ ...p, [id]: r.data.clave }));
+      setClaves(p => ({ ...p, [id]: r.data }));
     } catch { toast.error('Error al revelar clave'); }
   };
 
@@ -159,8 +162,9 @@ export default function CredencialesPortales() {
   };
   const openEdit = (c) => {
     setEditId(c.id);
-    setForm({ portal: c.portal, entidad: c.entidad,
-               usuario_portal: c.usuario_portal, clave_portal: '', obs: c.obs || '' });
+    setForm({ portal: c.portal, entidad: c.entidad, tipo_doc: c.tipo_doc || 'NIT',
+               numero_doc: c.numero_doc || '', titular: c.titular || '',
+               usuario_portal: c.usuario_portal, clave_portal: '', clave_api: '', obs: c.obs || '' });
     setShowPw(false); setShowForm(true);
   };
   const closeForm = () => { setShowForm(false); setEditId(null); };
@@ -169,9 +173,14 @@ export default function CredencialesPortales() {
     if (!form.entidad.trim() || !form.usuario_portal.trim()) {
       toast.error('Completa todos los campos requeridos'); return;
     }
+    if (esOperador(form.portal) && !String(form.numero_doc || '').trim()) {
+      toast.error('Para Pago Simple / SuAporte el NIT de la empresa es obligatorio'); return;
+    }
     if (!editId && !form.clave_portal.trim()) { toast.error('La contraseña es requerida'); return; }
     const d = { ...form };
     if (editId && !d.clave_portal) delete d.clave_portal;
+    if (editId && !d.clave_api) delete d.clave_api;
+    if (!esOperador(d.portal)) delete d.clave_api;
     if (editId) mutUpdate.mutate({ id: editId, d });
     else mutCreate.mutate(d);
   };
@@ -246,8 +255,9 @@ export default function CredencialesPortales() {
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 14 }}>
           {filtradas.map(c => {
-            const clave = claves[c.id];
-            const revealed = clave !== undefined;
+            const pack = claves[c.id];
+            const revealed = pack !== undefined;
+            const clave = pack?.clave;
             return (
               <div key={c.id} style={{
                 background: '#fff',
@@ -267,7 +277,11 @@ export default function CredencialesPortales() {
                 <div style={{ padding: '12px 16px' }}>
                   <div style={{ fontWeight: 700, fontSize: 15, color: C.primary, marginBottom: 12 }}>{c.entidad || '—'}</div>
 
-                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontFamily: 'monospace', fontSize: 12, background: C.surface2, padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.border}`, wordBreak: 'break-all', marginBottom: 8 }}>
+                      {c.tipo_doc} {c.numero_doc}{c.titular ? ` · ${c.titular}` : ''}
+                    </div>
+
+                    <div style={{ marginBottom: 8 }}>
                     <div style={lbl}>Usuario</div>
                     <div style={{ fontFamily: 'monospace', fontSize: 12, background: C.surface2, padding: '5px 10px', borderRadius: 6, border: `1px solid ${C.border}`, wordBreak: 'break-all' }}>
                       {c.usuario_portal}
@@ -301,6 +315,12 @@ export default function CredencialesPortales() {
                       </button>
                     </div>
                   </div>
+
+                  {c.tiene_clave_api && (
+                    <div style={{ fontSize: 11, color: '#7C3AED', fontWeight: 700, marginTop: 8 }}>
+                      Clave de API de Simple cargada
+                    </div>
+                  )}
 
                   {c.obs && (() => {
                     const obsTrim = c.obs.trim();
@@ -399,6 +419,37 @@ export default function CredencialesPortales() {
               </div>
             </div>
           </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '90px 1fr 1fr', gap: 14 }}>
+            <div>
+              <label style={lbl}>Tipo</label>
+              <select style={inp} value={form.tipo_doc} onChange={e => f('tipo_doc', e.target.value)}>
+                {TIPOS_DOC.map(t => <option key={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lbl}>NIT / documento {esOperador(form.portal) ? '*' : ''}</label>
+              <input style={mono} value={form.numero_doc} onChange={e => f('numero_doc', e.target.value)}
+                     placeholder="900123456" />
+            </div>
+            <div>
+              <label style={lbl}>Titular</label>
+              <input style={inp} value={form.titular} onChange={e => f('titular', e.target.value)}
+                     placeholder="Razón social" />
+            </div>
+          </div>
+
+          {esOperador(form.portal) && (
+            <div>
+              <label style={lbl}>Clave de API {editId ? '(vacío = sin cambio)' : ''}</label>
+              <input style={mono} type={showPw ? 'text' : 'password'}
+                     value={form.clave_api} onChange={e => f('clave_api', e.target.value)}
+                     placeholder="La que entrega Simple / SuAporte para esta empresa" />
+              <div style={{ fontSize: 11, color: C.text2, marginTop: 4 }}>
+                Distinta de la contraseña del portal. Si esta empresa no tiene la suya, se usa la global del servidor.
+              </div>
+            </div>
+          )}
 
           <div>
             <label style={lbl}>Observaciones <span style={{ fontWeight: 400, textTransform: 'none', letterSpacing: 0, color: C.text2 }}>— soporta URLs (se vuelven enlaces clicables)</span></label>

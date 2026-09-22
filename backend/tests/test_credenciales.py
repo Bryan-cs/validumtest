@@ -132,6 +132,62 @@ def test_reveal_inexistente_404(client, admin_token):
     assert r.status_code == 404
 
 
+# ─── Clave de API por empresa (Pago Simple / SuAporte) ───────────────────────
+
+def test_clave_api_se_guarda_cifrada_y_no_sale_en_el_listado(
+        client, admin_token, cred_payload):
+    p = {**cred_payload, "portal": "Pago Simple", "numero_doc": "900111222",
+         "usuario_portal": "CC900111222", "clave_portal": "pass-empresa",
+         "clave_api": "api-key-de-esta-empresa", "entidad": "Empresa Uno"}
+    r = client.post("/credenciales", json=p, headers=_h(admin_token))
+    assert r.status_code == 201
+    assert r.json().get("clave_api") in (None, False, "")
+    listed = client.get("/credenciales", headers=_h(admin_token)).json()
+    fila = next(x for x in listed if x["numero_doc"] == "900111222")
+    assert fila.get("tiene_clave_api") is True
+    assert "api-key" not in str(fila).lower()
+
+    from conftest import TestingSession
+    import models
+    db = TestingSession()
+    try:
+        row = db.query(models.CredencialPortal).filter_by(numero_doc="900111222").first()
+        assert row.clave_api
+        assert row.clave_api != "api-key-de-esta-empresa"
+    finally:
+        db.close()
+
+
+def test_cada_nit_resuelve_sus_propias_credenciales_de_simple(
+        client, admin_token, cred_payload, db):
+    """Dos empresas, dos keys. El envío de A no debe autenticar con las de B."""
+    from routers.credenciales import credenciales_de_aportante
+    from tenant import set_org, reset_org
+    import models
+
+    org = db.query(models.Organizacion).filter_by(slug="org-test").first()
+    for nit, usuario, clave in (
+        ("800111222", "CC800111222", "key-a"),
+        ("800333444", "CC800333444", "key-b"),
+    ):
+        client.post("/credenciales", json={
+            **cred_payload, "portal": "Pago Simple", "numero_doc": nit,
+            "usuario_portal": usuario, "clave_portal": f"pass-{nit}",
+            "clave_api": clave, "entidad": nit,
+        }, headers=_h(admin_token))
+
+    tok = set_org(org.id)
+    try:
+        ua, pa, ka = credenciales_de_aportante(db, "800111222")
+        ub, pb, kb = credenciales_de_aportante(db, "800.333.444")  # NIT con puntos
+        assert ua == "CC800111222" and ka == "key-a"
+        assert ub == "CC800333444" and kb == "key-b"
+        assert pa != pb
+        assert credenciales_de_aportante(db, "999999999") is None
+    finally:
+        reset_org(tok)
+
+
 # ─── Audit log ────────────────────────────────────────────────────────────────
 
 def test_reveal_genera_audit(client, empleado_token, admin_token, cred_payload):
