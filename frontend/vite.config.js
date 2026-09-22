@@ -48,6 +48,8 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
+        // Recharts no entra en estos trozos: Finanzas y Organizaciones ya
+        // se cargan aparte, y meterlo aquí lo pondría en la primera visita.
         manualChunks: {
           'vendor-react': ['react', 'react-dom', 'react-router-dom'],
           'vendor-query': ['@tanstack/react-query', '@tanstack/react-table'],

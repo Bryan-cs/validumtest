@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import api from '../utils/api';
 import { C, PageHeader, Btn, Modal, ConfirmModal, ErrorMsg, SkeletonCard } from '../components/UI';
+import { campo, celda } from '../estilos';
 
 const MESES = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
@@ -22,18 +23,10 @@ const pesos = (n) => '$' + (Number(n) || 0).toLocaleString('es-CO');
 // registrada con uno distinto al que está en el sistema.
 const TIPOS_DOC = ['CC', 'CE', 'TI', 'PA', 'CD', 'SC', 'PE', 'PT', 'PC'];
 
-const inp = {
-  padding: '9px 12px', borderRadius: 8, border: `1px solid ${C.border}`,
-  background: C.surface, fontSize: 13, color: C.text, outline: 'none',
-  fontFamily: 'inherit', boxSizing: 'border-box',
-};
+const inp = campo(C);
 const POR_PAGINA = 25;
 
-const td = {
-  padding: '8px 10px', fontSize: 13, color: C.text, verticalAlign: 'middle',
-  borderBottom: `1px solid ${C.border}`, borderRight: `1px solid ${C.border}`,
-  whiteSpace: 'nowrap',
-};
+const td = celda(C);
 const thBase = {
   ...td, fontSize: 11, fontWeight: 800, letterSpacing: '0.05em',
   textTransform: 'uppercase', background: '#F8FAFC', textAlign: 'left',

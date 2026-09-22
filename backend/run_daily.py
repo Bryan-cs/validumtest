@@ -18,6 +18,7 @@ if not en_ventana_cron(1425, 15, "run_daily", log, wrap_midnight=True):
     sys.exit(0)
 
 from scheduler_jobs import (
+    alertar_arl_pendientes,
     limpiar_notificaciones_diario,
     limpiar_token_blacklist,
     limpiar_actividad_antigua,
@@ -32,6 +33,7 @@ if wait_for_db("run_daily", log):
         limpiar_token_blacklist,
         limpiar_actividad_antigua,
         limpiar_login_attempts,
+        alertar_arl_pendientes,
     ]
     for job in _jobs:
         try:

@@ -37,9 +37,13 @@ def get_afiliados_filter_options(db):
 def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
                   tipo_doc="", ccf="", eps="", fecha_desde="", fecha_hasta="",
                   skip: int = 0, limit: int = 0):
-    sin_filtros = not any([q, estado, empresa, cliente, subtipo, tipo_doc, ccf, eps, fecha_desde, fecha_hasta])
-    if sin_filtros and skip == 0 and limit == 0:
-        cached = _cache_get("afiliados:all")
+    pagina = 0 < limit <= 200
+    cache_key = (
+        f"afiliados:pag:{skip}:{limit}:{q}:{estado}:{empresa}:{cliente}:"
+        f"{subtipo}:{tipo_doc}:{ccf}:{eps}:{fecha_desde}:{fecha_hasta}"
+    )
+    if pagina:
+        cached = _cache_get(cache_key)
         if cached is not None:
             return cached
 
@@ -74,12 +78,12 @@ def get_afiliados(db, q="", estado="", empresa="", cliente="", subtipo="",
     total = query.count()
     query = query.order_by(models.Afiliado.nombre)
     if limit > 0:
-        query = query.offset(skip).limit(limit)
+        query = query.offset(skip).limit(min(limit, 20_000))
     else:
-        query = query.limit(50_000)
+        query = query.limit(5_000)
     result = {"total": total, "items": [_afiliado_to_dict(a) for a in query.all()]}
-    if sin_filtros and skip == 0 and limit == 0:
-        _cache_set("afiliados:all", result, ttl=TTL_AFILIADOS)
+    if pagina:
+        _cache_set(cache_key, result, ttl=TTL_AFILIADOS)
     return result
 
 def get_afiliado(db, id):

@@ -139,7 +139,7 @@ def reporte_afiliados(
     db: Session = Depends(get_db), token=Depends(verify_token)
 ):
     result = crud.get_afiliados(db, q=q, estado=estado, empresa=empresa,
-                                cliente=cliente, subtipo=subtipo, skip=0, limit=0)
+                                cliente=cliente, subtipo=subtipo, skip=0, limit=20_000)
     items = result.get("items", [])
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -210,7 +210,7 @@ def reporte_financiero(
     db: Session = Depends(get_db), token=Depends(require_admin_or_empleado)
 ):
     result = crud.get_facturas(db, anio=anio, mes=mes, cliente=cliente,
-                               estado=estado, banco=banco, skip=0, limit=0)
+                               estado=estado, banco=banco, skip=0, limit=20_000)
     items = result.get("items", []) if isinstance(result, dict) else result
 
     # Mapa doc → (empresa, subtipo) para enriquecer el reporte

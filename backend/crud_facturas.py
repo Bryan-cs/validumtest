@@ -50,8 +50,12 @@ def get_facturas(db, anio="", mes="", cliente="", estado="", banco="", doc="",
     if doc:     q = q.filter_by(doc=doc)
     total = q.count()
     q = q.order_by(models.Factura.id.desc())
+    # Sin limit el listado traía la tabla entera. 5.000 cubre un mes de las
+    # cuatro empresas; el Excel pide un tope explícito más alto.
     if limit > 0:
-        q = q.offset(skip).limit(limit)
+        q = q.offset(skip).limit(min(limit, 20_000))
+    else:
+        q = q.limit(5_000)
     items = q.all()
     docs = list({f.doc for f in items if f.doc})
     afil_map = {}

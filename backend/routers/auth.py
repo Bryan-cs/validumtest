@@ -12,9 +12,8 @@ from .deps import (
     create_token, verify_token, security, is_token_blacklisted,
 )
 from fastapi.security import HTTPAuthorizationCredentials
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 from logger import logger
+from rate_limit import limiter as _limiter
 
 def _is_prod() -> bool:
     return bool(os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("ENVIRONMENT") == "production")
@@ -39,9 +38,6 @@ def _delete_refresh_cookie(response: Response) -> None:
         samesite="none" if prod else "lax",
         secure=prod,
     )
-
-_limiter = Limiter(key_func=get_remote_address)
-
 
 def _blacklist_jti(db: Session, jti: str, expires_at) -> bool:
     """Inserta jti en token_blacklist de forma atómica (race-safe).

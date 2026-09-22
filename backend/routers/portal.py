@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 import models, schemas
 from utils.planillas_query import list_planillas_with_docs
+from services.portal_vista import fila_afiliado
 from .deps import verify_token
 
 def _borrar_docs_asociados(db: Session, contextos: list[str], contexto_id: int):
@@ -69,24 +70,7 @@ def portal_afiliados(q: str = "", db: Session = Depends(get_db), token=Depends(_
     afiliados = query.order_by(models.Afiliado.nombre).limit(1000).all()
 
     ver_det = bool(token.get("ver_detalle")) or rol == "admin"
-
-    result = []
-    for a in afiliados:
-        try:
-            srvs = json.loads(a.servicios or "[]")
-        except Exception:
-            srvs = []
-        result.append({
-            "id": a.id, "nombre": a.nombre, "doc": a.doc, "tipo_doc": a.tipo_doc,
-            "empresa": a.empresa, "cargo": a.cargo,
-            "eps": a.eps, "afp": a.afp, "ccf": a.ccf, "arl": a.arl,
-            "estado": a.estado, "estado_srv": a.estado_srv,
-            "servicios": srvs, "tel": a.tel, "email": a.email,
-            "fecha_ingreso": a.fecha_ingreso, "fecha_afiliacion": a.fecha_afiliacion,
-            "novedades": a.novedades or "",
-            "detalle": (a.detalle or "") if ver_det else "",
-        })
-    return result
+    return [fila_afiliado(a, ver_det) for a in afiliados]
 
 
 @router.get("/afiliados/{doc}/resumen")

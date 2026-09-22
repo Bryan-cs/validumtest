@@ -8,6 +8,7 @@ TTL_CONFIG    = 600
 TTL_LISTAS    = 1800
 
 _redis_client = None
+_redis_error = None
 try:
     _redis_url = _os.getenv("REDIS_URL")
     if _redis_url:
@@ -16,8 +17,13 @@ try:
         _redis_client.ping()
 except Exception as _redis_err:
     _redis_client = None
+    _redis_error = _redis_err
     from logger import logger as _rlog
-    _rlog.warning(f"Redis no disponible, usando cache en memoria: {_redis_err}")
+    _rlog.warning(
+        "REDIS_URL es obligatorio con Postgres; la caché en memoria queda apagada"
+        if _os.getenv("DATABASE_URL", "").startswith("postgres")
+        else f"Redis no disponible, usando cache en memoria: {_redis_err}"
+    )
 
 _mem_cache: dict = {}
 _cache_lock = _threading.Lock()
@@ -63,7 +69,19 @@ def _redis_on_failure():
         _cblog.warning(f"Redis circuit breaker abierto — {_CB_COOLDOWN}s de pausa")
 
 
+def _es_postgres() -> bool:
+    url = _os.getenv("DATABASE_URL", "")
+    return url.startswith("postgres")
+
+
+def redis_en_produccion() -> bool:
+    """Con Postgres la caché en memoria de cada worker miente. Hace falta Redis."""
+    return bool(_redis_client) and _redis_disponible()
+
+
 def _use_mem_cache() -> bool:
+    if _es_postgres():
+        return False
     return _redis_client is None
 
 

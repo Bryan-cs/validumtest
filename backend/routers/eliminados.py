@@ -12,30 +12,25 @@ router = APIRouter(prefix="/eliminados", tags=["eliminados"])
 @router.get("")
 def list_eliminados(skip: int = Query(0, ge=0), limit: int = Query(0, ge=0, le=1000),
                     db: Session = Depends(get_db), token=Depends(verify_token)):
-    """limit=0 (default) devuelve todo, que es lo que espera Afiliados.jsx hoy: consume
-    la respuesta como array plano. skip/limit quedan disponibles para paginar sin
-    romper ese contrato."""
+    """Hasta 1.000 filas. Antes `limit=0` cargaba la tabla entera y filtraba en Python."""
     def _parse_datos(datos_completos):
         try:
             return json.loads(datos_completos or "{}")
         except Exception:
             return {}
 
-    rows = db.query(models.Eliminado).order_by(models.Eliminado.id.desc()).all()
-
-    # Un usuario con rol cliente solo puede ver SUS eliminados. Sin esto veia los de
-    # todos los clientes de la organizacion. El cliente no es una columna de la tabla
-    # (Eliminado guarda `empresa`, que es otra cosa): vive en el snapshot JSON
-    # datos_completos.cliente_txt, asi que el filtro va en Python y no en SQL.
+    techo = min(limit, 1000) if limit else 1000
+    q = db.query(models.Eliminado).order_by(models.Eliminado.id.desc())
     if token.get("rol") == "cliente":
         cliente_ref = (token.get("cliente_ref") or "").strip()
         if not cliente_ref:
             return []
+        rows = q.limit(5_000).all()
         rows = [r for r in rows
                 if (_parse_datos(r.datos_completos).get("cliente_txt") or "").strip() == cliente_ref]
-
-    if skip or limit:
-        rows = rows[skip: (skip + limit) if limit else None]
+        rows = rows[skip:skip + techo]
+    else:
+        rows = q.offset(skip).limit(techo).all()
 
     return [
         {

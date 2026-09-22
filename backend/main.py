@@ -35,11 +35,9 @@ import models, crud
 from routers.deps import verify_token, tenant_scope, require_admin_or_empleado
 
 # ─── SLOWAPI RATE LIMITING ────────────────────────────────────────────────────
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-
-limiter = Limiter(key_func=get_remote_address)
+from rate_limit import limiter
 
 
 # ─── PER-USER RATE LIMITING ───────────────────────────────────────────────────
@@ -160,6 +158,11 @@ async def lifespan(app: FastAPI):
     global _start_time
     _start_time = datetime.now(timezone.utc)
     init_db()
+    if os.getenv("DATABASE_URL", "").startswith("postgres"):
+        from crud_cache import redis_en_produccion
+        if not redis_en_produccion():
+            from logger import logger as _log
+            _log.error("REDIS_URL es obligatorio con Postgres: sin Redis cada worker cachea por su cuenta")
     # Advertencia si las credenciales por defecto no han sido cambiadas
     try:
         from database import SessionLocal
@@ -185,6 +188,8 @@ async def lifespan(app: FastAPI):
             _scheduler.add_job(_limpiar_tareas_mensuales,   "cron", day=1, hour=4, minute=0)
             _scheduler.add_job(_limpiar_novedades_antiguas, "cron", day=1, hour=5, minute=0)
             _scheduler.add_job(_limpiar_planillas_antiguas, "cron", day=1, hour=6, minute=0)
+            from scheduler_jobs import alertar_arl_pendientes as _alertar_arl
+            _scheduler.add_job(_alertar_arl, "cron", hour=7, minute=0)
             _scheduler.start()
         except Exception as e:
             from logger import logger as _log

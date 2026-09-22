@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { tokenDeSesion } from './sesion';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || '/api',
@@ -8,12 +9,9 @@ const api = axios.create({
 
 api.interceptors.request.use(config => {
   // Leer estado desde Zustand persist store (fuente única de verdad)
-  let state = null;
-  try {
-    const stored = localStorage.getItem('bbc-auth') ?? sessionStorage.getItem('bbc-auth');
-    if (stored) state = JSON.parse(stored)?.state;
-  } catch { /* ignorar */ }
-  if (state?.token) config.headers.Authorization = `Bearer ${state.token}`;
+  const stored = localStorage.getItem('bbc-auth') ?? sessionStorage.getItem('bbc-auth');
+  const token = tokenDeSesion(stored);
+  if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
