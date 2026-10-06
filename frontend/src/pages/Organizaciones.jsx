@@ -315,9 +315,28 @@ export default function Organizaciones() {
     enabled: tab === 'ing',
   });
 
-  // El ingreso del SaaS es la utilidad neta de cada empresa, no una tarifa por
-  // afiliado, así que el editor inline de precio_afiliado se retiró. El campo sigue
-  // existiendo en el modelo y PATCH /organizaciones/{id} lo acepta.
+  // Cobro mensual fijo por organización: el superadmin lo pone a mano en el Dashboard.
+  // No depende de los afiliados; de ahí sale todo Ingresos y el monto de las facturas.
+  const [valorEdit, setValorEdit] = useState(null);   // { id, draft } | null
+  const guardarValor = useMutation({
+    mutationFn: ({ id, valor }) => api.patch(`/organizaciones/${id}`, { valor_mensual: valor }),
+    onSuccess: () => {
+      toast.success('Cobro mensual actualizado');
+      qc.invalidateQueries({ queryKey: ['organizaciones-dashboard'] });
+      qc.invalidateQueries({ queryKey: ['organizaciones-ingresos'] });
+      qc.invalidateQueries({ queryKey: ['organizaciones-ingresos-mensuales'] });
+      setValorEdit(null);
+    },
+    onError: (e) => {
+      const d = e.response?.data?.detail;
+      toast.error(Array.isArray(d) ? d.map(x => x.msg).join(', ') : (d || 'Error al guardar el valor'));
+    },
+  });
+  const enviarValor = () => {
+    const limpio = String(valorEdit.draft).replace(/[^\d]/g, '');
+    if (!limpio) { toast.error('Ingresa un valor válido'); return; }
+    guardarValor.mutate({ id: valorEdit.id, valor: Number(limpio) });
+  };
 
   const fmtCOP = (v) => new Intl.NumberFormat('es-CO', {
     style: 'currency', currency: 'COP', maximumFractionDigits: 0,
@@ -471,9 +490,9 @@ export default function Organizaciones() {
               <div className="sa-tiles">
                 <div className="sa-tile sa-tile--dark">
                   <div>
-                    <div className="sa-tile-l" style={{ color: '#fff' }}>Utilidad neta del mes</div>
+                    <div className="sa-tile-l" style={{ color: '#fff' }}>Ingreso del mes</div>
                     <div className="sa-tile-n">{fmtCOP(ing.totales.ingreso_mensual)}</div>
-                    <div className="sa-tile-sub">solo facturas cobradas, ya sin gastos</div>
+                    <div className="sa-tile-sub">suma del cobro mensual de cada organización</div>
                   </div>
                   <div className="sa-ico">{Ico.money()}</div>
                 </div>
@@ -481,15 +500,15 @@ export default function Organizaciones() {
                   <div>
                     <div className="sa-tile-l">Proyección anual</div>
                     <div className="sa-tile-n">{fmtCOP(ing.totales.ingreso_anual)}</div>
-                    <div className="sa-tile-sub">utilidad neta del mes × 12</div>
+                    <div className="sa-tile-sub">ingreso del mes × 12</div>
                   </div>
                   <div className="sa-ico">{Ico.money()}</div>
                 </div>
                 <div className="sa-tile" style={{ animationDelay: '100ms' }}>
                   <div>
-                    <div className="sa-tile-l">Utilidad por afiliado</div>
-                    <div className="sa-tile-n">{fmtCOP(ing.totales.utilidad_por_afiliado)}</div>
-                    <div className="sa-tile-sub">promedio sobre {ing.totales.afiliados} afiliados activos</div>
+                    <div className="sa-tile-l">Afiliados activos</div>
+                    <div className="sa-tile-n">{ing.totales.afiliados}</div>
+                    <div className="sa-tile-sub">solo referencia · no cambian el cobro</div>
                   </div>
                   <div className="sa-ico">{Ico.users()}</div>
                 </div>
@@ -506,7 +525,7 @@ export default function Organizaciones() {
                 <div className="sa-tabletitle">Ingresos por organización</div>
                 <table className="sa-table">
                   <thead>
-                    <tr>{['Organización', 'Afiliados', 'Utilidad neta del mes', 'Ingreso mensual', 'Proyección anual', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
+                    <tr>{['Organización', 'Afiliados', 'Cobro mensual', 'Proyección anual', ''].map((h, i) => <th key={i}>{h}</th>)}</tr>
                   </thead>
                   <tbody>
                     {ing.organizaciones.map(o => (
@@ -516,14 +535,11 @@ export default function Organizaciones() {
                           <div className="sa-td-slug">{o.slug}{!o.activo && ' · inactiva'}</div>
                         </td>
                         <td>{o.afiliados}</td>
-                        <td title="Facturas pagadas + ingresos adicionales − nóminas − gastos (igual que Reportes Financieros)">
-                          <span className="sa-price-v">{fmtCOP(o.utilidad_neta)}</span>
-                        </td>
-                        <td style={{ fontWeight: 800 }}>{fmtCOP(o.ingreso_mensual)}</td>
+                        <td style={{ fontWeight: 800 }}>{fmtCOP(o.valor_mensual)}</td>
                         <td style={{ color: 'var(--muted)' }}>{fmtCOP(o.ingreso_anual)}</td>
                         <td>
                           <button className="sa-btn sa-btn--sm" disabled={facturar.isPending}
-                                  title={`Emitir factura del mes por la utilidad neta: ${fmtCOP(o.utilidad_neta)}`}
+                                  title={`Emitir factura del mes por ${fmtCOP(o.valor_mensual)}`}
                                   onClick={() => facturar.mutate(o.id)}>
                             Facturar
                           </button>
@@ -531,7 +547,7 @@ export default function Organizaciones() {
                       </tr>
                     ))}
                     {ing.organizaciones.length === 0 && (
-                      <tr><td colSpan={6} style={{ padding: 46, textAlign: 'center', color: 'var(--muted)' }}>Sin organizaciones aún.</td></tr>
+                      <tr><td colSpan={5} style={{ padding: 46, textAlign: 'center', color: 'var(--muted)' }}>Sin organizaciones aún.</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -560,7 +576,7 @@ export default function Organizaciones() {
                             <div className="sa-td-slug">{f.slug}</div>
                           </td>
                           <td style={{ fontWeight: 700 }}>{f.periodo}</td>
-                          <td>{f.afiliados} × {fmtCOP(f.precio)}</td>
+                          <td style={{ color: 'var(--muted)' }}>{f.afiliados}</td>
                           <td style={{ fontWeight: 800 }}>{fmtCOP(f.monto)}</td>
                           <td>
                             <span className={`sa-chip ${f.estado === 'pagada' ? 'sa-chip--on' : ''}`}
@@ -690,6 +706,64 @@ export default function Organizaciones() {
                   </div>
                   <div className="sa-ico" style={{ background: 'rgba(217,105,92,.12)', color: COLORES_ESTADO.no_encontrados }}>{Ico.alert()}</div>
                 </div>
+              </div>
+
+              <div className="sa-tablewrap" style={{ marginBottom: 18 }}>
+                <div className="sa-tabletitle">Cobro mensual por organización</div>
+                <p className="sa-tile-sub" style={{ margin: '0 24px 6px' }}>
+                  Valor fijo que se le cobra a cada empresa por mes. Lo pones tú; no cambia con la cantidad de afiliados.
+                </p>
+                <table className="sa-table" style={{ minWidth: 520 }}>
+                  <thead>
+                    <tr>{['Organización', 'Afiliados', 'Cobro mensual', 'Proyección anual'].map(h => <th key={h}>{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {dash.organizaciones.map(o => (
+                      <tr key={o.id}>
+                        <td>
+                          <div className="sa-td-name">{o.nombre}</div>
+                          <div className="sa-td-slug">{o.slug}{!o.activo && ' · inactiva'}</div>
+                        </td>
+                        <td style={{ color: 'var(--muted)' }}>{o.total}</td>
+                        <td>
+                          {valorEdit?.id === o.id ? (
+                            <form className="sa-price" onSubmit={(e) => { e.preventDefault(); enviarValor(); }}>
+                              <input className="sa-price-input" autoFocus inputMode="numeric"
+                                     aria-label={`Cobro mensual de ${o.nombre} (COP)`}
+                                     value={valorEdit.draft}
+                                     onChange={e => setValorEdit(v => ({ ...v, draft: e.target.value }))}
+                                     onKeyDown={e => { if (e.key === 'Escape') setValorEdit(null); }} />
+                              <button type="submit" className="sa-price-edit" title="Guardar"
+                                      disabled={guardarValor.isPending}>✓</button>
+                              <button type="button" className="sa-price-edit" title="Cancelar"
+                                      onClick={() => setValorEdit(null)}>✕</button>
+                            </form>
+                          ) : (
+                            <span className="sa-price">
+                              <span className="sa-price-v" style={!o.valor_mensual ? { color: 'var(--muted)' } : undefined}>
+                                {fmtCOP(o.valor_mensual)}
+                              </span>
+                              <button className="sa-price-edit" title={`Cambiar el cobro mensual de ${o.nombre}`}
+                                      aria-label={`Cambiar el cobro mensual de ${o.nombre}`}
+                                      onClick={() => setValorEdit({ id: o.id, draft: String(o.valor_mensual || '') })}>✎</button>
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ color: 'var(--muted)' }}>{fmtCOP(o.valor_mensual * 12)}</td>
+                      </tr>
+                    ))}
+                    {dash.organizaciones.length === 0 && (
+                      <tr><td colSpan={4} style={{ padding: 46, textAlign: 'center', color: 'var(--muted)' }}>Sin organizaciones aún.</td></tr>
+                    )}
+                    {dash.organizaciones.length > 0 && (
+                      <tr>
+                        <td colSpan={2} style={{ color: 'var(--muted)', fontWeight: 700 }}>Total</td>
+                        <td style={{ fontWeight: 800 }}>{fmtCOP(dash.totales.valor_mensual)}</td>
+                        <td style={{ color: 'var(--muted)' }}>{fmtCOP(dash.totales.valor_mensual * 12)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
 
               <div className="sa-dash-grid">

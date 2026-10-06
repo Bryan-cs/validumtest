@@ -25,12 +25,15 @@ class Organizacion(Base):
     nombre  = Column(String(150), nullable=False)
     slug    = Column(String(80), unique=True, index=True)   # identificador legible/único
     activo  = Column(Boolean, default=True)
-    precio_afiliado = Column(Numeric(12, 2), default=30_000)  # COP cobrados por afiliado activo/mes
+    precio_afiliado = Column(Numeric(12, 2), default=30_000)  # sin uso: el cobro es valor_mensual
+    # Cobro mensual fijo del SaaS a esta organización, fijado a mano por el superadmin.
+    # No depende de la cantidad de afiliados.
+    valor_mensual = Column(Numeric(15, 2), default=0)
     creado  = Column(DateTime(timezone=True), default=_utcnow)
 
 
 class IngresoMensualOrg(Base):
-    """Snapshot mensual de facturación del SaaS por organización (afiliados activos × precio).
+    """Snapshot mensual de facturación del SaaS por organización (su valor mensual fijo).
     El mes en curso se refresca al consultar Ingresos; los meses pasados quedan congelados.
     Tabla de nivel superadmin: NO entra en el auto-filtro tenant (se consulta sin organización activa)."""
     __tablename__ = "ingresos_mensuales_org"
@@ -42,13 +45,13 @@ class IngresoMensualOrg(Base):
     anio            = Column(Integer, nullable=False, index=True)
     mes             = Column(Integer, nullable=False)            # 1-12
     afiliados       = Column(Integer, default=0)                 # afiliados facturables ese mes
-    precio          = Column(Numeric(12, 2), default=30_000)     # precio vigente al snapshot
-    ingreso         = Column(Numeric(15, 2), default=0)          # afiliados × precio
+    precio          = Column(Numeric(12, 2), default=30_000)     # valor mensual vigente al snapshot
+    ingreso         = Column(Numeric(15, 2), default=0)          # = valor mensual de la organización
     actualizado     = Column(DateTime(timezone=True), default=_utcnow, onupdate=_utcnow)
 
 
 class FacturaOrg(Base):
-    """Factura del SaaS hacia una organización: cierre de un mes (afiliados × precio).
+    """Factura del SaaS hacia una organización: cierre de un mes por su valor mensual fijo.
     Una por organización/mes. Tabla de nivel superadmin: fuera del auto-filtro tenant."""
     __tablename__ = "facturas_org"
     __table_args__ = (
@@ -58,9 +61,9 @@ class FacturaOrg(Base):
     organizacion_id = Column(Integer, ForeignKey("organizaciones.id", ondelete="CASCADE"), index=True, nullable=False)
     anio            = Column(Integer, nullable=False, index=True)
     mes             = Column(Integer, nullable=False)              # 1-12
-    afiliados       = Column(Integer, default=0)                   # afiliados facturados
-    precio          = Column(Numeric(12, 2), default=30_000)
-    monto           = Column(Numeric(15, 2), default=0)            # afiliados × precio
+    afiliados       = Column(Integer, default=0)                   # referencia: afiliados activos al emitir
+    precio          = Column(Numeric(12, 2), default=30_000)       # valor mensual vigente al emitir
+    monto           = Column(Numeric(15, 2), default=0)            # = valor mensual de la organización
     estado          = Column(String(15), default="pendiente", index=True)  # pendiente | pagada
     creado          = Column(DateTime(timezone=True), default=_utcnow)
     pagada_en       = Column(DateTime(timezone=True), nullable=True)

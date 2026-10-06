@@ -119,6 +119,7 @@ def _ensure_columns():
     _check("seguimiento_arl", "tipo_afiliado", "ALTER TABLE seguimiento_arl ADD COLUMN tipo_afiliado VARCHAR(15) DEFAULT 'dependiente'")
     _check("usuarios", "ver_detalle", "ALTER TABLE usuarios ADD COLUMN ver_detalle BOOLEAN DEFAULT FALSE")
     _check("credenciales_portales", "clave_api", "ALTER TABLE credenciales_portales ADD COLUMN clave_api TEXT")
+    _check("organizaciones", "valor_mensual", "ALTER TABLE organizaciones ADD COLUMN valor_mensual NUMERIC(15,2) DEFAULT 0")
 
     # Columnas PILA de afiliados (ver migración u5v6w7x8y9z0). Van en bucle y no
     # como 24 _check sueltos porque entran todas juntas y con el mismo motivo.
